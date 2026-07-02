@@ -249,6 +249,18 @@ export default function App() {
   const visibleTasks = tasks.filter(canCurrentUserSeeTask);
   const visibleActiveTaskCount = visibleTasks.filter(t => !['已归档', '已完成', '已关闭'].includes(t.status)).length;
   const visibleEquipments = allEquipments.filter(canCurrentUserUseEquipment);
+  const sidebarEquipmentUptimeRate = visibleEquipments.length > 0
+    ? ((visibleEquipments.filter(eq => eq.status === '正常运行').length / visibleEquipments.length) * 100).toFixed(1)
+    : '0.0';
+  const sidebarCalibrationDueCount = visibleEquipments.filter(eq => {
+    if (!eq.calibrationRequired || !eq.nextCalibrationDate) return false;
+    const nextCalibrationTime = new Date(eq.nextCalibrationDate).getTime();
+    if (Number.isNaN(nextCalibrationTime)) return false;
+    const todayTime = new Date('2026-07-01').getTime();
+    const diffDays = (nextCalibrationTime - todayTime) / (1000 * 3600 * 24);
+    return diffDays >= 0 && diffDays <= 30;
+  }).length;
+  const sidebarEmergencyCount = visibleTasks.filter(t => t.urgency === '生命支持' || t.urgency === '特急').length;
   const clinicalDepartmentTasks = getDepartmentTasks(tasks, currentUserDepartment);
   const normalizeClinicalDraftSource = (source?: StructuredTicket['source']) => {
     return source === '科室扫码报修' || source === '微信小程序' ? source : 'AI 对话生成';
@@ -1217,21 +1229,21 @@ export default function App() {
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                   设备完好率
                 </span>
-                <span className="font-bold text-slate-200 font-mono">98.6%</span>
+                <span className="font-bold text-slate-200 font-mono">{sidebarEquipmentUptimeRate}%</span>
               </div>
               <div className="flex items-center justify-between text-xs text-slate-400">
                 <span className="flex items-center gap-1.5 text-slate-400">
                   <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
                   待检验计量
                 </span>
-                <span className="font-bold text-slate-200 font-mono">3 台</span>
+                <span className="font-bold text-slate-200 font-mono">{sidebarCalibrationDueCount} 台</span>
               </div>
               <div className="flex items-center justify-between text-xs text-slate-400">
                   <span className="flex items-center gap-1.5 text-slate-400">
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
                     今日应急
                   </span>
-                <span className="font-bold text-slate-200 font-mono">{visibleTasks.filter(t => t.urgency === '生命支持' || t.urgency === '特急').length} 次</span>
+                <span className="font-bold text-slate-200 font-mono">{sidebarEmergencyCount} 次</span>
               </div>
             </div>
           </div>
