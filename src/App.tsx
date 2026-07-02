@@ -3174,9 +3174,9 @@ export default function App() {
         >
           <FileText className="w-5 h-5" />
           <span className="text-[10px] mt-1 font-medium">任务看板</span>
-          {tasks.length > 0 && (
+          {visibleTasks.length > 0 && (
             <span className="absolute top-0 right-[20%] bg-rose-500 text-white font-extrabold text-[9px] min-w-[16px] h-[16px] rounded-full flex items-center justify-center px-1 border border-slate-900 scale-90">
-              {tasks.length}
+              {visibleTasks.length}
             </span>
           )}
         </button>

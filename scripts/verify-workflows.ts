@@ -355,6 +355,26 @@ const checks: Check[] = [
     }
   },
   {
+    name: 'mobile task tab badge follows role-visible task count',
+    run: () => {
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const tabStart = appSource.indexOf('id="btn-tab-list"');
+      const tabEnd = appSource.indexOf('</button>', tabStart);
+      assert(tabStart !== -1 && tabEnd > tabStart, '应能定位移动端任务看板标签按钮');
+      const tabSource = appSource.slice(tabStart, tabEnd);
+
+      assert(
+        tabSource.includes('{visibleTasks.length > 0 &&') &&
+          tabSource.includes('{visibleTasks.length}'),
+        '移动端任务看板角标应按当前角色可见工单计数，临床端不能显示全院工单数量'
+      );
+      assert(
+        !tabSource.includes('{tasks.length'),
+        '移动端任务看板角标不能使用全量 tasks.length，否则临床端会泄露/误导全院任务数量'
+      );
+    }
+  },
+  {
     name: 'default data includes a clinical acceptance demo task',
     run: () => {
       const respiratoryDoctor = createUser({
