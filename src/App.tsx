@@ -51,7 +51,7 @@ import { useAiSettings } from './hooks/useAiSettings';
 import { useSpeechRecognition } from './hooks/useSpeechRecognition';
 import { sendAssistantChat } from './services/aiApi';
 import { isSameDepartment, normalizeDepartmentName } from './utils/departmentUtils';
-import { getClinicalAcceptanceBlockReason, getEngineerStatusBlockReason } from './utils/taskWorkflow';
+import { getClinicalAcceptanceBlockReason, getEngineerStatusBlockReason, getRecommendedRoutingForTask } from './utils/taskWorkflow';
 import TaskStats from './components/TaskStats';
 import EquipmentArchives from './components/EquipmentArchives';
 
@@ -483,10 +483,7 @@ export default function App() {
 
     // 7. Need backup / Vendor coop
     const needBackupDevice = isUrgent ? '是' : '否';
-    const needVendorCoop = taskType === '供应商协同' || taskType === '验收安装协同' ? '是' : '否';
-
-    // 8. Recommended Dept
-    const recommendedDept = taskType === '非设备类转派任务' ? '信息科' : '医学装备科';
+    const routing = getRecommendedRoutingForTask(taskType, text);
 
     return {
       taskType,
@@ -498,8 +495,9 @@ export default function App() {
       urgency,
       affectClinical,
       needBackupDevice,
-      needVendorCoop,
-      recommendedDept,
+      needVendorCoop: routing.needVendorCoop,
+      recommendedDept: routing.recommendedDept,
+      notes: routing.routingNote,
       aiStatus: 'AI待补全',
       contactPerson: '科室医护人员',
       contactPhone: '未提取'
@@ -687,6 +685,10 @@ export default function App() {
     
     const currentDept = normalizeDepartmentName(currentSimulatedUser.department || currentSimulatedUser.dept);
     const draftDept = normalizeDepartmentName(draftTicket.department) || draftTicket.department;
+    const routing = getRecommendedRoutingForTask(draftTicket.taskType as TaskType, `${draftTicket.faultPhenomenon || ''} ${draftTicket.deviceName || ''} ${draftTicket.notes || ''}`);
+    const effectiveRecommendedDept = forwardDept || draftTicket.recommendedDept || routing.recommendedDept;
+    const effectiveNeedVendorCoop = routing.needVendorCoop === '是' ? '是' : (draftTicket.needVendorCoop || '否');
+    const routingNote = routing.routingNote && !draftTicket.notes?.includes(routing.routingNote) ? routing.routingNote : '';
     const defaultPerson = currentUserRole === 'medical_staff' ? currentSimulatedUser.name : (draftTicket.contactPerson || '未录入联系人');
     const defaultPhone = currentUserRole === 'medical_staff' ? (currentSimulatedUser.phone || draftTicket.contactPhone || '未录入电话') : (draftTicket.contactPhone || '未录入电话');
     const defaultDept = currentUserRole === 'medical_staff' ? (currentDept || draftDept || '未录入科室') : (draftDept || '未录入科室');
@@ -697,7 +699,8 @@ export default function App() {
     const deptNormalizationNote = draftTicket.notes?.includes('AI原始识别科室为') ? draftTicket.notes : '';
     const createLogAction = [
       `AI 智能建单。任务分类：${draftTicket.taskType || '未分类'}，来源：${draftTicket.source || 'AI 对话生成'}，紧急度判定：${draftTicket.urgency || '普通'}`,
-      forwardDept ? `自动提示转派至【${forwardDept}】` : '',
+      effectiveRecommendedDept && effectiveRecommendedDept !== '医学装备科' ? `自动提示转派至【${effectiveRecommendedDept}】` : '',
+      effectiveNeedVendorCoop === '是' ? '需要厂家/供应商协同' : '',
       deptNormalizationNote
     ].filter(Boolean).join('，');
 
@@ -718,8 +721,8 @@ export default function App() {
       status: '待确认',
       aiStatus: (draftTicket.aiStatus as any) || '已分析',
       needBackupDevice: draftTicket.needBackupDevice || '否',
-      needVendorCoop: draftTicket.needVendorCoop || '否',
-      recommendedDept: draftTicket.recommendedDept || '',
+      needVendorCoop: effectiveNeedVendorCoop,
+      recommendedDept: effectiveRecommendedDept,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       aiSuggestions: aiSuggestions.length > 0 ? aiSuggestions : ['已通过 AI 助手快速建立工单，等待派单工程师进行现场诊断。'],
@@ -731,7 +734,7 @@ export default function App() {
         }
       ],
       rawText: chatMessages.filter(m => m.sender === 'user').map(m => m.text).join(' | '),
-      notes: [draftTicket.notes, forwardDept ? `系统判断此单归属部门为 [${forwardDept}]。` : ''].filter(Boolean).join('\n')
+      notes: [draftTicket.notes, routingNote, effectiveRecommendedDept && effectiveRecommendedDept !== '医学装备科' ? `系统判断此单归属部门为 [${effectiveRecommendedDept}]。` : ''].filter(Boolean).join('\n')
     };
 
     setTasks(prev => [newTicket, ...prev]);
