@@ -5,6 +5,7 @@ import {
   User, Plus, Search, Briefcase, History, TrendingUp, DollarSign
 } from 'lucide-react';
 import { MedicalEquipment, MaintenanceLog, CalibrationLog, UserProfile } from '../types';
+import { isSameDepartment } from '../utils/departmentUtils';
 
 interface MaintenanceCalendarProps {
   equipments: MedicalEquipment[];
@@ -49,11 +50,18 @@ export default function MaintenanceCalendar({
 
   // Simulated logged-in engineer workspace state
   const [currentEngineer, setCurrentEngineer] = useState<string>('all'); // 'all' or specific engineer name
+  const canManageSchedule = currentUser.role === 'engineer';
+  const scheduleScopeLabel = currentUser.role === 'medical_staff' ? '本科室' : '全院';
+
+  const getScheduleManageBlockReason = (actionName: string) => {
+    if (canManageSchedule) return '';
+    return `当前登录身份为【${currentUser.name} ${currentUser.title}】，只能查看${currentUser.department || currentUser.dept || '本科室'}设备日程，不能执行${actionName}。`;
+  };
 
   // 同步全局模拟登录账户到日历技术员筛选
   useEffect(() => {
     if (currentUser.role === 'engineer') {
-      if (currentUser.id === 'u-admin') {
+      if (currentUser.id === 'u-admin' || currentUser.title.includes('主任')) {
         setCurrentEngineer('all');
       } else {
         setCurrentEngineer(currentUser.name);
@@ -142,7 +150,7 @@ export default function MaintenanceCalendar({
     const events: CalendarEvent[] = [];
     equipments.forEach(eq => {
       // 临床医护人员登录时，仅显示其所在科室的设备维保与计量日程
-      if (currentUser.role === 'medical_staff' && eq.dept !== currentUser.dept) {
+      if (currentUser.role === 'medical_staff' && !isSameDepartment(eq.dept, currentUser.department || currentUser.dept)) {
         return;
       }
 
@@ -378,6 +386,11 @@ export default function MaintenanceCalendar({
   const handleReschedule = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedEvent || !newScheduleDate) return;
+    const blockReason = getScheduleManageBlockReason('日程调期');
+    if (blockReason) {
+      triggerNotification(`⚠️ ${blockReason}`);
+      return;
+    }
 
     setIsRescheduling(true);
     const targetEqId = selectedEvent.equipment.id;
@@ -419,6 +432,12 @@ export default function MaintenanceCalendar({
   // Re-assign engineer for a future scheduled task
   const handleReassignEngineer = (engineer: string) => {
     if (!selectedEvent) return;
+    const blockReason = getScheduleManageBlockReason('技术员改派');
+    if (blockReason) {
+      triggerNotification(`⚠️ ${blockReason}`);
+      return;
+    }
+
     const targetEqId = selectedEvent.equipment.id;
     const taskType = selectedEvent.type;
 
@@ -447,6 +466,12 @@ export default function MaintenanceCalendar({
   // Work Deployment Form Submission
   const handleDeployWorkSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const blockReason = getScheduleManageBlockReason('新工单部署');
+    if (blockReason) {
+      triggerNotification(`⚠️ ${blockReason}`);
+      return;
+    }
+
     if (!deployEquipmentId || !deployDate) {
       triggerNotification('❌ 请完整选择受托医疗设备及计划日期。');
       return;
@@ -504,6 +529,12 @@ export default function MaintenanceCalendar({
 
   // Pre-fill deploy form from calendar cell click
   const openDeployForDate = (dateStr: string) => {
+    const blockReason = getScheduleManageBlockReason('新工单部署');
+    if (blockReason) {
+      triggerNotification(`⚠️ ${blockReason}`);
+      return;
+    }
+
     setDeployDate(dateStr);
     setIsDeployMode(true);
     setSelectedEvent(null);
@@ -517,6 +548,11 @@ export default function MaintenanceCalendar({
   // Direct dispatch handler (links to existing recording flow)
   const handleDirectDispatch = () => {
     if (!selectedEvent) return;
+    const blockReason = getScheduleManageBlockReason('现场执行登记');
+    if (blockReason) {
+      triggerNotification(`⚠️ ${blockReason}`);
+      return;
+    }
     
     // 1. Select the equipment
     setSelectedId(selectedEvent.equipment.id);
@@ -580,7 +616,7 @@ export default function MaintenanceCalendar({
           </div>
           <div>
             <h3 className="text-sm font-black text-slate-800 font-sans tracking-tight">装备科资产调度及维保履历回溯日历</h3>
-            <p className="text-[10px] text-slate-400">统筹全院医疗设备预防性维护(PM)、计量强检并全景回溯设备历史维修、保养履历</p>
+            <p className="text-[10px] text-slate-400">统筹{scheduleScopeLabel}医疗设备预防性维护(PM)、计量强检并全景回溯设备历史维修、保养履历</p>
           </div>
         </div>
 
@@ -590,7 +626,7 @@ export default function MaintenanceCalendar({
           {currentUser.role === 'medical_staff' ? (
             <div className="flex items-center gap-1.5 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-lg text-blue-700 font-sans shadow-2xs">
               <span className="p-0.5 bg-blue-600 rounded text-white"><Briefcase className="w-3 h-3" /></span>
-              <span className="text-[10px] font-black uppercase tracking-wide">已按科室自动建档: {currentUser.dept}</span>
+              <span className="text-[10px] font-black uppercase tracking-wide">已按科室自动建档: {currentUser.department || currentUser.dept}</span>
             </div>
           ) : (
             <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/80 px-2.5 py-1 rounded-lg">
@@ -960,7 +996,14 @@ export default function MaintenanceCalendar({
                 {/* ─── SCENARIO A: FUTURE SCHEDULED TASK (Editable) ─── */}
                 {(selectedEvent.type === 'maintenance' || selectedEvent.type === 'calibration') && (
                   <>
+                    {!canManageSchedule && (
+                      <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-[11px] text-blue-800 leading-relaxed font-medium">
+                        当前为临床科室只读追踪视图，可查看计划与责任人；调期、改派和现场执行登记由医学装备科工程师处理。
+                      </div>
+                    )}
+
                     {/* Assigned Technician selector */}
+                    {canManageSchedule && (
                     <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-3xs space-y-2">
                       <div className="flex items-center gap-1 text-[11px] font-bold text-slate-700 uppercase tracking-wider">
                         <User className="w-3.5 h-3.5 text-blue-500" />
@@ -976,8 +1019,10 @@ export default function MaintenanceCalendar({
                         ))}
                       </select>
                     </div>
+                    )}
 
                     {/* Reschedule Date Selector Panel */}
+                    {canManageSchedule && (
                     <form onSubmit={handleReschedule} className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-3xs space-y-3">
                       <div className="flex items-center gap-1 text-[11px] font-extrabold text-slate-700 uppercase tracking-wider">
                         <Clock className="w-3.5 h-3.5 text-blue-500" />
@@ -1002,8 +1047,10 @@ export default function MaintenanceCalendar({
                         {isRescheduling ? '更新调度指令中...' : '确认修改计划日期'}
                       </button>
                     </form>
+                    )}
 
                     {/* Quick deployment actions */}
+                    {canManageSchedule && (
                     <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-3xs space-y-2">
                       <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">工单与现场派发</div>
                       
@@ -1023,6 +1070,7 @@ export default function MaintenanceCalendar({
                         <span>一键推送企业微信通知</span>
                       </button>
                     </div>
+                    )}
                   </>
                 )}
 
@@ -1102,7 +1150,7 @@ export default function MaintenanceCalendar({
                 <div className="flex items-center justify-between pb-2 border-b border-slate-200/80">
                   <span className="text-xs font-black text-slate-700 tracking-wider uppercase flex items-center gap-1">
                     <Plus className="w-4 h-4 text-blue-600" />
-                    部署全院新维保工单
+                    部署{scheduleScopeLabel}新维保工单
                   </span>
                   <button 
                     type="button"
@@ -1232,7 +1280,7 @@ export default function MaintenanceCalendar({
                   className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-black shadow-sm transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Send className="w-3.5 h-3.5" />
-                  <span>立即向全院下发工单</span>
+                  <span>立即向{scheduleScopeLabel}下发工单</span>
                 </button>
                 <button
                   type="button"
@@ -1287,6 +1335,7 @@ export default function MaintenanceCalendar({
               </div>
 
               {/* Direct Work deployment launcher */}
+              {canManageSchedule ? (
               <div className="bg-blue-50/50 p-4 border border-blue-100/60 rounded-xl space-y-2.5">
                 <div className="space-y-1">
                   <span className="text-xs font-black text-blue-900 flex items-center gap-1.5">
@@ -1309,9 +1358,20 @@ export default function MaintenanceCalendar({
                   className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-black shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>部署全院新工作指令</span>
+                  <span>部署{scheduleScopeLabel}新工作指令</span>
                 </button>
               </div>
+              ) : (
+                <div className="bg-slate-50 p-4 border border-slate-200 rounded-xl space-y-1.5">
+                  <span className="text-xs font-black text-slate-700 flex items-center gap-1.5">
+                    <Info className="w-4 h-4 text-blue-500" />
+                    临床日程只读视图
+                  </span>
+                  <p className="text-[10px] text-slate-500 leading-relaxed font-medium">
+                    当前账号可查看本科室设备维保、维修和计量记录；新工单部署、调期和改派由医学装备科工程师执行。
+                  </p>
+                </div>
+              )}
 
               {/* Upcoming chronological events list */}
               <div className="flex-1 flex flex-col min-h-0 space-y-2">

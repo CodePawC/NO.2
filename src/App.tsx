@@ -295,6 +295,18 @@ export default function App() {
   const [forwardDept, setForwardDept] = useState<string | null>(null);
   const [isFullDraftOpen, setIsFullDraftOpen] = useState(false);
 
+  useEffect(() => {
+    if (!isClinicalUser || !selectedTask || canCurrentUserSeeTask(selectedTask)) {
+      return;
+    }
+
+    const fallbackTask = visibleTasks[0] || null;
+    setSelectedTask(fallbackTask);
+    setMobileTab(fallbackTask ? 'list' : 'chat');
+    setShowRoleSwitchedToast(`已阻止跨科室工单访问，仅显示【${currentUserDepartment || '本科室'}】任务`);
+    setTimeout(() => setShowRoleSwitchedToast(null), 4500);
+  }, [isClinicalUser, currentUserDepartment, selectedTask?.id, tasks]);
+
   // Advanced AI custom settings states
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const {

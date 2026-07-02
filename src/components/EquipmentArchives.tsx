@@ -755,6 +755,24 @@ export default function EquipmentArchives({
   const canCurrentUserReportEquipment = (equipment: MedicalEquipment) => {
     return currentUser.role !== 'medical_staff' || !currentUserDepartment || isSameDepartment(equipment.dept, currentUserDepartment);
   };
+  const canCurrentUserViewEquipment = (equipment: MedicalEquipment) => {
+    return currentUser.role !== 'medical_staff' || !currentUserDepartment || isSameDepartment(equipment.dept, currentUserDepartment);
+  };
+  const visibleEquipments = equipments.filter(canCurrentUserViewEquipment);
+  const visibleDepartments: string[] = ['全部科室', ...Array.from(new Set(visibleEquipments.map(eq => eq.dept))).filter((dept): dept is string => Boolean(dept))];
+  const assetScopeLabel = currentUser.role === 'medical_staff' ? '本科室' : '全院';
+  const matrixFilteredEquipments = visibleEquipments.filter(e => {
+    const matchesDept = matrixSelectedDept === '全部科室' || isSameDepartment(e.dept, matrixSelectedDept);
+    const matchesCategory = matrixSelectedCategory === '全部分类' || e.category === matrixSelectedCategory;
+    const matchesStatus = matrixSelectedStatus === '全部状态' || e.status === matrixSelectedStatus;
+    const matchesSearch = !matrixSearchQuery.trim() ||
+      e.deviceName.toLowerCase().includes(matrixSearchQuery.toLowerCase()) ||
+      e.sn.toLowerCase().includes(matrixSearchQuery.toLowerCase()) ||
+      e.model.toLowerCase().includes(matrixSearchQuery.toLowerCase()) ||
+      e.manufacturer.toLowerCase().includes(matrixSearchQuery.toLowerCase());
+
+    return matchesDept && matchesCategory && matchesStatus && matchesSearch;
+  });
 
   // 启动系统相机扫描仪
   const startScannerCamera = async () => {
@@ -850,6 +868,12 @@ export default function EquipmentArchives({
       if (equipId) {
         const found = equipments.find(eq => eq.id === equipId || eq.sn === equipId);
         if (found) {
+          if (!canCurrentUserViewEquipment(found)) {
+            setQuickRepairToast(`当前临床账号只能查看本科室设备：${currentUserDepartment}`);
+            setTimeout(() => setQuickRepairToast(null), 5000);
+            return;
+          }
+
           setSelectedId(found.id);
           setViewMode('inventory');
           if (e.detail?.activeTab) {
@@ -862,7 +886,7 @@ export default function EquipmentArchives({
     return () => {
       window.removeEventListener('deep-link-equipment', handleDeepLinkEquipment);
     };
-  }, [equipments]);
+  }, [equipments, currentUser.id, currentUserDepartment]);
 
   // Keep selectedId valid in the filtered list when filters or roles change
   useEffect(() => {
@@ -874,7 +898,7 @@ export default function EquipmentArchives({
     }
   }, [currentUser, onlyMyDept, clinicalFilterMode, selectedDept, selectedCategory, selectedStatus, searchTerm, equipments]);
 
-  const selectedEquipment = equipments.find(eq => eq.id === selectedId) || equipments[0];
+  const selectedEquipment = visibleEquipments.find(eq => eq.id === selectedId) || visibleEquipments[0] || equipments[0];
 
   // Refresh AI Chat context on device select change
   useEffect(() => {
@@ -886,12 +910,12 @@ export default function EquipmentArchives({
   }, [selectedId]);
 
   // Unique lists for filtering dropdowns
-  const departments = ['全部科室', ...Array.from(new Set(equipments.map(eq => eq.dept)))];
+  const departments = visibleDepartments;
   const categories = ['全部分类', '急救生命支持', '影像诊断', '检验分析', '手术治疗', '其他'];
   const statusOptions = ['全部状态', '正常运行', '故障维修', '计量中', '已停用'];
 
   // Filtered Equipment List taking simulated user into account
-  const filteredEquipments = equipments.filter(eq => {
+  const filteredEquipments = visibleEquipments.filter(eq => {
     const matchesSearch = eq.deviceName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           eq.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           eq.sn.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -918,11 +942,11 @@ export default function EquipmentArchives({
   });
 
   // Calculate Overall院 Dashboard stats
-  const totalAssetsValue = equipments.reduce((sum, eq) => sum + eq.purchaseCost, 0);
-  const totalEquipments = equipments.length;
-  const perfectRate = ((equipments.filter(eq => eq.status === '正常运行').length / totalEquipments) * 100).toFixed(1);
-  const troubleCount = equipments.filter(eq => eq.status === '故障维修').length;
-  const calibrationReminderCount = equipments.filter(eq => {
+  const totalAssetsValue = visibleEquipments.reduce((sum, eq) => sum + eq.purchaseCost, 0);
+  const totalEquipments = visibleEquipments.length;
+  const perfectRate = totalEquipments > 0 ? ((visibleEquipments.filter(eq => eq.status === '正常运行').length / totalEquipments) * 100).toFixed(1) : '0.0';
+  const troubleCount = visibleEquipments.filter(eq => eq.status === '故障维修').length;
+  const calibrationReminderCount = visibleEquipments.filter(eq => {
     if (!eq.calibrationRequired || !eq.nextCalibrationDate) return false;
     const nextCal = new Date(eq.nextCalibrationDate).getTime();
     const today = new Date('2026-07-01').getTime(); // Using static current time from environment metadata
@@ -1862,7 +1886,7 @@ Clinical class: Life-saving respiratory device`;
                     }`}
                   >
                     <span>🚨 我已报修设备</span>
-                    {equipments.filter(eq => isSameDepartment(eq.dept, currentUserDepartment) && (eq.status === '故障维修' || eq.maintenanceLogs.some(log => log.type === '维修' && log.status === '进行中'))).length > 0 && (
+                    {visibleEquipments.filter(eq => eq.status === '故障维修' || eq.maintenanceLogs.some(log => log.type === '维修' && log.status === '进行中')).length > 0 && (
                       <span className="absolute -top-1 -right-1 flex h-2 w-2">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
@@ -1874,7 +1898,7 @@ Clinical class: Life-saving respiratory device`;
                 <button
                   type="button"
                   onClick={() => {
-                    const firstDeptEq = equipments.find(eq => isSameDepartment(eq.dept, currentUserDepartment));
+                    const firstDeptEq = visibleEquipments[0];
                     setQuickRepairEquipId(firstDeptEq ? firstDeptEq.id : '');
                     setIsQuickRepairModalOpen(true);
                   }}
@@ -3427,7 +3451,7 @@ Clinical class: Life-saving respiratory device`;
         ) : viewMode === 'calendar' ? (
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-full min-h-0 overflow-hidden w-full flex-1">
             <MaintenanceCalendar
-              equipments={equipments}
+              equipments={visibleEquipments}
               setEquipments={setEquipments}
               selectedId={selectedId}
               setSelectedId={setSelectedId}
@@ -3454,19 +3478,7 @@ Clinical class: Life-saving respiratory device`;
                 <div>
                   <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest">筛选后在册设备</p>
                   <p className="text-sm md:text-xl font-black text-slate-800">
-                    {
-                      equipments.filter(e => {
-                        const matchesDept = matrixSelectedDept === '全部科室' || e.dept === matrixSelectedDept;
-                        const matchesCategory = matrixSelectedCategory === '全部分类' || e.category === matrixSelectedCategory;
-                        const matchesStatus = matrixSelectedStatus === '全部状态' || e.status === matrixSelectedStatus;
-                        const matchesSearch = !matrixSearchQuery.trim() || 
-                          e.deviceName.toLowerCase().includes(matrixSearchQuery.toLowerCase()) ||
-                          e.sn.toLowerCase().includes(matrixSearchQuery.toLowerCase()) ||
-                          e.model.toLowerCase().includes(matrixSearchQuery.toLowerCase()) ||
-                          e.manufacturer.toLowerCase().includes(matrixSearchQuery.toLowerCase());
-                        return matchesDept && matchesCategory && matchesStatus && matchesSearch;
-                      }).length
-                    } <span className="text-[10px] md:text-xs font-normal text-slate-500">台 / 共{equipments.length}台</span>
+                    {matrixFilteredEquipments.length} <span className="text-[10px] md:text-xs font-normal text-slate-500">台 / 共{visibleEquipments.length}台</span>
                   </p>
                 </div>
               </div>
@@ -3478,7 +3490,7 @@ Clinical class: Life-saving respiratory device`;
                 <div>
                   <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest">正常运行比例</p>
                   <p className="text-sm md:text-xl font-black text-emerald-600">
-                    {Math.round((equipments.filter(e => e.status === '正常运行').length / (equipments.length || 1)) * 100)}%
+                    {Math.round((visibleEquipments.filter(e => e.status === '正常运行').length / (visibleEquipments.length || 1)) * 100)}%
                   </p>
                 </div>
               </div>
@@ -3490,7 +3502,7 @@ Clinical class: Life-saving respiratory device`;
                 <div>
                   <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest">故障待修总数</p>
                   <p className="text-sm md:text-xl font-black text-rose-600">
-                    {equipments.filter(e => e.status === '故障维修').length} <span className="text-[10px] md:text-xs font-normal text-slate-500">台在修理</span>
+                    {visibleEquipments.filter(e => e.status === '故障维修').length} <span className="text-[10px] md:text-xs font-normal text-slate-500">台在修理</span>
                   </p>
                 </div>
               </div>
@@ -3502,7 +3514,7 @@ Clinical class: Life-saving respiratory device`;
                 <div>
                   <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest">下期计量检定数</p>
                   <p className="text-sm md:text-xl font-black text-indigo-600">
-                    {equipments.filter(e => e.calibrationRequired).length} <span className="text-[10px] md:text-xs font-normal text-slate-500">台受控</span>
+                    {visibleEquipments.filter(e => e.calibrationRequired).length} <span className="text-[10px] md:text-xs font-normal text-slate-500">台受控</span>
                   </p>
                 </div>
               </div>
@@ -3518,7 +3530,7 @@ Clinical class: Life-saving respiratory device`;
                     <span>医学装备资产台账明细表</span>
                   </h3>
                   <p className="text-[11px] text-slate-500 mt-1">
-                    实时汇总之全院资产设备，支持按多字段首字母排序与多维度精细化联动检索，点击“定位档案”可自动穿透跳转至主台账对应设备卷宗。
+                    实时汇总之{assetScopeLabel}资产设备，支持按多字段首字母排序与多维度精细化联动检索，点击“定位档案”可自动穿透跳转至主台账对应设备卷宗。
                   </p>
                 </div>
 
@@ -3528,21 +3540,21 @@ Clinical class: Life-saving respiratory device`;
                     onClick={() => {
                       const csvContent = "data:text/csv;charset=utf-8,\uFEFF" // Include BOM for Chinese encoding support in Excel
                         + ["设备编号,设备名称,科室,品类,品牌/厂商,型号,出厂SN,购置金额,运行状态,下期维保时间,是否强检"]
-                          .concat(equipments.map(e => `"${e.id}","${e.deviceName}","${e.dept}","${e.category}","${e.manufacturer}","${e.model}","${e.sn}",${e.purchasePrice},"${e.status}","${e.nextMaintenanceDate || ''}","${e.calibrationRequired ? '是' : '否'}"`))
+                          .concat(matrixFilteredEquipments.map(e => `"${e.id}","${e.deviceName}","${e.dept}","${e.category}","${e.manufacturer}","${e.model}","${e.sn}",${e.purchasePrice},"${e.status}","${e.nextMaintenanceDate || ''}","${e.calibrationRequired ? '是' : '否'}"`))
                           .join("\n");
                       const encodedUri = encodeURI(csvContent);
                       const link = document.createElement("a");
                       link.setAttribute("href", encodedUri);
-                      link.setAttribute("download", `医学装备资产台账明细_${new Date().toISOString().slice(0,10)}.csv`);
+                      link.setAttribute("download", `医学装备资产台账明细_${assetScopeLabel}_${new Date().toISOString().slice(0,10)}.csv`);
                       document.body.appendChild(link);
                       link.click();
                       document.body.removeChild(link);
                     }}
                     className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-xs transition-all cursor-pointer"
-                    title="导出当前全量设备资产报表为 CSV 格式"
+                    title={`导出当前${assetScopeLabel}可见设备资产报表为 CSV 格式`}
                   >
                     <Printer className="w-3.5 h-3.5 text-slate-500" />
-                    <span>导出全表 (CSV)</span>
+                    <span>导出当前表 (CSV)</span>
                   </button>
 
                   {/* Reset All Filters */}
@@ -3588,8 +3600,8 @@ Clinical class: Life-saving respiratory device`;
                     onChange={(e) => setMatrixSelectedDept(e.target.value)}
                     className="w-full text-xs bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-slate-600 focus:outline-none font-bold"
                   >
-                    <option value="全部科室">全部科室 ({Array.from(new Set(equipments.map(e => e.dept))).filter(Boolean).length}个)</option>
-                    {Array.from(new Set(equipments.map(e => e.dept))).filter(Boolean).sort().map(dept => (
+                    <option value="全部科室">全部科室 ({visibleDepartments.length - 1}个)</option>
+                    {visibleDepartments.filter(dept => dept !== '全部科室').sort().map(dept => (
                       <option key={dept} value={dept}>{dept}</option>
                     ))}
                   </select>
@@ -3629,18 +3641,7 @@ Clinical class: Life-saving respiratory device`;
               {/* Table rendering panel */}
               <div className="overflow-x-auto border border-slate-200 rounded-xl flex-1 min-h-[300px]">
                 {(() => {
-                  const sortedAndFilteredEquipments = [...equipments]
-                    .filter(e => {
-                      const matchesDept = matrixSelectedDept === '全部科室' || e.dept === matrixSelectedDept;
-                      const matchesCategory = matrixSelectedCategory === '全部分类' || e.category === matrixSelectedCategory;
-                      const matchesStatus = matrixSelectedStatus === '全部状态' || e.status === matrixSelectedStatus;
-                      const matchesSearch = !matrixSearchQuery.trim() || 
-                        e.deviceName.toLowerCase().includes(matrixSearchQuery.toLowerCase()) ||
-                        e.sn.toLowerCase().includes(matrixSearchQuery.toLowerCase()) ||
-                        e.model.toLowerCase().includes(matrixSearchQuery.toLowerCase()) ||
-                        e.manufacturer.toLowerCase().includes(matrixSearchQuery.toLowerCase());
-                      return matchesDept && matchesCategory && matchesStatus && matchesSearch;
-                    })
+                  const sortedAndFilteredEquipments = [...matrixFilteredEquipments]
                     .sort((a, b) => {
                       let valA = (a[matrixSortField as keyof MedicalEquipment] || '').toString();
                       let valB = (b[matrixSortField as keyof MedicalEquipment] || '').toString();
@@ -3856,7 +3857,7 @@ Clinical class: Life-saving respiratory device`;
                                     type="button"
                                     onClick={() => {
                                       if (!canCurrentUserReportEquipment(eq)) {
-                                        setQuickRepairToast(`当前临床账号只能为本科室设备发起报修：${currentUser.dept}`);
+                                        setQuickRepairToast(`当前临床账号只能为本科室设备发起报修：${currentUserDepartment}`);
                                         setTimeout(() => setQuickRepairToast(null), 5000);
                                         return;
                                       }
@@ -3898,9 +3899,9 @@ Clinical class: Life-saving respiratory device`;
                   <Layers className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest">全院设备总数</p>
+                  <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest">{assetScopeLabel}设备总数</p>
                   <div className="flex items-baseline gap-1 mt-0.5">
-                    <span className="text-xl md:text-2xl font-black text-slate-800">{equipments.length}</span>
+                    <span className="text-xl md:text-2xl font-black text-slate-800">{visibleEquipments.length}</span>
                     <span className="text-[10px] md:text-xs text-slate-500 font-bold">台设备在册</span>
                   </div>
                 </div>
@@ -3914,7 +3915,7 @@ Clinical class: Life-saving respiratory device`;
                   <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest">正常运行中</p>
                   <div className="flex items-baseline gap-1 mt-0.5">
                     <span className="text-xl md:text-2xl font-black text-emerald-600">
-                      {equipments.filter(e => e.status === '正常运行').length}
+                      {visibleEquipments.filter(e => e.status === '正常运行').length}
                     </span>
                     <span className="text-[10px] md:text-xs text-slate-500 font-bold">台状态优良</span>
                   </div>
@@ -3929,7 +3930,7 @@ Clinical class: Life-saving respiratory device`;
                   <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest">故障待修状态</p>
                   <div className="flex items-baseline gap-1 mt-0.5">
                     <span className="text-xl md:text-2xl font-black text-rose-600">
-                      {equipments.filter(e => e.status === '故障维修').length}
+                      {visibleEquipments.filter(e => e.status === '故障维修').length}
                     </span>
                     <span className="text-[10px] md:text-xs text-slate-500 font-bold">台维保待料</span>
                   </div>
@@ -3944,7 +3945,7 @@ Clinical class: Life-saving respiratory device`;
                   <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest">业务实体科室数</p>
                   <div className="flex items-baseline gap-1 mt-0.5">
                     <span className="text-xl md:text-2xl font-black text-indigo-600">
-                      {Array.from(new Set(equipments.map(e => e.dept))).filter(Boolean).length}
+                      {visibleDepartments.length - 1}
                     </span>
                     <span className="text-[10px] md:text-xs text-slate-500 font-bold">个医学科室</span>
                   </div>
@@ -3958,7 +3959,7 @@ Clinical class: Life-saving respiratory device`;
                 <div>
                   <h3 className="text-sm md:text-base font-black text-slate-800 flex items-center gap-2">
                     <LayoutGrid className="w-5 h-5 text-indigo-500 animate-pulse" />
-                    <span>全院科室 ✕ 装备类别 联动资产看板</span>
+                    <span>{assetScopeLabel}科室 ✕ 装备类别 联动资产看板</span>
                   </h3>
                   <p className="text-[11px] text-slate-500 mt-1">
                     系统根据实际库存智能统计。<strong>点击下表任何科室行、品类列、交叉单元格或总数，将自动完成筛选并跳转到【台账明细表】专属页面，实现穿透下钻！</strong>
@@ -3986,7 +3987,7 @@ Clinical class: Life-saving respiratory device`;
                           >
                             <span className="block font-bold">{cat}</span>
                             <span className="text-[9px] font-normal text-slate-400">
-                              (全院: {equipments.filter(e => e.category === cat).length}台)
+                              ({assetScopeLabel}: {visibleEquipments.filter(e => e.category === cat).length}台)
                             </span>
                           </th>
                         );
@@ -4005,8 +4006,8 @@ Clinical class: Life-saving respiratory device`;
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
-                    {Array.from(new Set(equipments.map(e => e.dept))).filter(Boolean).map(dept => {
-                      const deptTotal = equipments.filter(e => e.dept === dept).length;
+                    {visibleDepartments.filter(dept => dept !== '全部科室').map(dept => {
+                      const deptTotal = visibleEquipments.filter(e => isSameDepartment(e.dept, dept)).length;
                       
                       return (
                         <tr 
@@ -4032,7 +4033,7 @@ Clinical class: Life-saving respiratory device`;
 
                           {/* Category Count Cells */}
                           {['急救生命支持', '影像诊断', '检验分析', '手术治疗', '其他'].map(cat => {
-                            const count = equipments.filter(e => e.dept === dept && e.category === cat).length;
+                            const count = visibleEquipments.filter(e => isSameDepartment(e.dept, dept) && e.category === cat).length;
                             
                             return (
                               <td key={cat} className="p-2.5 text-center">
@@ -4079,7 +4080,7 @@ Clinical class: Life-saving respiratory device`;
                     <tr className="bg-slate-100/60 font-black border-t-2 border-slate-200">
                       <td className="p-3 text-slate-800 font-extrabold">全院品类小计</td>
                       {['急救生命支持', '影像诊断', '检验分析', '手术治疗', '其他'].map(cat => {
-                        const colTotal = equipments.filter(e => e.category === cat).length;
+                        const colTotal = visibleEquipments.filter(e => e.category === cat).length;
                         
                         return (
                           <td key={cat} className="p-3 text-center">
@@ -4108,7 +4109,7 @@ Clinical class: Life-saving respiratory device`;
                           }}
                           className="font-black"
                         >
-                          {equipments.length}台
+                          {visibleEquipments.length}台
                         </button>
                       </td>
                     </tr>
@@ -4130,7 +4131,7 @@ Clinical class: Life-saving respiratory device`;
             <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-4 md:p-6">
               <h3 className="text-sm md:text-base font-black text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-3 mb-4">
                 <BarChart2 className="w-5 h-5 text-indigo-500" />
-                <span>全院资产购置成本分布分析</span>
+                <span>{assetScopeLabel}资产购置成本分布分析</span>
               </h3>
               
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -4142,9 +4143,9 @@ Clinical class: Life-saving respiratory device`;
                       <span>科室资产原值排行</span>
                     </p>
                     <div className="space-y-2 font-mono">
-                      {Array.from(new Set(equipments.map(e => e.dept))).filter(Boolean)
+                      {visibleDepartments.filter(dept => dept !== '全部科室')
                         .map(dept => {
-                          const value = equipments.filter(e => e.dept === dept).reduce((sum, e) => sum + (Number(e.purchasePrice) || 0), 0);
+                          const value = visibleEquipments.filter(e => isSameDepartment(e.dept, dept)).reduce((sum, e) => sum + (Number(e.purchasePrice) || 0), 0);
                           return { dept, value };
                         })
                         .sort((a, b) => b.value - a.value)
@@ -4165,7 +4166,7 @@ Clinical class: Life-saving respiratory device`;
                     </p>
                     <div className="space-y-2 font-mono">
                       {['急救生命支持', '影像诊断', '检验分析', '手术治疗', '其他'].map((cat, idx) => {
-                        const value = equipments.filter(e => e.category === cat).reduce((sum, e) => sum + (Number(e.purchasePrice) || 0), 0);
+                        const value = visibleEquipments.filter(e => e.category === cat).reduce((sum, e) => sum + (Number(e.purchasePrice) || 0), 0);
                         const ratio = totalAssetsValue > 0 ? ((value / totalAssetsValue) * 100).toFixed(1) : '0';
                         return (
                           <div key={idx} className="flex justify-between items-center text-[11px]">
@@ -4183,11 +4184,11 @@ Clinical class: Life-saving respiratory device`;
                   <BarChart2 className="w-12 h-12 text-slate-300 mb-2 animate-bounce" />
                   <p className="text-xs font-bold text-slate-700">科室资产总原值堆叠对比</p>
                   <p className="text-[10px] text-slate-400 mt-1">
-                    系统已对齐全院在册装备数据，支持 3D 响应式分析
+                    系统已对齐{assetScopeLabel}在册装备数据，支持 3D 响应式分析
                   </p>
                   <div className="flex gap-1.5 mt-3 flex-wrap justify-center">
-                    {Array.from(new Set(equipments.map(e => e.dept))).filter(Boolean).map(dept => {
-                      const count = equipments.filter(e => e.dept === dept).length;
+                    {visibleDepartments.filter(dept => dept !== '全部科室').map(dept => {
+                      const count = visibleEquipments.filter(e => isSameDepartment(e.dept, dept)).length;
                       return (
                         <span key={dept} className="text-[9px] bg-white border border-slate-200 rounded px-1.5 py-0.5 text-slate-500 font-bold font-mono">
                           {dept} ({count}台)
@@ -4205,7 +4206,7 @@ Clinical class: Life-saving respiratory device`;
       {/* Global Bottom Footer stats info */}
       <footer id="global_footer" className="hidden md:flex mt-6 justify-between text-[11px] text-slate-400 border-t border-slate-200/60 pt-4">
         <div className="flex gap-6">
-          <span>全院医学装备资产估算总值: <strong className="text-slate-600">¥{totalAssetsValue.toLocaleString()}</strong></span>
+          <span>{assetScopeLabel}医学装备资产估算总值: <strong className="text-slate-600">¥{totalAssetsValue.toLocaleString()}</strong></span>
           <span>运行设备完好率: <strong className="text-emerald-600 font-bold">{perfectRate}%</strong></span>
           <span>医学强检监控状态: <strong className="text-slate-600">良好</strong></span>
         </div>
@@ -5651,7 +5652,7 @@ Clinical class: Life-saving respiratory device`;
                   required
                 >
                   <option value="">-- 请选择本科室发生故障的设备 --</option>
-                  {equipments.filter(eq => !currentUser.dept || isSameDepartment(eq.dept, currentUser.dept)).map(eq => (
+                  {visibleEquipments.map(eq => (
                     <option key={eq.id} value={eq.id}>
                       [{eq.status}] {eq.deviceName} ({eq.model}) (SN: {eq.sn})
                     </option>
