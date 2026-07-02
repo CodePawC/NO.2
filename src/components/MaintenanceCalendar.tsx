@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { MedicalEquipment, MaintenanceLog, CalibrationLog, UserProfile } from '../types';
 import { isSameDepartment } from '../utils/departmentUtils';
+import { getLocalDateString } from '../utils/dateUtils';
 
 interface MaintenanceCalendarProps {
   equipments: MedicalEquipment[];
@@ -1353,7 +1354,7 @@ export default function MaintenanceCalendar({
                     if (equipments.length > 0) {
                       setDeployEquipmentId(equipments[0].id);
                     }
-                    setDeployDate('2026-07-02');
+                    setDeployDate(getLocalDateString());
                   }}
                   className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-black shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                 >

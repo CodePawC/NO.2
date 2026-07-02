@@ -51,6 +51,7 @@ import { MOCK_VOICE_TEMPLATES, PRESET_PROMPTS, SIMULATED_USERS } from './data/ap
 import { useAiSettings } from './hooks/useAiSettings';
 import { useSpeechRecognition } from './hooks/useSpeechRecognition';
 import { sendAssistantChat } from './services/aiApi';
+import { getDateDiffDaysFromToday } from './utils/dateUtils';
 import { isSameDepartment, normalizeDepartmentName } from './utils/departmentUtils';
 import { syncTasksToEquipmentArchives } from './utils/equipmentSync';
 import { EQUIPMENT_STORAGE_KEY, parseStoredEquipmentList } from './utils/equipmentStorage';
@@ -253,11 +254,9 @@ export default function App() {
     ? ((visibleEquipments.filter(eq => eq.status === '正常运行').length / visibleEquipments.length) * 100).toFixed(1)
     : '0.0';
   const sidebarCalibrationDueCount = visibleEquipments.filter(eq => {
-    if (!eq.calibrationRequired || !eq.nextCalibrationDate) return false;
-    const nextCalibrationTime = new Date(eq.nextCalibrationDate).getTime();
-    if (Number.isNaN(nextCalibrationTime)) return false;
-    const todayTime = new Date('2026-07-01').getTime();
-    const diffDays = (nextCalibrationTime - todayTime) / (1000 * 3600 * 24);
+    if (!eq.calibrationRequired) return false;
+    const diffDays = getDateDiffDaysFromToday(eq.nextCalibrationDate);
+    if (diffDays === null) return false;
     return diffDays >= 0 && diffDays <= 30;
   }).length;
   const sidebarEmergencyCount = visibleTasks.filter(t => t.urgency === '生命支持' || t.urgency === '特急').length;
@@ -1241,7 +1240,7 @@ export default function App() {
               <div className="flex items-center justify-between text-xs text-slate-400">
                   <span className="flex items-center gap-1.5 text-slate-400">
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
-                    今日应急
+                    应急任务
                   </span>
                 <span className="font-bold text-slate-200 font-mono">{sidebarEmergencyCount} 次</span>
               </div>

@@ -11,6 +11,7 @@ import { SIMULATED_USERS } from '../data/appPresets';
 import { analyzeGeminiContent, chatWithGeminiExpert } from '../services/aiApi';
 import { isSameDepartment } from '../utils/departmentUtils';
 import { EQUIPMENT_STORAGE_KEY, parseStoredEquipmentList } from '../utils/equipmentStorage';
+import { getDateDiffDaysFromToday, getLocalDateString, getLocalDateTimeString } from '../utils/dateUtils';
 import MaintenanceCalendar from './MaintenanceCalendar';
 import BudgetStackedChart from './BudgetStackedChart';
 
@@ -37,22 +38,14 @@ const parseBatchSns = (text: string): string[] => {
 // 检查医疗器械注册证有效期状态
 const getRegistrationStatus = (dateStr?: string) => {
   if (!dateStr) return { status: 'none', text: '未设置有效期' };
-  const validDate = new Date(dateStr).getTime();
-  const today = new Date('2026-07-01').getTime(); // 固定的系统比对时间
-  const diffDays = (validDate - today) / (1000 * 3600 * 24);
+  const diffDays = getDateDiffDaysFromToday(dateStr);
+  if (diffDays === null) return { status: 'none', text: '日期格式异常' };
   if (diffDays < 0) {
     return { status: 'expired', text: '已过期', diffDays: Math.floor(Math.abs(diffDays)) };
   } else if (diffDays <= 90) {
     return { status: 'expiring', text: '即将过期', diffDays: Math.floor(diffDays) };
   }
   return { status: 'valid', text: '有效中', diffDays: Math.floor(diffDays) };
-};
-
-const getLocalDateString = (date = new Date()) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
 };
 
 const createQuickRepairWorkOrderNo = (equipments: MedicalEquipment[], date = getLocalDateString()) => {
@@ -110,7 +103,7 @@ export const generatePreviewData = (equipment: MedicalEquipment, file: Attachmen
       fileName: file.name,
       fileSize: file.size,
       fileType: fileTypeStr,
-      uploadDate: file.uploadDate || '2026-07-01',
+      uploadDate: file.uploadDate || getLocalDateString(),
       author: '原厂技术维护委员会审核印制',
       summary: `本手册是关于《${equipment.deviceName} (型号: ${equipment.model})》的官方全生命周期技术手册。涵盖了整机基本电气指标、操作前置条件、日常预防性维护(PM)检测节点、漏电流测试容限、特种环境电磁兼容指引以及常规故障诊断速查指南。`,
       tlDr: [
@@ -208,7 +201,7 @@ export const generatePreviewData = (equipment: MedicalEquipment, file: Attachmen
       fileName: file.name,
       fileSize: file.size,
       fileType: fileTypeStr,
-      uploadDate: file.uploadDate || '2026-07-01',
+      uploadDate: file.uploadDate || getLocalDateString(),
       author: '中华人民共和国财政税务机关专用核签',
       summary: `本发票为《${equipment.deviceName} (型号: ${equipment.model})》的官方增值税专用凭证。记录了该设备购入原值、采购流程合规编码、国家专用发票代码及号码，并附带了医学装备科采购合同与入库核验流程。`,
       tlDr: [
@@ -306,7 +299,7 @@ export const generatePreviewData = (equipment: MedicalEquipment, file: Attachmen
       fileName: file.name,
       fileSize: file.size,
       fileType: fileTypeStr,
-      uploadDate: file.uploadDate || '2026-07-01',
+      uploadDate: file.uploadDate || getLocalDateString(),
       author: '医院装备科信息档案处自动提取',
       summary: `本文件是关于《${equipment.deviceName}》的技术文件。系统已运用 AI 智能引擎对其进行了 OCR 信息扫描，建立了元数据目录，便于日常维护审计、计量校准及快速核查。`,
       tlDr: [
@@ -385,7 +378,7 @@ export const generatePreviewData = (equipment: MedicalEquipment, file: Attachmen
             { label: "签署机构", value: "装备部终审" }
           ],
           lines: [
-            `档案登记时间: ${file.uploadDate || '2026-07-01'}`,
+            `档案登记时间: ${file.uploadDate || getLocalDateString()}`,
             `上传原件文件名: ${file.name}`,
             "技术档案可信审计散列值: [SHA256: 7f8a9e1d2c3b4a5f6e7d8c9b0a1b2c3d4e5f]",
             "系统数字可信核签：临床工程师及科室主管对以上参数一致性进行了电子签字，确认永久归档备查。"
@@ -831,9 +824,8 @@ export default function EquipmentArchives({
   const troubleCount = visibleEquipments.filter(eq => eq.status === '故障维修').length;
   const calibrationReminderCount = visibleEquipments.filter(eq => {
     if (!eq.calibrationRequired || !eq.nextCalibrationDate) return false;
-    const nextCal = new Date(eq.nextCalibrationDate).getTime();
-    const today = new Date('2026-07-01').getTime(); // Using static current time from environment metadata
-    const diffDays = (nextCal - today) / (1000 * 3600 * 24);
+    const diffDays = getDateDiffDaysFromToday(eq.nextCalibrationDate);
+    if (diffDays === null) return false;
     return diffDays >= 0 && diffDays <= 30; // Within 30 days
   }).length;
 
@@ -2044,10 +2036,10 @@ Clinical class: Life-saving respiratory device`;
                   // 2. Calculate Calibration status
                   let calibStatus: { status: 'none' | 'expired' | 'expiring' | 'valid'; text: string; diffDays?: number } = { status: 'none', text: '免强检' };
                   if (eq.calibrationRequired && eq.nextCalibrationDate) {
-                    const calibDate = new Date(eq.nextCalibrationDate).getTime();
-                    const today = new Date('2026-07-01').getTime();
-                    const diffDays = (calibDate - today) / (1000 * 3600 * 24);
-                    if (diffDays < 0) {
+                    const diffDays = getDateDiffDaysFromToday(eq.nextCalibrationDate);
+                    if (diffDays === null) {
+                      calibStatus = { status: 'none', text: '日期异常' };
+                    } else if (diffDays < 0) {
                       calibStatus = { status: 'expired', text: '计量超期', diffDays: Math.floor(Math.abs(diffDays)) };
                     } else if (diffDays <= 30) {
                       calibStatus = { status: 'expiring', text: '计量临期', diffDays: Math.floor(diffDays) };
@@ -4214,7 +4206,7 @@ Clinical class: Life-saving respiratory device`;
           <span>运行设备完好率: <strong className="text-emerald-600 font-bold">{perfectRate}%</strong></span>
           <span>医学强检监控状态: <strong className="text-slate-600">良好</strong></span>
         </div>
-        <span>医疗质量与物理安全自诊断时间: 2026-07-01 23:03:29 (本地时间)</span>
+        <span>医疗质量与物理安全自诊断时间: {getLocalDateTimeString()} (本地时间)</span>
       </footer>
 
       {/* Mobile Sticky Navigation Tab Bar */}
@@ -5976,7 +5968,7 @@ Clinical class: Life-saving respiratory device`;
                   <div className="absolute top-0 right-0 hidden sm:flex flex-col items-end text-right font-mono text-[9px] text-slate-400 leading-normal">
                     <span>备案号: ARC-{selectedEquipment.id.toUpperCase()}</span>
                     <span>归档级别: {selectedEquipment.deviceClass || '暂未分类'}</span>
-                    <span>导出时间: 2026-07-02 01:30</span>
+                    <span>导出时间: {getLocalDateTimeString()}</span>
                   </div>
                 </div>
 
