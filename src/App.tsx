@@ -504,6 +504,13 @@ export default function App() {
   const [activeLogAction, setActiveLogAction] = useState('');
   const [activeLogOperator, setActiveLogOperator] = useState('');
 
+  useEffect(() => {
+    setRatingComment('');
+    setRatingValue(5);
+    setActiveLogAction('');
+    setActiveLogOperator('');
+  }, [selectedTask?.id, currentSimulatedUserId, currentUserRole]);
+
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // Persist tasks & Automatically synchronize status and maintenance logs to Equipment Archives

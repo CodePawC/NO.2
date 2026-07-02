@@ -240,6 +240,25 @@ const checks: Check[] = [
     }
   },
   {
+    name: 'task detail draft inputs reset on task or role change',
+    run: () => {
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const formStateStart = appSource.indexOf('// Status modify form inside task detail');
+      const formStateEnd = appSource.indexOf('const chatEndRef = useRef<HTMLDivElement>(null);', formStateStart);
+      assert(formStateStart !== -1 && formStateEnd > formStateStart, '应能定位任务详情表单状态逻辑');
+      const formStateSource = appSource.slice(formStateStart, formStateEnd);
+
+      assert(
+        formStateSource.includes("setRatingComment('');") &&
+          formStateSource.includes('setRatingValue(5);') &&
+          formStateSource.includes("setActiveLogAction('');") &&
+          formStateSource.includes("setActiveLogOperator('');") &&
+          formStateSource.includes('[selectedTask?.id, currentSimulatedUserId, currentUserRole]'),
+        '切换工单或身份时应清空临床验收草稿与工程师日志草稿，避免上一单未提交内容被误用于下一单'
+      );
+    }
+  },
+  {
     name: 'transferred non-equipment tasks can be closed without polluting medical repair flow',
     run: () => {
       const transferTask = createTask({
