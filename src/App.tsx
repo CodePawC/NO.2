@@ -47,7 +47,7 @@ import {
 } from 'lucide-react';
 import { StructuredTicket, ChatMessage, TaskType, UrgencyLevel, ClinicalImpact, TaskStatus, LLMConfig, MedicalEquipment } from './types';
 import { INITIAL_TASKS } from './data/defaultTasks';
-import { MOCK_VOICE_TEMPLATES, PRESET_PROMPTS, SIMULATED_USERS } from './data/appPresets';
+import { getPresetPromptsForUser, MOCK_VOICE_TEMPLATES, SIMULATED_USERS } from './data/appPresets';
 import { useAiSettings } from './hooks/useAiSettings';
 import { useSpeechRecognition } from './hooks/useSpeechRecognition';
 import { sendAssistantChat } from './services/aiApi';
@@ -251,6 +251,7 @@ export default function App() {
   const currentSimulatedUser = SIMULATED_USERS.find(u => u.id === currentSimulatedUserId) || SIMULATED_USERS[0];
   const isClinicalUser = currentUserRole === 'medical_staff';
   const currentUserDepartment = currentSimulatedUser.department || currentSimulatedUser.dept;
+  const visiblePresetPrompts = getPresetPromptsForUser(currentSimulatedUser);
   const canCurrentUserSeeTask = (task: StructuredTicket) => {
     return !isClinicalUser || isSameDepartment(task.department, currentUserDepartment);
   };
@@ -1469,7 +1470,7 @@ export default function App() {
               快捷预设:
             </span>
             <div className="flex flex-wrap gap-1 flex-1">
-              {PRESET_PROMPTS.map((preset, idx) => (
+              {visiblePresetPrompts.map((preset, idx) => (
                 <button
                   key={idx}
                   onClick={() => handleSendMessage(preset.text)}

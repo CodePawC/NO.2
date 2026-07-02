@@ -1,6 +1,11 @@
 import { LLMConfig, UserProfile } from '../types';
 
-export const PRESET_PROMPTS = [
+export type PresetPrompt = {
+  label: string;
+  text: string;
+};
+
+export const PRESET_PROMPTS: PresetPrompt[] = [
   {
     label: "生命支持急修",
     text: "我是急诊科的王医生，我们抢救室1号床的迈瑞监护仪突然黑屏开不了机，现在病人正在抢救，急需使用！联系电话内线8120。"
@@ -22,6 +27,66 @@ export const PRESET_PROMPTS = [
     text: "胃镜室电子胃镜CV-290插入管处在漏水测试时发现气密性不合格，可能有微小破损，画面有点模糊。急用！"
   }
 ];
+
+const getDepartmentEquipmentProfile = (department: string) => {
+  if (department.includes('呼吸')) {
+    return { urgentDevice: '德尔格呼吸机', acceptanceDevice: '无创呼吸机', vendorDevice: '呼吸机氧传感器', location: '5楼病区' };
+  }
+  if (department.includes('放射')) {
+    return { urgentDevice: 'DR机房转运监护仪', acceptanceDevice: '联影DR平板探测器', vendorDevice: 'DR球管组件', location: 'DR机房' };
+  }
+  if (department.includes('手术')) {
+    return { urgentDevice: '麻醉机', acceptanceDevice: '手术无影灯', vendorDevice: '麻醉机气路模块', location: '手术间' };
+  }
+  if (department.includes('ICU') || department.includes('重症')) {
+    return { urgentDevice: '输液泵', acceptanceDevice: '床旁监护仪', vendorDevice: '监护仪主控模块', location: '重症床旁' };
+  }
+  if (department.includes('急诊')) {
+    return { urgentDevice: '迈瑞监护仪', acceptanceDevice: '除颤监护仪', vendorDevice: '除颤仪电池模块', location: '抢救室' };
+  }
+  if (department.includes('超声')) {
+    return { urgentDevice: '便携超声', acceptanceDevice: '彩色多普勒超声诊断仪', vendorDevice: '超声探头', location: '超声诊室' };
+  }
+  if (department.includes('检验')) {
+    return { urgentDevice: '血气分析仪', acceptanceDevice: '全自动生化分析仪', vendorDevice: '样本针模块', location: '检验窗口' };
+  }
+
+  return { urgentDevice: '常用监护设备', acceptanceDevice: '新到医疗设备', vendorDevice: '原厂功能模块', location: '诊疗区域' };
+};
+
+export const getPresetPromptsForUser = (user: UserProfile): PresetPrompt[] => {
+  if (user.role !== 'medical_staff') {
+    return PRESET_PROMPTS;
+  }
+
+  const department = user.department || user.dept || '本科室';
+  const contactName = user.name || '科室医护人员';
+  const contactPhone = user.phone || '未留电话';
+  const profile = getDepartmentEquipmentProfile(department);
+
+  return [
+    {
+      label: '本科室急修',
+      text: `我是${department}的${contactName}，我们${profile.location}正在使用的${profile.urgentDevice}突然报警无法正常运行，已经影响患者处置，请医学装备科立即协助。联系电话${contactPhone}。`
+    },
+    {
+      label: '本科室到货验收',
+      text: `${department}今天有${profile.acceptanceDevice}到货，需要医学装备科协助开箱验收、核对配置并登记条码。联系人${contactName}，${contactPhone}。`
+    },
+    {
+      label: '电脑网络(转信息科)',
+      text: `${department}诊室电脑网络异常，HIS系统无法登录，影响患者处方和检查开立。联系人${contactName}，${contactPhone}。`
+    },
+    {
+      label: '水电后勤(转总务)',
+      text: `${department}诊疗区域插座没电，照明异常，怀疑跳闸，需要后勤师傅协助处理。联系人${contactName}，${contactPhone}。`
+    },
+    {
+      label: '厂家协同',
+      text: `${department}在用${profile.vendorDevice}出现疑似原厂部件故障，需要医学装备科联系厂家售后协同排查。联系人${contactName}，${contactPhone}。`
+    }
+  ];
+};
 
 export const MOCK_VOICE_TEMPLATES = [
   {

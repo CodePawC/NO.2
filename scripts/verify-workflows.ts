@@ -3,6 +3,7 @@ import { isSameDepartment } from '../src/utils/departmentUtils.ts';
 import { parseStoredEquipmentList } from '../src/utils/equipmentStorage.ts';
 import { syncTasksToEquipmentArchives } from '../src/utils/equipmentSync.ts';
 import { getDepartmentTasks } from '../src/utils/taskOrdering.ts';
+import { getPresetPromptsForUser, PRESET_PROMPTS } from '../src/data/appPresets.ts';
 import {
   canEngineerCloseTransferredTask,
   getClinicalAcceptanceBlockReason,
@@ -394,6 +395,39 @@ const checks: Check[] = [
         !clinicalDetailSource.includes('<span>检索建档</span>'),
         '临床端任务详情不能暴露工程师检索建档按钮'
       );
+    }
+  },
+  {
+    name: 'clinical quick presets stay in the current department context',
+    run: () => {
+      const respiratoryDoctor = createUser({
+        name: '赵晓东',
+        department: '呼吸内科',
+        dept: '呼吸内科',
+        phone: '分机 5610'
+      });
+      const clinicalPresets = getPresetPromptsForUser(respiratoryDoctor);
+      const clinicalText = clinicalPresets.map(preset => `${preset.label} ${preset.text}`).join('\n');
+
+      assert(
+        clinicalPresets.every(preset => preset.text.includes('呼吸内科')),
+        '临床快捷预设应全部带入当前登录科室'
+      );
+      assert(
+        clinicalPresets.every(preset => preset.text.includes('赵晓东') && preset.text.includes('分机 5610')),
+        '临床快捷预设应带入当前登录医护姓名和联系电话'
+      );
+      assert(
+        !/放射科|妇产科|胃镜室|急诊科/.test(clinicalText),
+        '临床快捷预设不能夹带其他演示科室文字'
+      );
+
+      const engineerPresets = getPresetPromptsForUser(createUser({
+        role: 'engineer',
+        department: '医学装备科',
+        dept: '医学装备科'
+      }));
+      assertEqual(engineerPresets, PRESET_PROMPTS, '工程师端应继续保留全院演示快捷预设');
     }
   }
 ];
