@@ -1,20 +1,132 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# CodePawC NO.2
 
-# Run and deploy your AI Studio app
+Hospital medical equipment operations prototype exported from Google AI Studio and prepared for ongoing GitHub + Codex development.
 
-This contains everything you need to run your app locally.
+The app provides an AI-assisted repair intake workflow, medical equipment archives, simulated clinical/engineer roles, equipment maintenance records, and Gemini/OpenAI-compatible model settings.
 
-View your app in AI Studio: https://ai.studio/apps/e2e83fa6-65dc-4e9a-9517-9231ce722acd
+## Tech Stack
 
-## Run Locally
+- React 19
+- TypeScript
+- Vite
+- Tailwind CSS
+- Express
+- Google Gemini SDK (`@google/genai`)
 
-**Prerequisites:**  Node.js
+## Repository Layout
 
+```text
+.
+├── src/
+│   ├── App.tsx
+│   ├── components/
+│   ├── data/
+│   └── types.ts
+├── server.ts
+├── vite.config.ts
+├── .env.example
+├── AGENTS.md
+└── .github/workflows/ci.yml
+```
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Prerequisites
+
+- Node.js 22 or newer
+- npm
+- Optional: Gemini API key for live AI calls
+
+## Local Development
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Create a local environment file:
+
+```bash
+cp .env.example .env.local
+```
+
+Set `GEMINI_API_KEY` in `.env.local` if you want cloud AI features. The app can still build and run without it; AI calls fall back to local rule-based behavior where implemented.
+
+Start the development server:
+
+```bash
+npm run dev
+```
+
+Open:
+
+```text
+http://127.0.0.1:3000
+```
+
+## Available Scripts
+
+```bash
+npm run dev
+```
+
+Runs the Express server with Vite middleware.
+
+```bash
+npm run lint
+```
+
+Runs TypeScript checking with `tsc --noEmit`.
+
+```bash
+npm run build
+```
+
+Builds the Vite frontend and bundles `server.ts` into `dist/server.cjs`.
+
+```bash
+npm run start
+```
+
+Starts the production build from `dist/server.cjs`.
+
+## Environment Variables
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `GEMINI_API_KEY` | No for build, yes for live Gemini calls | Gemini API key used by server-side AI endpoints. |
+| `APP_URL` | No | Public app URL for hosted/self-referential workflows. |
+
+Do not commit `.env.local` or real API keys.
+
+## CI
+
+GitHub Actions runs on pushes and pull requests targeting `main`.
+
+The workflow performs:
+
+1. Dependency installation
+2. TypeScript check
+3. Production build
+4. Production server smoke test against `/api/health`
+
+CI does not require `GEMINI_API_KEY`.
+
+## Development Workflow
+
+Recommended flow:
+
+1. Use Google AI Studio for quick prototype ideas.
+2. Push or export code into GitHub.
+3. Use Codex and pull requests for structured development, review, testing, and deployment work.
+4. Keep `main` as the stable source of truth.
+
+## Notes for Codex
+
+Codex-specific repository guidance lives in `AGENTS.md`.
+
+Future engineering priorities:
+
+- Split the large React components into focused pages, hooks, and services.
+- Move durable production data out of `localStorage`.
+- Keep provider API keys on the server side for production deployments.
+- Add tests around task parsing, status transitions, and equipment archive workflows.
