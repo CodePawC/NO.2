@@ -73,24 +73,6 @@ export default function App() {
   });
 
   useEffect(() => {
-    const handleDeepLinkTicket = (e: any) => {
-      const ticketId = e.detail?.ticketId;
-      if (ticketId) {
-        const found = tasks.find(t => t.id === ticketId);
-        if (found) {
-          setSelectedTask(found);
-          setCurrentWorkspace('tasks');
-          setMobileTab('detail');
-        }
-      }
-    };
-    window.addEventListener('deep-link-ticket', handleDeepLinkTicket);
-    return () => {
-      window.removeEventListener('deep-link-ticket', handleDeepLinkTicket);
-    };
-  }, [tasks]);
-
-  useEffect(() => {
     const saved = localStorage.getItem('medical_equipment_data');
     if (saved) {
       try {
@@ -301,6 +283,42 @@ export default function App() {
   const [isClarification, setIsClarification] = useState(false);
   const [forwardDept, setForwardDept] = useState<string | null>(null);
   const [isFullDraftOpen, setIsFullDraftOpen] = useState(false);
+
+  useEffect(() => {
+    const handleDeepLinkTicket = (e: any) => {
+      const ticketId = e.detail?.ticketId;
+      if (!ticketId) return;
+
+      const found = tasks.find(t => t.id === ticketId);
+      if (!found) return;
+
+      if (!canCurrentUserSeeTask(found)) {
+        const fallbackTask = tasks.find(canCurrentUserSeeTask) || null;
+        const scopeLabel = currentUserDepartment || '本科室';
+        setSelectedTask(fallbackTask);
+        setCurrentWorkspace('tasks');
+        setMobileTab(fallbackTask ? 'list' : 'chat');
+        setShowRoleSwitchedToast(`已阻止跨科室工单访问，仅显示【${scopeLabel}】任务`);
+        setTimeout(() => setShowRoleSwitchedToast(null), 4500);
+        setChatMessages(prev => [...prev, {
+          id: `msg-ticket-deeplink-blocked-${Date.now()}`,
+          sender: 'assistant',
+          text: `⚠️ **工单访问权限提醒**\n当前临床账号只能查看【${scopeLabel}】工单。任务【${found.id}】归属【${found.department}】，系统已阻止打开。`,
+          timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+        }]);
+        return;
+      }
+
+      setSelectedTask(found);
+      setCurrentWorkspace('tasks');
+      setMobileTab('detail');
+    };
+
+    window.addEventListener('deep-link-ticket', handleDeepLinkTicket);
+    return () => {
+      window.removeEventListener('deep-link-ticket', handleDeepLinkTicket);
+    };
+  }, [tasks, isClinicalUser, currentUserDepartment]);
 
   useEffect(() => {
     if (!isClinicalUser || !selectedTask || canCurrentUserSeeTask(selectedTask)) {

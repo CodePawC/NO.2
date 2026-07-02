@@ -6,7 +6,7 @@ import {
   PlusCircle, FileUp, ChevronRight, ChevronLeft, ChevronDown, Info, HardDrive, RefreshCw,
   HelpCircle, CheckSquare, Layers, Copy, Printer, User, BarChart2, LayoutGrid, Table, Filter, ArrowUpDown
 } from 'lucide-react';
-import { MedicalEquipment, MaintenanceLog, CalibrationLog, Attachment, UserProfile } from '../types';
+import { MedicalEquipment, MaintenanceLog, CalibrationLog, Attachment, UserProfile, StructuredTicket } from '../types';
 import { SIMULATED_USERS } from '../data/appPresets';
 import { analyzeGeminiContent, chatWithGeminiExpert } from '../services/aiApi';
 import { isSameDepartment } from '../utils/departmentUtils';
@@ -544,7 +544,7 @@ export default function EquipmentArchives({
   onBackToTasks?: () => void;
   onReportRepairFromEquip?: (equip: MedicalEquipment) => void;
   onQuickRepairCreated?: (request: QuickRepairRequest) => void;
-  tasks?: any[];
+  tasks?: StructuredTicket[];
   currentUser?: UserProfile;
   onUserChange?: (user: UserProfile) => void;
 }) {
@@ -757,6 +757,14 @@ export default function EquipmentArchives({
   };
   const canCurrentUserViewEquipment = (equipment: MedicalEquipment) => {
     return currentUser.role !== 'medical_staff' || !currentUserDepartment || isSameDepartment(equipment.dept, currentUserDepartment);
+  };
+  const canCurrentUserViewTicket = (ticket: StructuredTicket) => {
+    return currentUser.role !== 'medical_staff' || !currentUserDepartment || isSameDepartment(ticket.department, currentUserDepartment);
+  };
+  const getRelatedTasksForEquipment = (equipment: MedicalEquipment) => {
+    return tasks
+      .filter(t => t.deviceId === equipment.id || t.deviceId === equipment.sn || (t.deviceName === equipment.deviceName && isSameDepartment(t.department, equipment.dept)))
+      .filter(canCurrentUserViewTicket);
   };
   const canManageEquipmentArchive = currentUser.role === 'engineer';
   const showArchiveManageBlockedToast = (actionName: string) => {
@@ -2370,7 +2378,7 @@ Clinical class: Life-saving respiratory device`;
                 >
                   🔔 相关工单
                   <span className="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 rounded-full font-bold font-mono">
-                    {tasks.filter(t => t.deviceId === selectedEquipment.id || t.deviceId === selectedEquipment.sn || (t.deviceName === selectedEquipment.deviceName && isSameDepartment(t.department, selectedEquipment.dept))).length}
+                    {getRelatedTasksForEquipment(selectedEquipment).length}
                   </span>
                 </button>
               </div>
@@ -3239,7 +3247,7 @@ Clinical class: Life-saving respiratory device`;
                 })()}
 
                 {activeTab === 'tickets' && (() => {
-                  const relatedTasks = tasks.filter(t => t.deviceId === selectedEquipment.id || t.deviceId === selectedEquipment.sn || (t.deviceName === selectedEquipment.deviceName && isSameDepartment(t.department, selectedEquipment.dept)));
+                  const relatedTasks = getRelatedTasksForEquipment(selectedEquipment);
                   return (
                     <div className="space-y-4">
                       <div className="flex justify-between items-center pb-2 border-b border-slate-100">
