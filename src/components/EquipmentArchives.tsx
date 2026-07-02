@@ -809,6 +809,47 @@ export default function EquipmentArchives({
 
   const selectedEquipment = filteredEquipments.find(eq => eq.id === selectedId) || filteredEquipments[0] || null;
 
+  const previewFileBelongsToSelectedEquipment = Boolean(
+    selectedEquipment && previewFile && selectedEquipment.attachments.some(file => file.id === previewFile.id)
+  );
+  const maintenanceLogBelongsToSelectedEquipment = Boolean(
+    selectedEquipment && viewMaintenanceLog && selectedEquipment.maintenanceLogs.some(log => log.id === viewMaintenanceLog.id)
+  );
+  const calibrationLogBelongsToSelectedEquipment = Boolean(
+    selectedEquipment && viewCalibrationLog && selectedEquipment.calibrationLogs.some(log => log.id === viewCalibrationLog.id)
+  );
+
+  useEffect(() => {
+    if (isPreviewOpen && !previewFileBelongsToSelectedEquipment) {
+      setIsPreviewOpen(false);
+      setPreviewFile(null);
+      setActivePreviewPage(1);
+    }
+  }, [isPreviewOpen, previewFileBelongsToSelectedEquipment]);
+
+  useEffect(() => {
+    if (viewMaintenanceLog && !maintenanceLogBelongsToSelectedEquipment) {
+      setViewMaintenanceLog(null);
+    }
+    if (viewCalibrationLog && !calibrationLogBelongsToSelectedEquipment) {
+      setViewCalibrationLog(null);
+    }
+  }, [
+    viewMaintenanceLog,
+    viewCalibrationLog,
+    maintenanceLogBelongsToSelectedEquipment,
+    calibrationLogBelongsToSelectedEquipment
+  ]);
+
+  useEffect(() => {
+    if (!quickRepairEquipId) return;
+    const quickRepairEquipment = equipments.find(eq => eq.id === quickRepairEquipId);
+    if (quickRepairEquipment && canCurrentUserReportEquipment(quickRepairEquipment)) return;
+
+    const fallbackEquipment = visibleEquipments.find(canCurrentUserReportEquipment);
+    setQuickRepairEquipId(fallbackEquipment?.id || '');
+  }, [quickRepairEquipId, currentUser.id, currentUserDepartment, equipments, visibleEquipments]);
+
   // Refresh AI Chat context on device select change
   useEffect(() => {
     if (selectedEquipment) {

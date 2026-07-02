@@ -498,6 +498,26 @@ const checks: Check[] = [
           archiveSource.includes('setCurrentEditId(null);'),
         '切换到临床档案视图时应清理工程师档案管理弹窗和编辑态'
       );
+      assert(
+        archiveSource.includes('previewFileBelongsToSelectedEquipment') &&
+          archiveSource.includes('selectedEquipment.attachments.some(file => file.id === previewFile.id)') &&
+          archiveSource.includes('setPreviewFile(null);') &&
+          archiveSource.includes('setActivePreviewPage(1);'),
+        '附件预览应在当前选中设备变化后关闭不属于该设备的旧预览'
+      );
+      assert(
+        archiveSource.includes('maintenanceLogBelongsToSelectedEquipment') &&
+          archiveSource.includes('calibrationLogBelongsToSelectedEquipment') &&
+          archiveSource.includes('selectedEquipment.maintenanceLogs.some(log => log.id === viewMaintenanceLog.id)') &&
+          archiveSource.includes('selectedEquipment.calibrationLogs.some(log => log.id === viewCalibrationLog.id)'),
+        '维修工单和计量证书阅览应校验仍属于当前选中设备'
+      );
+      assert(
+        archiveSource.includes('const quickRepairEquipment = equipments.find(eq => eq.id === quickRepairEquipId);') &&
+          archiveSource.includes('canCurrentUserReportEquipment(quickRepairEquipment)') &&
+          archiveSource.includes("setQuickRepairEquipId(fallbackEquipment?.id || '');"),
+        '快捷报修弹窗中的设备选择应随角色和科室切换重新校验可报修范围'
+      );
     }
   },
   {
