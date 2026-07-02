@@ -411,12 +411,21 @@ const checks: Check[] = [
       const archiveSource = readFileSync('src/components/EquipmentArchives.tsx', 'utf8');
 
       assert(
-        archiveSource.includes('const selectedEquipment = visibleEquipments.find(eq => eq.id === selectedId) || visibleEquipments[0] || null;'),
-        '临床无可见资产时应显示空态，不能回退到全院第一台设备'
+        archiveSource.includes('const selectedEquipment = filteredEquipments.find(eq => eq.id === selectedId) || filteredEquipments[0] || null;'),
+        '详情面板应与当前过滤结果同源，过滤为空时显示空态'
       );
       assert(
-        !archiveSource.includes('|| visibleEquipments[0] || equipments[0]'),
-        '选中设备不能绕过 visibleEquipments 回退到隐藏资产'
+        !archiveSource.includes('|| visibleEquipments[0]') && !archiveSource.includes('|| equipments[0]'),
+        '选中设备不能绕过 filteredEquipments 回退到隐藏或未过滤资产'
+      );
+      assert(
+        archiveSource.includes('本科室在修设备') && archiveSource.includes('右侧详情已同步清空'),
+        '临床档案筛选文案应准确说明在修设备筛选与详情空态'
+      );
+      assert(
+        archiveSource.includes('当前筛选条件下暂无可选设备') &&
+          archiveSource.includes('[selectedEquipment?.id]'),
+        '档案 AI 智脑应在当前过滤无设备时同步切换为空态提示'
       );
     }
   },

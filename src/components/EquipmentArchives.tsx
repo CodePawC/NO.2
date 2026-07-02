@@ -634,6 +634,36 @@ export default function EquipmentArchives({
   const visibleEquipments = equipments.filter(canCurrentUserViewEquipment);
   const visibleDepartments: string[] = ['全部科室', ...Array.from(new Set(visibleEquipments.map(eq => eq.dept))).filter((dept): dept is string => Boolean(dept))];
   const assetScopeLabel = currentUser.role === 'medical_staff' ? '本科室' : '全院';
+  const categories = ['全部分类', '急救生命支持', '影像诊断', '检验分析', '手术治疗', '其他'];
+  const statusOptions = ['全部状态', '正常运行', '故障维修', '计量中', '已停用'];
+
+  // Filtered Equipment List taking simulated user into account
+  const filteredEquipments = visibleEquipments.filter(eq => {
+    const matchesSearch = eq.deviceName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          eq.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          eq.sn.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          eq.manufacturer.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          eq.dept.toLowerCase().includes(searchTerm.toLowerCase());
+
+    // Default department match
+    let matchesDept = selectedDept === '全部科室' || isSameDepartment(eq.dept, selectedDept);
+
+    // 临床医护人员登录并且开启了"仅看我科室设备"
+    if (currentUser.role === 'medical_staff' && onlyMyDept && currentUserDepartment) {
+      if (clinicalFilterMode === 'my_reported') {
+        // "本科室在修设备" -> 所在科室 + 处于故障维修状态 或 含有进行中的维修工单
+        const hasActiveRepairs = eq.status === '故障维修' || eq.maintenanceLogs.some(log => log.type === '维修' && log.status === '进行中');
+        if (!hasActiveRepairs) return false;
+      }
+      matchesDept = isSameDepartment(eq.dept, currentUserDepartment);
+    }
+
+    const matchesCategory = selectedCategory === '全部分类' || eq.category === selectedCategory;
+    const matchesStatus = selectedStatus === '全部状态' || eq.status === selectedStatus;
+
+    return matchesSearch && matchesDept && matchesCategory && matchesStatus;
+  });
+
   const matrixFilteredEquipments = visibleEquipments.filter(e => {
     const matchesDept = matrixSelectedDept === '全部科室' || isSameDepartment(e.dept, matrixSelectedDept);
     const matchesCategory = matrixSelectedCategory === '全部分类' || e.category === matrixSelectedCategory;
@@ -774,7 +804,7 @@ export default function EquipmentArchives({
     }
   }, [currentUser, onlyMyDept, clinicalFilterMode, selectedDept, selectedCategory, selectedStatus, searchTerm, equipments]);
 
-  const selectedEquipment = visibleEquipments.find(eq => eq.id === selectedId) || visibleEquipments[0] || null;
+  const selectedEquipment = filteredEquipments.find(eq => eq.id === selectedId) || filteredEquipments[0] || null;
 
   // Refresh AI Chat context on device select change
   useEffect(() => {
@@ -782,40 +812,15 @@ export default function EquipmentArchives({
       setChatMessages([
         { role: 'model', text: `您已选中【${selectedEquipment.deviceName}】(型号: ${selectedEquipment.model})。我可以协助您：\n1. 诊断可能出现的故障代码与排故方案。\n2. 提供该设备的年/季预防性维护 (PM) 技术大纲。\n3. 解答临床操作、计量检测规范或日常消毒疑问。` }
       ]);
+    } else {
+      setChatMessages([
+        { role: 'model', text: '当前筛选条件下暂无可选设备。请调整左侧筛选条件后，再选择设备进行故障诊断、PM 维保或计量检测咨询。' }
+      ]);
     }
-  }, [selectedId]);
+  }, [selectedEquipment?.id]);
 
-  // Unique lists for filtering dropdowns
+  // Unique list for filtering dropdowns
   const departments = visibleDepartments;
-  const categories = ['全部分类', '急救生命支持', '影像诊断', '检验分析', '手术治疗', '其他'];
-  const statusOptions = ['全部状态', '正常运行', '故障维修', '计量中', '已停用'];
-
-  // Filtered Equipment List taking simulated user into account
-  const filteredEquipments = visibleEquipments.filter(eq => {
-    const matchesSearch = eq.deviceName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          eq.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          eq.sn.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          eq.manufacturer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          eq.dept.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    // Default department match
-    let matchesDept = selectedDept === '全部科室' || isSameDepartment(eq.dept, selectedDept);
-
-    // 临床医护人员登录并且开启了"仅看我科室设备"
-    if (currentUser.role === 'medical_staff' && onlyMyDept && currentUserDepartment) {
-      if (clinicalFilterMode === 'my_reported') {
-        // "已经报修的设备" -> 所在科室 + 处于故障维修状态 或 含有进行中的维修工单
-        const hasActiveRepairs = eq.status === '故障维修' || eq.maintenanceLogs.some(log => log.type === '维修' && log.status === '进行中');
-        if (!hasActiveRepairs) return false;
-      }
-      matchesDept = isSameDepartment(eq.dept, currentUserDepartment);
-    }
-
-    const matchesCategory = selectedCategory === '全部分类' || eq.category === selectedCategory;
-    const matchesStatus = selectedStatus === '全部状态' || eq.status === selectedStatus;
-    
-    return matchesSearch && matchesDept && matchesCategory && matchesStatus;
-  });
 
   // Calculate Overall院 Dashboard stats
   const totalAssetsValue = visibleEquipments.reduce((sum, eq) => sum + eq.purchaseCost, 0);
@@ -1867,7 +1872,7 @@ Clinical class: Life-saving respiratory device`;
                         : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                     }`}
                   >
-                    <span>🚨 我已报修设备</span>
+                    <span>🚨 本科室在修设备</span>
                     {visibleEquipments.filter(eq => eq.status === '故障维修' || eq.maintenanceLogs.some(log => log.type === '维修' && log.status === '进行中')).length > 0 && (
                       <span className="absolute -top-1 -right-1 flex h-2 w-2">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
@@ -2014,7 +2019,7 @@ Clinical class: Life-saving respiratory device`;
             <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
               {filteredEquipments.length === 0 ? (
                 <div className="text-center py-12 text-slate-400 text-xs">
-                  <p className="mb-3">没有找到符合条件的设备</p>
+                  <p className="mb-3">没有找到符合条件的设备，右侧详情已同步清空</p>
                   <button
                     type="button"
                     onClick={() => {
