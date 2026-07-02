@@ -53,6 +53,7 @@ import { useSpeechRecognition } from './hooks/useSpeechRecognition';
 import { sendAssistantChat } from './services/aiApi';
 import { isSameDepartment, normalizeDepartmentName } from './utils/departmentUtils';
 import { syncTasksToEquipmentArchives } from './utils/equipmentSync';
+import { getDepartmentTasks, sortTasksByOperationalPriority } from './utils/taskOrdering';
 import { getClinicalAcceptanceBlockReason, getEngineerNextStatus, getEngineerStatusBlockReason, getEngineerWorkflowHint, getRecommendedRoutingForTask } from './utils/taskWorkflow';
 import TaskStats from './components/TaskStats';
 import EquipmentArchives from './components/EquipmentArchives';
@@ -242,6 +243,7 @@ export default function App() {
   const visibleTasks = tasks.filter(canCurrentUserSeeTask);
   const visibleActiveTaskCount = visibleTasks.filter(t => !['已归档', '已完成', '已关闭'].includes(t.status)).length;
   const visibleEquipments = allEquipments.filter(canCurrentUserUseEquipment);
+  const clinicalDepartmentTasks = getDepartmentTasks(tasks, currentUserDepartment);
   const normalizeClinicalDraftSource = (source?: StructuredTicket['source']) => {
     return source === '科室扫码报修' || source === '微信小程序' ? source : 'AI 对话生成';
   };
@@ -285,7 +287,7 @@ export default function App() {
       setChatMessages([greetingMsg]);
       
       // Auto-set selected task to their department's first active task if any
-      const deptTasks = tasks.filter(t => isSameDepartment(t.department, targetUser.department || targetUser.dept));
+      const deptTasks = getDepartmentTasks(tasks, targetUser.department || targetUser.dept);
       if (deptTasks.length > 0) {
         setSelectedTask(deptTasks[0]);
       } else {
@@ -1025,31 +1027,7 @@ export default function App() {
   });
 
   // Risk Priority Sorting and Automatic Pinning (Requirement 5)
-  const sortedAndFilteredTasks = [...filteredTasks].sort((a, b) => {
-    // 属于“生命支持设备应急”、“医用气体异常”或包含“抢救”字样的任务必须实现自动置顶
-    const isPinnedA = a.taskType === '生命支持设备应急' || a.taskType === '医用气体异常' || a.deviceName.includes('抢救') || a.faultPhenomenon.includes('抢救');
-    const isPinnedB = b.taskType === '生命支持设备应急' || b.taskType === '医用气体异常' || b.deviceName.includes('抢救') || b.faultPhenomenon.includes('抢救');
-
-    if (isPinnedA && !isPinnedB) return -1;
-    if (!isPinnedA && isPinnedB) return 1;
-
-    // Both pinned or both not pinned, sort by urgency level risk score
-    const urgencyWeight: Record<UrgencyLevel, number> = {
-      '生命支持': 50,
-      '特急': 40,
-      '紧急': 30,
-      '较急': 20,
-      '普通': 10
-    };
-    const scoreA = urgencyWeight[a.urgency] || 10;
-    const scoreB = urgencyWeight[b.urgency] || 10;
-
-    if (scoreA !== scoreB) {
-      return scoreB - scoreA;
-    }
-
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-  });
+  const sortedAndFilteredTasks = sortTasksByOperationalPriority(filteredTasks);
 
   return (
     <div className="h-screen max-h-screen overflow-hidden bg-slate-100 flex flex-col md:flex-row font-sans text-slate-800 antialiased relative" id="root">
@@ -2030,17 +2008,17 @@ export default function App() {
                     <FileText className="w-3.5 h-3.5 text-slate-400" />
                     {currentSimulatedUser.department}报修记录
                   </h3>
-                  <p className="text-[10px] text-slate-400">仅展示当前登录科室提报的设备故障</p>
+                  <p className="text-[10px] text-slate-400">仅展示当前登录科室任务，待验收与处理中优先</p>
                 </div>
                 
                 <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                  {tasks.filter(t => isSameDepartment(t.department, currentSimulatedUser.department || currentSimulatedUser.dept)).length === 0 ? (
+                  {clinicalDepartmentTasks.length === 0 ? (
                     <div className="py-12 px-4 text-center text-slate-400 text-xs">
                       <AlertTriangle className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                       您科室尚未提报过任何设备故障，请在左侧 AI 报修通道提报。
                     </div>
                   ) : (
-                    tasks.filter(t => isSameDepartment(t.department, currentSimulatedUser.department || currentSimulatedUser.dept)).map(t => {
+                    clinicalDepartmentTasks.map(t => {
                       const isSelected = selectedTask?.id === t.id;
                       
                       let statusStyle = 'bg-slate-100 text-slate-700 border-slate-200';
