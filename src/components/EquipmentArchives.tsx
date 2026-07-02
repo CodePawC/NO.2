@@ -1658,8 +1658,8 @@ Clinical class: Life-saving respiratory device`;
       )}
       
       {/* Top Header Section */}
-      <header id="header_section" className="flex flex-col lg:flex-row lg:items-center lg:justify-between bg-white px-3 md:px-6 py-2.5 md:py-4 rounded-xl shadow-sm mb-3 md:mb-6 border border-slate-200 gap-2.5">
-        <div className="flex items-center justify-between w-full lg:w-auto gap-4">
+      <header id="header_section" className="flex flex-col 2xl:flex-row 2xl:items-center 2xl:justify-between bg-white px-3 md:px-6 py-2.5 md:py-4 rounded-xl shadow-sm mb-3 md:mb-6 border border-slate-200 gap-2.5">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between w-full 2xl:w-auto min-w-0 gap-2.5 md:gap-4">
           <div className="flex items-center gap-2.5 md:gap-4">
             <div className="bg-blue-600 p-1.5 md:p-2.5 rounded-lg text-white flex-shrink-0">
               <Activity className="w-4 h-4 md:w-6 md:h-6 animate-pulse" />
@@ -1679,7 +1679,7 @@ Clinical class: Life-saving respiratory device`;
           </div>
 
           {/* View Mode Switcher */}
-          <div className="flex bg-slate-100 p-0.5 md:p-1 rounded-lg border border-slate-200/60 flex-shrink-0">
+          <div className="flex bg-slate-100 p-0.5 md:p-1 rounded-lg border border-slate-200/60 flex-shrink-0 overflow-x-auto max-w-full">
             <button
               onClick={() => setViewMode('inventory')}
               className={`px-2 py-1 md:px-2.5 md:py-1.5 text-[11px] md:text-xs font-bold rounded-md flex items-center gap-1 md:gap-1.5 transition-all cursor-pointer ${
@@ -1757,7 +1757,7 @@ Clinical class: Life-saving respiratory device`;
         </div>
         
         {/* Dynamic Filters & Search Panel */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full lg:w-auto">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full 2xl:w-auto 2xl:flex-shrink-0">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
             <input 
@@ -1765,7 +1765,7 @@ Clinical class: Life-saving respiratory device`;
               placeholder="搜索设备、SN号、生产商、科室..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="bg-slate-100 text-slate-800 border-none rounded-lg pl-9 pr-4 py-2 text-xs md:text-sm w-full lg:w-72 focus:outline-none focus:ring-2 focus:ring-blue-500 font-sans"
+              className="bg-slate-100 text-slate-800 border-none rounded-lg pl-9 pr-4 py-2 text-xs md:text-sm w-full 2xl:w-72 focus:outline-none focus:ring-2 focus:ring-blue-500 font-sans"
             />
           </div>
 

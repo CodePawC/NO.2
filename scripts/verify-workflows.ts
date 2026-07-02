@@ -427,6 +427,12 @@ const checks: Check[] = [
           archiveSource.includes('[selectedEquipment?.id]'),
         '档案 AI 智脑应在当前过滤无设备时同步切换为空态提示'
       );
+      assert(
+        archiveSource.includes('2xl:flex-row') &&
+          archiveSource.includes('2xl:w-auto 2xl:flex-shrink-0') &&
+          archiveSource.includes('overflow-x-auto max-w-full'),
+        '资产档案页头部搜索区不能覆盖视图切换按钮，维保日历/看板入口必须可点击'
+      );
     }
   },
   {
@@ -613,6 +619,35 @@ const checks: Check[] = [
       assert(
         indexSource.includes('<title>医学装备数字化平台</title>'),
         '浏览器标签标题应使用产品名称而不是模板默认名'
+      );
+    }
+  },
+  {
+    name: 'maintenance calendar keeps clinical readonly and engineer deploy paths',
+    run: () => {
+      const calendarSource = readFileSync('src/components/MaintenanceCalendar.tsx', 'utf8');
+
+      assert(
+        calendarSource.includes("const canManageSchedule = currentUser.role === 'engineer'") &&
+          calendarSource.includes("currentUser.role === 'medical_staff' && !isSameDepartment"),
+        '维保日历应按角色隔离管理权限并限制临床只看本科室设备'
+      );
+      assert(
+        calendarSource.includes('临床日程只读视图') &&
+          calendarSource.includes('新工单部署、调期和改派由医学装备科工程师执行'),
+        '临床日历视图应显示只读说明'
+      );
+      assert(
+        calendarSource.includes('canManageSchedule ? (') &&
+          calendarSource.includes('部署{scheduleScopeLabel}新工作指令') &&
+          calendarSource.includes('handleDeployWorkSubmit'),
+        '工程师日历视图应保留部署新工作指令能力'
+      );
+      assert(
+        calendarSource.includes("getScheduleManageBlockReason('新工单部署')") &&
+          calendarSource.includes("getScheduleManageBlockReason('日程调期')") &&
+          calendarSource.includes("getScheduleManageBlockReason('技术员改派')"),
+        '日历所有管理型操作应统一走角色阻断逻辑'
       );
     }
   }
