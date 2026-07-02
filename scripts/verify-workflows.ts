@@ -5,6 +5,7 @@ import { findUniqueEquipmentMatchForDraft, syncTasksToEquipmentArchives } from '
 import { getDepartmentTasks } from '../src/utils/taskOrdering.ts';
 import { getPresetPromptsForUser, PRESET_PROMPTS } from '../src/data/appPresets.ts';
 import { INITIAL_TASKS } from '../src/data/defaultTasks.ts';
+import { DEFAULT_EQUIPMENT } from '../src/data/defaultEquipment.ts';
 import {
   canEngineerCloseTransferredTask,
   getClinicalAcceptanceBlockReason,
@@ -452,6 +453,42 @@ const checks: Check[] = [
       });
       const activeSync = syncTasksToEquipmentArchives([activeTask], [createEquipment()], new Date('2026-07-03T00:00:00+08:00'));
       assertEqual(activeSync.equipments[0].status, '故障维修', '活跃设备维修单应把档案状态标为故障维修');
+
+      const acceptanceDemoTask = INITIAL_TASKS.find(task => task.id === 'TKT-2026062805');
+      const respiratoryVentilator = DEFAULT_EQUIPMENT.find(equipment => equipment.id === 'eq-004');
+      assert(!!acceptanceDemoTask && !!respiratoryVentilator, '默认验收演示单与呼吸内科无创呼吸机档案应同时存在');
+      const activeDemoSync = syncTasksToEquipmentArchives(
+        [acceptanceDemoTask!],
+        [{ ...respiratoryVentilator!, status: '正常运行', maintenanceLogs: [...respiratoryVentilator!.maintenanceLogs] }],
+        new Date('2026-07-03T00:00:00+08:00')
+      );
+      assertEqual(activeDemoSync.equipments[0].status, '故障维修', '待验收演示单应把关联呼吸机档案标为故障维修');
+
+      const acceptedDemoTask = createTask({
+        ...acceptanceDemoTask!,
+        status: '已完成',
+        updatedAt: '2026-07-03T11:00:00+08:00',
+        logs: [
+          ...acceptanceDemoTask!.logs,
+          { time: '2026-07-03 11:00', action: '临床科室进行验收。确认评价：【5星】。评价意见：设备使用一切正常。', operator: '赵晓东 (呼吸内科主治医生)' }
+        ],
+        clinicalAcceptance: {
+          rating: 5,
+          comment: '设备使用一切正常',
+          acceptedBy: '赵晓东',
+          acceptedByTitle: '呼吸内科主治医生',
+          acceptedAt: '2026-07-03T11:00:00+08:00'
+        }
+      });
+      const completedDemoSync = syncTasksToEquipmentArchives(
+        [acceptedDemoTask],
+        [{ ...respiratoryVentilator!, status: '故障维修', maintenanceLogs: [...respiratoryVentilator!.maintenanceLogs] }],
+        new Date('2026-07-03T00:00:00+08:00')
+      );
+      const demoMaintenanceLog = completedDemoSync.equipments[0].maintenanceLogs.find(log => log.workOrderNo === 'TKT-2026062805');
+      assertEqual(completedDemoSync.equipments[0].status, '正常运行', '验收完成后呼吸机档案应恢复正常运行');
+      assertEqual(demoMaintenanceLog?.status, '已完成', '验收完成后应写入已完成维修档案日志');
+      assertEqual(demoMaintenanceLog?.verifyPerson, '赵晓东', '维修档案日志应保留临床验收人');
 
       const completedTask = createTask({
         id: 'TKT-COMPLETE',
