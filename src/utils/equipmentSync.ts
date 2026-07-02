@@ -1,4 +1,5 @@
 import { MaintenanceLog, MedicalEquipment, StructuredTicket, TaskStatus } from '../types';
+import { canEngineerCloseTransferredTask } from './taskWorkflow';
 
 const ACTIVE_TASK_STATUSES: TaskStatus[] = ['待确认', '待派工', '已派工', '处理中', '待科室验收'];
 const COMPLETED_TASK_STATUSES: TaskStatus[] = ['已完成', '已归档', '已关闭'];
@@ -23,6 +24,10 @@ const isSameOrLaterDateString = (nextDate: string, currentDate?: string) => {
 
 const isTaskForEquipment = (task: StructuredTicket, equipment: MedicalEquipment) => {
   return equipment.id === task.deviceId || equipment.sn === task.deviceId;
+};
+
+const shouldSyncTaskToEquipmentArchive = (task: StructuredTicket, equipment: MedicalEquipment) => {
+  return isTaskForEquipment(task, equipment) && !canEngineerCloseTransferredTask(task);
 };
 
 const isOpenRepairLog = (log: MaintenanceLog) => {
@@ -65,7 +70,7 @@ export const syncTasksToEquipmentArchives = (
   let changed = false;
 
   const equipments = equipmentArchives.map(equipment => {
-    const relatedTasks = tasks.filter(task => isTaskForEquipment(task, equipment));
+    const relatedTasks = tasks.filter(task => shouldSyncTaskToEquipmentArchive(task, equipment));
     if (relatedTasks.length === 0) return equipment;
 
     let equipmentChanged = false;
