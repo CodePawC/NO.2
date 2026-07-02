@@ -98,13 +98,39 @@ const getTaskAcceptanceDisplay = (task: StructuredTicket) => {
   };
 };
 
+const TASK_STORAGE_KEY = 'hospital_tasks';
+const TASK_PRESET_MIGRATION_KEY = 'hospital_tasks_seeded_preset_ids';
+const TASK_PRESET_MIGRATION_IDS = ['TKT-2026062805'];
+
+const getSeededPresetTaskIds = () => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(TASK_PRESET_MIGRATION_KEY) || '[]');
+    return new Set(Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : []);
+  } catch (error) {
+    console.warn('Failed to load seeded preset task ids:', error);
+    return new Set<string>();
+  }
+};
+
+const mergeMissingPresetTasks = (storedTasks: StructuredTicket[]) => {
+  const storedIds = new Set(storedTasks.map(task => task.id));
+  const seededPresetIds = getSeededPresetTaskIds();
+  const missingPresetTasks = INITIAL_TASKS.filter(
+    task => TASK_PRESET_MIGRATION_IDS.includes(task.id) && !storedIds.has(task.id) && !seededPresetIds.has(task.id)
+  );
+  const nextSeededPresetIds = new Set([...seededPresetIds, ...TASK_PRESET_MIGRATION_IDS]);
+  localStorage.setItem(TASK_PRESET_MIGRATION_KEY, JSON.stringify([...nextSeededPresetIds]));
+
+  return missingPresetTasks.length > 0 ? [...missingPresetTasks, ...storedTasks] : storedTasks;
+};
+
 const getStoredTasks = () => {
-  const saved = localStorage.getItem('hospital_tasks');
+  const saved = localStorage.getItem(TASK_STORAGE_KEY);
   if (!saved) return INITIAL_TASKS;
 
   try {
     const parsed = JSON.parse(saved);
-    return Array.isArray(parsed) ? parsed : INITIAL_TASKS;
+    return Array.isArray(parsed) ? mergeMissingPresetTasks(parsed) : INITIAL_TASKS;
   } catch (error) {
     console.warn('Failed to load persisted tasks, falling back to defaults:', error);
     return INITIAL_TASKS;
@@ -515,7 +541,7 @@ export default function App() {
 
   // Persist tasks & Automatically synchronize status and maintenance logs to Equipment Archives
   useEffect(() => {
-    localStorage.setItem('hospital_tasks', JSON.stringify(tasks));
+    localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(tasks));
 
     // Automatically sync latest tasks status to equipment archives
     try {

@@ -4,6 +4,7 @@ import { parseStoredEquipmentList } from '../src/utils/equipmentStorage.ts';
 import { findUniqueEquipmentMatchForDraft, syncTasksToEquipmentArchives } from '../src/utils/equipmentSync.ts';
 import { getDepartmentTasks } from '../src/utils/taskOrdering.ts';
 import { getPresetPromptsForUser, PRESET_PROMPTS } from '../src/data/appPresets.ts';
+import { INITIAL_TASKS } from '../src/data/defaultTasks.ts';
 import {
   canEngineerCloseTransferredTask,
   getClinicalAcceptanceBlockReason,
@@ -350,6 +351,49 @@ const checks: Check[] = [
       const visibleTasks = getDepartmentTasks(tasks, '呼吸');
       assertEqual(visibleTasks.length, 1, '呼吸内科临床用户只能看到本科室任务');
       assertEqual(visibleTasks[0].id, 'TKT-RESP', '呼吸内科可见任务应为本科室任务');
+    }
+  },
+  {
+    name: 'default data includes a clinical acceptance demo task',
+    run: () => {
+      const respiratoryDoctor = createUser({
+        id: 'DR-3011',
+        role: 'medical_staff',
+        department: '呼吸内科',
+        dept: '呼吸内科',
+        name: '赵晓东',
+        title: '呼吸内科主治医生'
+      });
+      const acceptanceDemoTask = INITIAL_TASKS.find(
+        task => task.id === 'TKT-2026062805' && task.status === '待科室验收'
+      );
+
+      assert(!!acceptanceDemoTask, '默认任务应包含一张待科室验收的呼吸内科演示单');
+      assertEqual(acceptanceDemoTask?.department, '呼吸内科', '演示验收单应归属呼吸内科，方便赵晓东角色测试');
+      assertEqual(acceptanceDemoTask?.deviceId, 'eq-004', '演示验收单应关联呼吸内科无创呼吸机档案');
+      assertEqual(
+        getClinicalAcceptanceBlockReason(acceptanceDemoTask!, respiratoryDoctor, 'medical_staff'),
+        '',
+        '呼吸内科临床演示角色应可直接签署默认待验收单'
+      );
+
+      const respiratoryVisibleTasks = getDepartmentTasks(INITIAL_TASKS, '呼吸内科');
+      assert(
+        respiratoryVisibleTasks.some(task => task.id === 'TKT-2026062805'),
+        '呼吸内科临床任务列表应能看到默认待验收演示单'
+      );
+
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const mergeStart = appSource.indexOf('const TASK_PRESET_MIGRATION_IDS');
+      const mergeEnd = appSource.indexOf('const getStoredTasks = () => {', mergeStart);
+      assert(mergeStart !== -1 && mergeEnd > mergeStart, '应能定位默认任务迁移逻辑');
+      const mergeSource = appSource.slice(mergeStart, mergeEnd);
+      assert(
+        mergeSource.includes("const TASK_PRESET_MIGRATION_IDS = ['TKT-2026062805'];") &&
+          mergeSource.includes('TASK_PRESET_MIGRATION_KEY') &&
+          mergeSource.includes('!seededPresetIds.has(task.id)'),
+        '新增演示单应通过一次性迁移补齐到已有本地数据，不能把所有默认任务反复补回'
+      );
     }
   },
   {
