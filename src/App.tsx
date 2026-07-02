@@ -220,6 +220,9 @@ export default function App() {
   const visibleTasks = tasks.filter(canCurrentUserSeeTask);
   const visibleActiveTaskCount = visibleTasks.filter(t => !['已归档', '已完成', '已关闭'].includes(t.status)).length;
   const visibleEquipments = allEquipments.filter(canCurrentUserUseEquipment);
+  const normalizeClinicalDraftSource = (source?: StructuredTicket['source']) => {
+    return source === '科室扫码报修' || source === '微信小程序' ? source : 'AI 对话生成';
+  };
 
   const getEngineerActionBlockReason = (actionName: string) => {
     if (currentUserRole === 'engineer' && currentSimulatedUser.role === 'engineer') {
@@ -739,13 +742,22 @@ export default function App() {
     const defaultPerson = currentUserRole === 'medical_staff' ? currentSimulatedUser.name : (draftTicket.contactPerson || '未录入联系人');
     const defaultPhone = currentUserRole === 'medical_staff' ? (currentSimulatedUser.phone || draftTicket.contactPhone || '未录入电话') : (draftTicket.contactPhone || '未录入电话');
     const defaultDept = currentUserRole === 'medical_staff' ? (currentDept || draftDept || '未录入科室') : (draftDept || '未录入科室');
+    const finalSource = currentUserRole === 'medical_staff'
+      ? normalizeClinicalDraftSource(draftTicket.source)
+      : (draftTicket.source || 'AI 对话生成');
+    const finalContactPerson = currentUserRole === 'medical_staff'
+      ? currentSimulatedUser.name
+      : (draftTicket.contactPerson && draftTicket.contactPerson !== '科室医护人员' && draftTicket.contactPerson !== '未录入联系人' ? draftTicket.contactPerson : defaultPerson);
+    const finalContactPhone = currentUserRole === 'medical_staff'
+      ? (currentSimulatedUser.phone || '未录入电话')
+      : (draftTicket.contactPhone && draftTicket.contactPhone !== '未提取' && draftTicket.contactPhone !== '未录入电话' ? draftTicket.contactPhone : defaultPhone);
     const finalDepartment = currentUserRole === 'medical_staff'
       ? (currentDept || draftDept || '未录入科室')
       : (draftDept && draftDept !== '未录入科室' ? draftDept : defaultDept);
     const defaultLoc = draftTicket.location && draftTicket.location !== '未录入位置' ? draftTicket.location : (currentUserRole === 'medical_staff' ? `${currentDept || currentSimulatedUser.department}病房` : '未录入位置');
     const deptNormalizationNote = draftTicket.notes?.includes('AI原始识别科室为') ? draftTicket.notes : '';
     const createLogAction = [
-      `AI 智能建单。任务分类：${draftTicket.taskType || '未分类'}，来源：${draftTicket.source || 'AI 对话生成'}，紧急度判定：${draftTicket.urgency || '普通'}`,
+      `AI 智能建单。任务分类：${draftTicket.taskType || '未分类'}，来源：${finalSource}，紧急度判定：${draftTicket.urgency || '普通'}`,
       effectiveRecommendedDept && effectiveRecommendedDept !== '医学装备科' ? `自动提示转派至【${effectiveRecommendedDept}】` : '',
       effectiveNeedVendorCoop === '是' ? '需要厂家/供应商协同' : '',
       deptNormalizationNote
@@ -755,14 +767,14 @@ export default function App() {
     const newTicket: StructuredTicket = {
       id: newTicketId,
       taskType: (draftTicket.taskType as TaskType) || '设备报修',
-      source: (draftTicket.source as any) || 'AI 对话生成',
+      source: finalSource,
       department: finalDepartment,
       location: defaultLoc,
       deviceName: canUseLinkedEquipment ? (draftTicket.deviceName || '未录入设备名称') : '未录入设备名称',
       deviceId: canUseLinkedEquipment ? (draftTicket.deviceId || 'EQ-TEMP-' + Math.floor(Math.random() * 9000 + 1000)) : 'EQ-TEMP-' + Math.floor(Math.random() * 9000 + 1000),
       faultPhenomenon: draftTicket.faultPhenomenon || '暂未提供具体描述',
-      contactPerson: draftTicket.contactPerson && draftTicket.contactPerson !== '科室医护人员' && draftTicket.contactPerson !== '未录入联系人' ? draftTicket.contactPerson : defaultPerson,
-      contactPhone: draftTicket.contactPhone && draftTicket.contactPhone !== '未提取' && draftTicket.contactPhone !== '未录入电话' ? draftTicket.contactPhone : defaultPhone,
+      contactPerson: finalContactPerson,
+      contactPhone: finalContactPhone,
       urgency: (draftTicket.urgency as UrgencyLevel) || '普通',
       affectClinical: (draftTicket.affectClinical as ClinicalImpact) || '否',
       status: '待确认',
@@ -858,7 +870,15 @@ export default function App() {
   const handleUpdateDraftField = (field: keyof StructuredTicket, value: any) => {
     setDraftTicket(prev => ({
       ...(prev || {}),
-      [field]: value
+      [field]: value,
+      ...(currentUserRole === 'medical_staff'
+        ? {
+            source: normalizeClinicalDraftSource(prev?.source),
+            department: currentUserDepartment,
+            contactPerson: currentSimulatedUser.name,
+            contactPhone: currentSimulatedUser.phone || '未录入电话'
+          }
+        : {})
     }));
   };
 
@@ -2445,7 +2465,8 @@ export default function App() {
                       <select 
                         value={draftTicket.source || 'AI 对话生成'}
                         onChange={(e) => handleUpdateDraftField('source', e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                        disabled={currentUserRole === 'medical_staff'}
+                        className="w-full bg-white disabled:bg-slate-100 disabled:text-slate-400 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                       >
                         <option value="AI 对话生成">AI 对话生成</option>
                         <option value="科室扫码报修">科室扫码报修</option>
@@ -2528,7 +2549,8 @@ export default function App() {
                         value={draftTicket.department || ''} 
                         placeholder="请输入申报科室"
                         onChange={(e) => handleUpdateDraftField('department', e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800"
+                        disabled={currentUserRole === 'medical_staff'}
+                        className="w-full bg-white disabled:bg-slate-100 disabled:text-slate-400 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800"
                       />
                     </div>
 
@@ -2572,7 +2594,8 @@ export default function App() {
                         value={draftTicket.contactPerson || ''} 
                         placeholder="张医生"
                         onChange={(e) => handleUpdateDraftField('contactPerson', e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800"
+                        disabled={currentUserRole === 'medical_staff'}
+                        className="w-full bg-white disabled:bg-slate-100 disabled:text-slate-400 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800"
                       />
                     </div>
 
@@ -2583,7 +2606,8 @@ export default function App() {
                         value={draftTicket.contactPhone || ''} 
                         placeholder="如：13800138000"
                         onChange={(e) => handleUpdateDraftField('contactPhone', e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 font-mono"
+                        disabled={currentUserRole === 'medical_staff'}
+                        className="w-full bg-white disabled:bg-slate-100 disabled:text-slate-400 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 font-mono"
                       />
                     </div>
 
@@ -3059,7 +3083,8 @@ export default function App() {
                   <select 
                     value={draftTicket.source || 'AI 对话生成'}
                     onChange={(e) => handleUpdateDraftField('source', e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none"
+                    disabled={currentUserRole === 'medical_staff'}
+                    className="w-full bg-slate-50 disabled:bg-slate-100 disabled:text-slate-400 border border-slate-200 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none"
                   >
                     <option value="AI 对话生成">AI 对话生成</option>
                     <option value="科室扫码报修">科室扫码报修</option>
@@ -3078,7 +3103,8 @@ export default function App() {
                     value={draftTicket.department || ''} 
                     onChange={(e) => handleUpdateDraftField('department', e.target.value)}
                     placeholder="请输入科室，如：急诊科"
-                    className="w-full bg-slate-50 border border-slate-200 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none"
+                    disabled={currentUserRole === 'medical_staff'}
+                    className="w-full bg-slate-50 disabled:bg-slate-100 disabled:text-slate-400 border border-slate-200 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none"
                   />
                 </div>
 
@@ -3207,7 +3233,8 @@ export default function App() {
                     value={draftTicket.contactPerson || ''} 
                     onChange={(e) => handleUpdateDraftField('contactPerson', e.target.value)}
                     placeholder="请输入联系人姓名"
-                    className="w-full bg-slate-50 border border-slate-200 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none"
+                    disabled={currentUserRole === 'medical_staff'}
+                    className="w-full bg-slate-50 disabled:bg-slate-100 disabled:text-slate-400 border border-slate-200 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none"
                   />
                 </div>
 
@@ -3219,7 +3246,8 @@ export default function App() {
                     value={draftTicket.contactPhone || ''} 
                     onChange={(e) => handleUpdateDraftField('contactPhone', e.target.value)}
                     placeholder="请输入内线分机或手机号"
-                    className="w-full bg-slate-50 border border-slate-200 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none font-mono"
+                    disabled={currentUserRole === 'medical_staff'}
+                    className="w-full bg-slate-50 disabled:bg-slate-100 disabled:text-slate-400 border border-slate-200 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none font-mono"
                   />
                 </div>
 
