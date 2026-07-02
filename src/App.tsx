@@ -214,8 +214,12 @@ export default function App() {
   const canCurrentUserSeeTask = (task: StructuredTicket) => {
     return !isClinicalUser || isSameDepartment(task.department, currentUserDepartment);
   };
+  const canCurrentUserUseEquipment = (equipment: MedicalEquipment) => {
+    return !isClinicalUser || isSameDepartment(equipment.dept, currentUserDepartment);
+  };
   const visibleTasks = tasks.filter(canCurrentUserSeeTask);
   const visibleActiveTaskCount = visibleTasks.filter(t => !['已归档', '已完成', '已关闭'].includes(t.status)).length;
+  const visibleEquipments = allEquipments.filter(canCurrentUserUseEquipment);
 
   const getEngineerActionBlockReason = (actionName: string) => {
     if (currentUserRole === 'engineer' && currentSimulatedUser.role === 'engineer') {
@@ -726,6 +730,8 @@ export default function App() {
     
     const currentDept = normalizeDepartmentName(currentSimulatedUser.department || currentSimulatedUser.dept);
     const draftDept = normalizeDepartmentName(draftTicket.department) || draftTicket.department;
+    const linkedEquipment = allEquipments.find(eq => eq.id === draftTicket.deviceId || eq.sn === draftTicket.deviceId);
+    const canUseLinkedEquipment = !linkedEquipment || canCurrentUserUseEquipment(linkedEquipment);
     const routing = getRecommendedRoutingForTask(draftTicket.taskType as TaskType, `${draftTicket.faultPhenomenon || ''} ${draftTicket.deviceName || ''} ${draftTicket.notes || ''}`);
     const effectiveRecommendedDept = forwardDept || draftTicket.recommendedDept || routing.recommendedDept;
     const effectiveNeedVendorCoop = routing.needVendorCoop === '是' ? '是' : (draftTicket.needVendorCoop || '否');
@@ -752,8 +758,8 @@ export default function App() {
       source: (draftTicket.source as any) || 'AI 对话生成',
       department: finalDepartment,
       location: defaultLoc,
-      deviceName: draftTicket.deviceName || '未录入设备名称',
-      deviceId: draftTicket.deviceId || 'EQ-TEMP-' + Math.floor(Math.random() * 9000 + 1000),
+      deviceName: canUseLinkedEquipment ? (draftTicket.deviceName || '未录入设备名称') : '未录入设备名称',
+      deviceId: canUseLinkedEquipment ? (draftTicket.deviceId || 'EQ-TEMP-' + Math.floor(Math.random() * 9000 + 1000)) : 'EQ-TEMP-' + Math.floor(Math.random() * 9000 + 1000),
       faultPhenomenon: draftTicket.faultPhenomenon || '暂未提供具体描述',
       contactPerson: draftTicket.contactPerson && draftTicket.contactPerson !== '科室医护人员' && draftTicket.contactPerson !== '未录入联系人' ? draftTicket.contactPerson : defaultPerson,
       contactPhone: draftTicket.contactPhone && draftTicket.contactPhone !== '未提取' && draftTicket.contactPhone !== '未录入电话' ? draftTicket.contactPhone : defaultPhone,
@@ -775,7 +781,12 @@ export default function App() {
         }
       ],
       rawText: chatMessages.filter(m => m.sender === 'user').map(m => m.text).join(' | '),
-      notes: [draftTicket.notes, routingNote, effectiveRecommendedDept && effectiveRecommendedDept !== '医学装备科' ? `系统判断此单归属部门为 [${effectiveRecommendedDept}]。` : ''].filter(Boolean).join('\n')
+      notes: [
+        draftTicket.notes,
+        routingNote,
+        effectiveRecommendedDept && effectiveRecommendedDept !== '医学装备科' ? `系统判断此单归属部门为 [${effectiveRecommendedDept}]。` : '',
+        !canUseLinkedEquipment && linkedEquipment ? `临床账号尝试关联外科室资产 [${linkedEquipment.id}]，系统已移除该资产绑定并按本科室工单提交。` : ''
+      ].filter(Boolean).join('\n')
     };
 
     setTasks(prev => [newTicket, ...prev]);
@@ -2481,9 +2492,9 @@ export default function App() {
                       </label>
                       <select
                         className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium"
-                        value={allEquipments.find(eq => eq.id === draftTicket.deviceId || eq.sn === draftTicket.deviceId)?.id || ''}
+                        value={visibleEquipments.find(eq => eq.id === draftTicket.deviceId || eq.sn === draftTicket.deviceId)?.id || ''}
                         onChange={(e) => {
-                          const selected = allEquipments.find(eq => eq.id === e.target.value);
+                          const selected = visibleEquipments.find(eq => eq.id === e.target.value);
                           if (selected) {
                             handleUpdateDraftField('deviceName', `${selected.manufacturer} ${selected.deviceName} (${selected.model})`);
                             handleUpdateDraftField('deviceId', selected.id);
@@ -2498,12 +2509,15 @@ export default function App() {
                         }}
                       >
                         <option value="">-- 手动录入，或选择档案库中的在册设备 --</option>
-                        {allEquipments.map((eq: any) => (
+                        {visibleEquipments.map((eq: any) => (
                           <option key={eq.id} value={eq.id}>
                             [{eq.dept}] {eq.manufacturer} {eq.deviceName} ({eq.model}) - {eq.sn}
                           </option>
                         ))}
                       </select>
+                      {visibleEquipments.length === 0 && (
+                        <p className="text-[9px] text-amber-600 mt-1 font-medium">当前账号暂无可关联的本科室在册资产，可继续手动录入设备名称并提交。</p>
+                      )}
                       <p className="text-[9px] text-slate-400 mt-1">💡 绑定在册设备能自动带入科室、SN、安全评级等，完成一站式闭环归档。</p>
                     </div>
 
@@ -3034,6 +3048,9 @@ export default function App() {
                     <option value="普通杂项任务">普通杂项任务</option>
                     <option value="非设备类转派任务">非设备类转派任务</option>
                   </select>
+                  {visibleEquipments.length === 0 && (
+                    <p className="text-[9px] text-amber-700 mt-1 font-medium">当前账号暂无可关联的本科室在册资产，可继续手动录入设备信息。</p>
+                  )}
                 </div>
 
                 {/* 2. 任务来源 */}
@@ -3085,9 +3102,9 @@ export default function App() {
                   </label>
                   <select
                     className="w-full bg-white border border-emerald-300 rounded-lg px-2 py-1.5 text-xs text-slate-800 focus:outline-none font-medium"
-                    value={allEquipments.find(eq => eq.id === draftTicket.deviceId || eq.sn === draftTicket.deviceId)?.id || ''}
+                    value={visibleEquipments.find(eq => eq.id === draftTicket.deviceId || eq.sn === draftTicket.deviceId)?.id || ''}
                     onChange={(e) => {
-                      const selected = allEquipments.find(eq => eq.id === e.target.value);
+                      const selected = visibleEquipments.find(eq => eq.id === e.target.value);
                       if (selected) {
                         handleUpdateDraftField('deviceName', `${selected.manufacturer} ${selected.deviceName} (${selected.model})`);
                         handleUpdateDraftField('deviceId', selected.id);
@@ -3102,7 +3119,7 @@ export default function App() {
                     }}
                   >
                     <option value="">-- 搜索选择医院档案库中的在册设备 --</option>
-                    {allEquipments.map((eq: any) => (
+                    {visibleEquipments.map((eq: any) => (
                       <option key={eq.id} value={eq.id}>
                         [{eq.dept}] {eq.manufacturer} {eq.deviceName} ({eq.model})
                       </option>

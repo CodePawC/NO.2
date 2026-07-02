@@ -758,6 +758,11 @@ export default function EquipmentArchives({
   const canCurrentUserViewEquipment = (equipment: MedicalEquipment) => {
     return currentUser.role !== 'medical_staff' || !currentUserDepartment || isSameDepartment(equipment.dept, currentUserDepartment);
   };
+  const canManageEquipmentArchive = currentUser.role === 'engineer';
+  const showArchiveManageBlockedToast = (actionName: string) => {
+    setQuickRepairToast(`当前临床账号只能查看本科室设备并发起报修，不能执行${actionName}。请切换到医学装备科工程师账号后再操作。`);
+    setTimeout(() => setQuickRepairToast(null), 5000);
+  };
   const visibleEquipments = equipments.filter(canCurrentUserViewEquipment);
   const visibleDepartments: string[] = ['全部科室', ...Array.from(new Set(visibleEquipments.map(eq => eq.dept))).filter((dept): dept is string => Boolean(dept))];
   const assetScopeLabel = currentUser.role === 'medical_staff' ? '本科室' : '全院';
@@ -956,6 +961,11 @@ export default function EquipmentArchives({
 
   // Handle Equipment deletion
   const handleDelete = (id: string) => {
+    if (!canManageEquipmentArchive) {
+      showArchiveManageBlockedToast('档案作废删除');
+      return;
+    }
+
     if (window.confirm('您确定要永久删除该设备的全部档案、维保记录和附件吗？此操作不可撤销。')) {
       const nextList = equipments.filter(eq => eq.id !== id);
       setEquipments(nextList);
@@ -967,6 +977,11 @@ export default function EquipmentArchives({
 
   // Open modal for Create
   const openCreateModal = () => {
+    if (!canManageEquipmentArchive) {
+      showArchiveManageBlockedToast('手动新增档案');
+      return;
+    }
+
     setFormMode('create');
     setCurrentEditId(null);
     setFormDeviceName('');
@@ -993,6 +1008,11 @@ export default function EquipmentArchives({
 
   // Open modal for Edit
   const openEditModal = (eq: MedicalEquipment) => {
+    if (!canManageEquipmentArchive) {
+      showArchiveManageBlockedToast('修改设备档案');
+      return;
+    }
+
     setFormMode('edit');
     setCurrentEditId(eq.id);
     setFormDeviceName(eq.deviceName);
@@ -1019,6 +1039,11 @@ export default function EquipmentArchives({
 
   // Open modal for cloning / quick duplicating
   const openCloneModal = (eq: MedicalEquipment) => {
+    if (!canManageEquipmentArchive) {
+      showArchiveManageBlockedToast('克隆复制档案');
+      return;
+    }
+
     setFormMode('create');
     setCurrentEditId(null);
     setFormDeviceName(eq.deviceName);
@@ -1046,6 +1071,11 @@ export default function EquipmentArchives({
   // Save Equipment Form
   const saveEquipmentForm = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageEquipmentArchive) {
+      showArchiveManageBlockedToast('保存设备档案');
+      return;
+    }
+
     if (!formDeviceName.trim() || !formModel.trim() || !formManufacturer.trim() || !formDept.trim()) {
       alert('请完整填写基本档案中的必填项！');
       return;
@@ -1749,13 +1779,15 @@ Clinical class: Life-saving respiratory device`;
           
           {/* Quick action buttons on mobile next to title */}
           <div className="flex items-center gap-1.5 lg:hidden">
-            <button 
-              onClick={() => setIsAiParserOpen(true)}
-              className="flex items-center justify-center bg-gradient-to-r from-violet-600 to-indigo-600 text-white p-2 rounded-lg text-xs font-medium hover:from-violet-700 hover:to-indigo-700 shadow-md shadow-indigo-100 transition-all"
-              title="AI 扫码入库"
-            >
-              <Sparkles className="w-4 h-4" />
-            </button>
+            {canManageEquipmentArchive && (
+              <button
+                onClick={() => setIsAiParserOpen(true)}
+                className="flex items-center justify-center bg-gradient-to-r from-violet-600 to-indigo-600 text-white p-2 rounded-lg text-xs font-medium hover:from-violet-700 hover:to-indigo-700 shadow-md shadow-indigo-100 transition-all"
+                title="AI 扫码入库"
+              >
+                <Sparkles className="w-4 h-4" />
+              </button>
+            )}
             <button 
               onClick={() => setIsDossierModalOpen(true)}
               className="flex items-center justify-center bg-slate-800 text-white p-2 rounded-lg text-xs font-medium hover:bg-slate-900 transition-colors shadow-sm"
@@ -1763,13 +1795,15 @@ Clinical class: Life-saving respiratory device`;
             >
               <Printer className="w-4 h-4" />
             </button>
-            <button 
-              onClick={openCreateModal}
-              className="flex items-center justify-center bg-blue-600 text-white p-2 rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors shadow-sm shadow-blue-100"
-              title="手动新增"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
+            {canManageEquipmentArchive && (
+              <button
+                onClick={openCreateModal}
+                className="flex items-center justify-center bg-blue-600 text-white p-2 rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors shadow-sm shadow-blue-100"
+                title="手动新增"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
         
@@ -1787,14 +1821,16 @@ Clinical class: Life-saving respiratory device`;
           </div>
 
           <div className="hidden lg:flex items-center gap-2">
-            <button 
-              onClick={() => setIsAiParserOpen(true)}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white px-3.5 py-2 rounded-lg text-xs md:text-sm font-medium hover:from-violet-700 hover:to-indigo-700 shadow-md shadow-indigo-100 transition-all whitespace-nowrap"
-              title="通过智能OCR识别设备铭牌或单据发票自动入库"
-            >
-              <Sparkles className="w-4 h-4" />
-              <span>AI 扫码入库</span>
-            </button>
+            {canManageEquipmentArchive && (
+              <button
+                onClick={() => setIsAiParserOpen(true)}
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white px-3.5 py-2 rounded-lg text-xs md:text-sm font-medium hover:from-violet-700 hover:to-indigo-700 shadow-md shadow-indigo-100 transition-all whitespace-nowrap"
+                title="通过智能OCR识别设备铭牌或单据发票自动入库"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>AI 扫码入库</span>
+              </button>
+            )}
 
             <button 
               onClick={() => setIsDossierModalOpen(true)}
@@ -1805,12 +1841,14 @@ Clinical class: Life-saving respiratory device`;
               <span>导出PDF档案</span>
             </button>
 
-            <button 
-              onClick={openCreateModal}
-              className="flex-1 sm:flex-initial flex items-center justify-center bg-blue-600 text-white px-3.5 py-2 rounded-lg text-xs md:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm shadow-blue-100 whitespace-nowrap"
-            >
-              + 手动新增
-            </button>
+            {canManageEquipmentArchive && (
+              <button
+                onClick={openCreateModal}
+                className="flex-1 sm:flex-initial flex items-center justify-center bg-blue-600 text-white px-3.5 py-2 rounded-lg text-xs md:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm shadow-blue-100 whitespace-nowrap"
+              >
+                + 手动新增
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -2378,7 +2416,9 @@ Clinical class: Life-saving respiratory device`;
                             <div className="h-[160px] bg-slate-100/50 border border-dashed border-slate-300 rounded-lg text-center flex flex-col items-center justify-center p-4">
                               <Activity className="w-6 h-6 text-slate-300 mb-1" />
                               <p className="text-[11px] text-slate-500 font-bold">暂未绑定外观照片</p>
-                              <p className="text-[9px] text-slate-400 mt-0.5">可点击“修改档案”录入</p>
+                              <p className="text-[9px] text-slate-400 mt-0.5">
+                                {canManageEquipmentArchive ? '可点击“修改档案”录入' : '如需补录请联系医学装备科'}
+                              </p>
                             </div>
                           )}
                         </div>
@@ -2536,7 +2576,7 @@ Clinical class: Life-saving respiratory device`;
                             <div className="mt-3 p-2.5 bg-rose-50 border border-rose-200/50 rounded-lg text-[11px] text-rose-800 flex items-start gap-2">
                               <AlertTriangle className="w-4 h-4 text-rose-500 flex-shrink-0 mt-0.5" />
                               <p className="leading-normal col-span-2">
-                                <strong>⚠️ 资质缺失警告：</strong> 该设备尚未登记医疗器械注册证号。根据《医疗器械监督管理条例》，无合格准入证号的器械在临床科室运行存在重度法律违规风险，请点击下方 “修改档案” 按钮立即补录。
+                                <strong>⚠️ 资质缺失警告：</strong> 该设备尚未登记医疗器械注册证号。根据《医疗器械监督管理条例》，无合格准入证号的器械在临床科室运行存在重度法律违规风险，{canManageEquipmentArchive ? '请点击下方 “修改档案” 按钮立即补录。' : '请联系医学装备科尽快补录并核验。'}
                               </p>
                             </div>
                           );
@@ -3286,14 +3326,20 @@ Clinical class: Life-saving respiratory device`;
 
               {/* Action Toolbar Footer in Details Sheet */}
               <div id="equipment_details_actions" className="p-2.5 sm:p-4 bg-slate-50 border-t border-slate-200/80 flex justify-between items-center gap-2 md:gap-3">
-                <button 
-                  onClick={() => handleDelete(selectedEquipment.id)}
-                  className="px-2.5 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-rose-200 rounded-lg transition-colors flex items-center justify-center gap-1 flex-shrink-0"
-                  title="作废删除档案"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  <span className="hidden sm:inline">作废删除</span>
-                </button>
+                {canManageEquipmentArchive ? (
+                  <button
+                    onClick={() => handleDelete(selectedEquipment.id)}
+                    className="px-2.5 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-rose-200 rounded-lg transition-colors flex items-center justify-center gap-1 flex-shrink-0"
+                    title="作废删除档案"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span className="hidden sm:inline">作废删除</span>
+                  </button>
+                ) : (
+                  <div className="text-[10px] text-slate-400 font-medium hidden sm:block">
+                    临床只读档案
+                  </div>
+                )}
 
                 <div className="flex items-center gap-1.5 sm:gap-3 flex-1 sm:flex-initial justify-end min-w-0">
                   <button 
@@ -3304,22 +3350,26 @@ Clinical class: Life-saving respiratory device`;
                     <QrCode className="w-4 h-4" />
                     <span className="hidden md:inline">打印二维码</span>
                   </button>
-                  <button 
-                    onClick={() => openEditModal(selectedEquipment)}
-                    className="p-2 sm:px-4 sm:py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-600 hover:bg-white bg-slate-50 flex items-center justify-center gap-1.5 transition-all flex-shrink-0"
-                    title="修改档案信息"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                    <span className="hidden md:inline">修改档案</span>
-                  </button>
-                  <button 
-                    onClick={() => openCloneModal(selectedEquipment)}
-                    className="p-2 sm:px-4 sm:py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-600 hover:bg-white bg-slate-50 flex items-center justify-center gap-1.5 transition-all flex-shrink-0"
-                    title="复制当前设备规格建立新档案"
-                  >
-                    <Copy className="w-4 h-4 text-violet-600" />
-                    <span className="hidden md:inline">克隆复制</span>
-                  </button>
+                  {canManageEquipmentArchive && (
+                    <>
+                      <button
+                        onClick={() => openEditModal(selectedEquipment)}
+                        className="p-2 sm:px-4 sm:py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-600 hover:bg-white bg-slate-50 flex items-center justify-center gap-1.5 transition-all flex-shrink-0"
+                        title="修改档案信息"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                        <span className="hidden md:inline">修改档案</span>
+                      </button>
+                      <button
+                        onClick={() => openCloneModal(selectedEquipment)}
+                        className="p-2 sm:px-4 sm:py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-600 hover:bg-white bg-slate-50 flex items-center justify-center gap-1.5 transition-all flex-shrink-0"
+                        title="复制当前设备规格建立新档案"
+                      >
+                        <Copy className="w-4 h-4 text-violet-600" />
+                        <span className="hidden md:inline">克隆复制</span>
+                      </button>
+                    </>
+                  )}
                   <button 
                     onClick={() => setIsScannerModalOpen(true)}
                     disabled={!canCurrentUserReportEquipment(selectedEquipment)}
@@ -3353,7 +3403,9 @@ Clinical class: Life-saving respiratory device`;
             <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-8">
               <HardDrive className="w-16 h-16 text-slate-200 mb-3 animate-bounce" />
               <p className="font-bold text-slate-500">未选中任何设备档案</p>
-              <p className="text-xs text-slate-400 mt-1">请从左侧列表点击选择，或点击 AI 扫码入库新增设备。</p>
+              <p className="text-xs text-slate-400 mt-1">
+                {canManageEquipmentArchive ? '请从左侧列表点击选择，或点击 AI 扫码入库新增设备。' : '请从左侧本科室设备列表点击选择。'}
+              </p>
             </div>
           )}
         </section>
