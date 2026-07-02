@@ -25,6 +25,10 @@ const isTaskForEquipment = (task: StructuredTicket, equipment: MedicalEquipment)
   return equipment.id === task.deviceId || equipment.sn === task.deviceId;
 };
 
+const isOpenRepairLog = (log: MaintenanceLog) => {
+  return log.type === '维修' && log.status === '进行中';
+};
+
 export const getLinkedArchiveWorkOrderNo = (task: StructuredTicket) => {
   const searchableText = [
     task.notes,
@@ -79,9 +83,18 @@ export const syncTasksToEquipmentArchives = (
 
     const hasActiveTask = relatedTasks.some(task => ACTIVE_TASK_STATUSES.includes(task.status));
     const hasCompletedTask = relatedTasks.some(task => COMPLETED_TASK_STATUSES.includes(task.status));
+    const completingArchiveWorkOrders = new Set(
+      relatedTasks
+        .filter(task => COMPLETED_TASK_STATUSES.includes(task.status))
+        .map(getLinkedArchiveWorkOrderNo)
+        .filter(Boolean)
+    );
+    const hasOpenArchiveRepair = syncedEquipment.maintenanceLogs.some(log => (
+      isOpenRepairLog(log) && !completingArchiveWorkOrders.has(log.workOrderNo || '')
+    ));
     let targetStatus = syncedEquipment.status;
 
-    if (hasActiveTask) {
+    if (hasActiveTask || hasOpenArchiveRepair) {
       targetStatus = '故障维修';
     } else if (hasCompletedTask && syncedEquipment.status === '故障维修') {
       targetStatus = '正常运行';
