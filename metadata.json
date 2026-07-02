@@ -1,0 +1,6 @@
+{
+  "name": "医院医学装备AI任务助手",
+  "description": "医院医学装备科 AI 任务单助手，识别并流转、追踪、闭环管理设备报修、杂项、验收及供应商协同等任务。",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
