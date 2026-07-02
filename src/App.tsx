@@ -314,9 +314,12 @@ export default function App() {
       };
       setChatMessages([greetingMsg]);
       
-      // Auto-set selected task to their department's first active task if any
+      // Keep the current task in focus when switching back to its owning clinical department.
       const deptTasks = getDepartmentTasks(tasks, targetUser.department || targetUser.dept);
-      if (deptTasks.length > 0) {
+      const currentTaskBelongsToTargetDept = selectedTask && isSameDepartment(selectedTask.department, targetUser.department || targetUser.dept);
+      if (currentTaskBelongsToTargetDept) {
+        setSelectedTask(selectedTask);
+      } else if (deptTasks.length > 0) {
         setSelectedTask(deptTasks[0]);
       } else {
         setSelectedTask(null);
@@ -2084,6 +2087,7 @@ export default function App() {
                       if (t.status === '处理中') statusStyle = 'bg-sky-50 text-sky-700 border-sky-100';
                       if (t.status === '待科室验收') statusStyle = 'bg-amber-50 text-amber-800 border-amber-200 animate-pulse font-semibold';
                       if (t.status === '已完成') statusStyle = 'bg-emerald-50 text-emerald-800 border-emerald-100';
+                      if (t.status === '已关闭' || t.status === '已归档') statusStyle = 'bg-slate-100 text-slate-500 border-slate-200';
 
                       return (
                         <div
@@ -2124,7 +2128,9 @@ export default function App() {
                           <span className="text-xs font-mono font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-sm">{selectedTask.id}</span>
                           <span className="text-xs font-semibold text-slate-500">{selectedTask.deviceName}</span>
                         </div>
-                        <h3 className="text-sm font-bold text-slate-900">{selectedTask.deviceName} 故障报修追踪</h3>
+                        <h3 className="text-sm font-bold text-slate-900">
+                          {selectedTask.deviceName} {needsClinicalAcceptance(selectedTask) ? '故障报修追踪' : '转派事项追踪'}
+                        </h3>
                         <p className="text-[11px] text-slate-500 mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
                           <span>位置: 📍{selectedTask.location}</span>
                           <span>报修人: 👤{selectedTask.contactPerson}</span>
@@ -2136,6 +2142,7 @@ export default function App() {
                           selectedTask.status === '待科室验收' ? 'bg-amber-100 text-amber-800 border-amber-200 animate-pulse' :
                           selectedTask.status === '已完成' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' :
                           selectedTask.status === '处理中' ? 'bg-sky-100 text-sky-800 border-sky-200' :
+                          selectedTask.status === '已关闭' || selectedTask.status === '已归档' ? 'bg-slate-100 text-slate-500 border-slate-200' :
                           'bg-slate-100 text-slate-800 border-slate-200'
                         }`}>
                           {selectedTask.status}

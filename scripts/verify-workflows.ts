@@ -460,6 +460,31 @@ const checks: Check[] = [
         clinicalDetailSource.includes("selectedTask.status === '待科室验收' && needsClinicalAcceptance(selectedTask)"),
         '临床验收表单只能展示给需要设备维修验收的工单'
       );
+      assert(
+        clinicalDetailSource.includes("needsClinicalAcceptance(selectedTask) ? '故障报修追踪' : '转派事项追踪'"),
+        '临床端非设备转派单标题应区别于设备故障报修'
+      );
+      assert(
+        clinicalDetailSource.includes("selectedTask.status === '已关闭' || selectedTask.status === '已归档'"),
+        '临床详情应为已关闭/已归档终态提供明确状态样式'
+      );
+    }
+  },
+  {
+    name: 'clinical role switch preserves the focused same-department task',
+    run: () => {
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const switchStart = appSource.indexOf('const handleSwitchUser = (userId: string) => {');
+      const switchEnd = appSource.indexOf('const [chatMessages, setChatMessages]', switchStart);
+      assert(switchStart !== -1 && switchEnd > switchStart, '应能定位角色切换逻辑');
+      const switchSource = appSource.slice(switchStart, switchEnd);
+
+      assert(
+        switchSource.includes('currentTaskBelongsToTargetDept') &&
+          switchSource.includes('isSameDepartment(selectedTask.department, targetUser.department || targetUser.dept)') &&
+          switchSource.includes('setSelectedTask(selectedTask);'),
+        '切回临床同科室时应保留当前聚焦工单，避免关闭转派单被列表排序切走'
+      );
     }
   }
 ];
