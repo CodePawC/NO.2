@@ -585,8 +585,9 @@ export default function EquipmentArchives({
 
   useEffect(() => {
     if (currentUser) {
-      if (currentUser.role === 'medical_staff' && currentUser.dept) {
-        setSelectedDept(currentUser.dept);
+      const userDepartment = currentUser.dept || currentUser.department;
+      if (currentUser.role === 'medical_staff' && userDepartment) {
+        setSelectedDept(userDepartment);
         setOnlyMyDept(true);
       } else {
         setSelectedDept('全部科室');
@@ -749,9 +750,10 @@ export default function EquipmentArchives({
   const [isScannerCameraActive, setIsScannerCameraActive] = useState(false);
   const scannerVideoRef = useRef<HTMLVideoElement | null>(null);
   const scannerStreamRef = useRef<MediaStream | null>(null);
+  const currentUserDepartment = currentUser.dept || currentUser.department;
 
   const canCurrentUserReportEquipment = (equipment: MedicalEquipment) => {
-    return currentUser.role !== 'medical_staff' || !currentUser.dept || isSameDepartment(equipment.dept, currentUser.dept);
+    return currentUser.role !== 'medical_staff' || !currentUserDepartment || isSameDepartment(equipment.dept, currentUserDepartment);
   };
 
   // 启动系统相机扫描仪
@@ -819,7 +821,7 @@ export default function EquipmentArchives({
 
     if (matched) {
       if (!canCurrentUserReportEquipment(matched)) {
-        setScannerMatchError(`已识别设备【${matched.deviceName}】，但其归属科室为【${matched.dept}】。当前临床账号只能为【${currentUser.dept}】设备发起扫码报修。`);
+        setScannerMatchError(`已识别设备【${matched.deviceName}】，但其归属科室为【${matched.dept}】。当前临床账号只能为【${currentUserDepartment}】设备发起扫码报修。`);
         return;
       }
 
@@ -900,13 +902,13 @@ export default function EquipmentArchives({
     let matchesDept = selectedDept === '全部科室' || isSameDepartment(eq.dept, selectedDept);
 
     // 临床医护人员登录并且开启了"仅看我科室设备"
-    if (currentUser.role === 'medical_staff' && onlyMyDept && currentUser.dept) {
+    if (currentUser.role === 'medical_staff' && onlyMyDept && currentUserDepartment) {
       if (clinicalFilterMode === 'my_reported') {
         // "已经报修的设备" -> 所在科室 + 处于故障维修状态 或 含有进行中的维修工单
         const hasActiveRepairs = eq.status === '故障维修' || eq.maintenanceLogs.some(log => log.type === '维修' && log.status === '进行中');
         if (!hasActiveRepairs) return false;
       }
-      matchesDept = isSameDepartment(eq.dept, currentUser.dept);
+      matchesDept = isSameDepartment(eq.dept, currentUserDepartment);
     }
 
     const matchesCategory = selectedCategory === '全部分类' || eq.category === selectedCategory;
@@ -1580,7 +1582,7 @@ Clinical class: Life-saving respiratory device`;
 
   const handleQuickRepair = () => {
     if (!canCurrentUserReportEquipment(selectedEquipment)) {
-      setQuickRepairToast(`当前临床账号只能为本科室设备发起报修：${currentUser.dept}`);
+      setQuickRepairToast(`当前临床账号只能为本科室设备发起报修：${currentUserDepartment}`);
       setTimeout(() => setQuickRepairToast(null), 5000);
       return;
     }
@@ -1834,7 +1836,7 @@ Clinical class: Life-saving respiratory device`;
                     <span className="text-[11px] font-black">临床医护快捷面板</span>
                   </div>
                   <span className="text-[9px] font-black bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded">
-                    {currentUser.dept}
+                    {currentUserDepartment}
                   </span>
                 </div>
                 
@@ -1860,7 +1862,7 @@ Clinical class: Life-saving respiratory device`;
                     }`}
                   >
                     <span>🚨 我已报修设备</span>
-                    {equipments.filter(eq => isSameDepartment(eq.dept, currentUser.dept) && (eq.status === '故障维修' || eq.maintenanceLogs.some(log => log.type === '维修' && log.status === '进行中'))).length > 0 && (
+                    {equipments.filter(eq => isSameDepartment(eq.dept, currentUserDepartment) && (eq.status === '故障维修' || eq.maintenanceLogs.some(log => log.type === '维修' && log.status === '进行中'))).length > 0 && (
                       <span className="absolute -top-1 -right-1 flex h-2 w-2">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
@@ -1872,7 +1874,7 @@ Clinical class: Life-saving respiratory device`;
                 <button
                   type="button"
                   onClick={() => {
-                    const firstDeptEq = equipments.find(eq => isSameDepartment(eq.dept, currentUser.dept));
+                    const firstDeptEq = equipments.find(eq => isSameDepartment(eq.dept, currentUserDepartment));
                     setQuickRepairEquipId(firstDeptEq ? firstDeptEq.id : '');
                     setIsQuickRepairModalOpen(true);
                   }}
@@ -1891,7 +1893,7 @@ Clinical class: Life-saving respiratory device`;
                       onChange={(e) => setOnlyMyDept(e.target.checked)}
                       className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5 cursor-pointer"
                     />
-                    <span className="font-bold text-blue-800">仅看本科室设备 ({currentUser.dept})</span>
+                    <span className="font-bold text-blue-800">仅看本科室设备 ({currentUserDepartment})</span>
                   </label>
                 </div>
               </div>
@@ -3853,13 +3855,24 @@ Clinical class: Life-saving respiratory device`;
                                   <button
                                     type="button"
                                     onClick={() => {
+                                      if (!canCurrentUserReportEquipment(eq)) {
+                                        setQuickRepairToast(`当前临床账号只能为本科室设备发起报修：${currentUser.dept}`);
+                                        setTimeout(() => setQuickRepairToast(null), 5000);
+                                        return;
+                                      }
+
                                       setQuickRepairEquipId(eq.id);
                                       setQuickRepairDesc(`【台账明细表一键快捷报修】\n管理员在“台账明细表”执行快捷报修，请立刻核实响应。`);
                                       setQuickRepairUrgency('high');
                                       setIsQuickRepairModalOpen(true);
                                     }}
-                                    className="px-2.5 py-1 bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-600 hover:text-white rounded-md text-[10.5px] font-bold transition-all cursor-pointer"
-                                    title="一键报修"
+                                    disabled={!canCurrentUserReportEquipment(eq)}
+                                    className={`px-2.5 py-1 border rounded-md text-[10.5px] font-bold transition-all ${
+                                      canCurrentUserReportEquipment(eq)
+                                        ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-600 hover:text-white cursor-pointer'
+                                        : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                                    }`}
+                                    title={canCurrentUserReportEquipment(eq) ? '一键报修' : '当前临床账号只能为本科室设备发起报修'}
                                   >
                                     报修
                                   </button>

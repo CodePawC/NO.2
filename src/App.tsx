@@ -100,6 +100,11 @@ export default function App() {
   }, [currentWorkspace]);
 
   const handleReportRepairFromEquip = (equip: any) => {
+    if (currentUserRole === 'medical_staff' && currentSimulatedUser.role === 'medical_staff' && !isSameDepartment(equip.dept, currentSimulatedUser.department || currentSimulatedUser.dept)) {
+      appendWorkflowNotice(`⚠️ **报修权限提醒**\n当前临床账号只能为本科室设备发起报修。设备【${equip.deviceName}】归属【${equip.dept}】，当前账号归属【${currentSimulatedUser.department || currentSimulatedUser.dept}】。`, 'msg-asset-report-blocked');
+      return;
+    }
+
     setCurrentWorkspace('tasks');
     const presetText = `【系统一键扫码报修】
 设备名称: ${equip.deviceName}
@@ -204,6 +209,30 @@ export default function App() {
   const [showRoleSwitchedToast, setShowRoleSwitchedToast] = useState<string | null>(null);
 
   const currentSimulatedUser = SIMULATED_USERS.find(u => u.id === currentSimulatedUserId) || SIMULATED_USERS[0];
+  const isClinicalUser = currentUserRole === 'medical_staff';
+  const currentUserDepartment = currentSimulatedUser.department || currentSimulatedUser.dept;
+  const canCurrentUserSeeTask = (task: StructuredTicket) => {
+    return !isClinicalUser || isSameDepartment(task.department, currentUserDepartment);
+  };
+  const visibleTasks = tasks.filter(canCurrentUserSeeTask);
+  const visibleActiveTaskCount = visibleTasks.filter(t => !['已归档', '已完成', '已关闭'].includes(t.status)).length;
+
+  const getEngineerActionBlockReason = (actionName: string) => {
+    if (currentUserRole === 'engineer' && currentSimulatedUser.role === 'engineer') {
+      return '';
+    }
+
+    return `当前登录身份为【${currentSimulatedUser.name} ${currentSimulatedUser.title}】，不能执行${actionName}。请切换到医学装备科工程师账号后再操作。`;
+  };
+
+  const appendWorkflowNotice = (message: string, idPrefix = 'msg-workflow-notice') => {
+    setChatMessages(prev => [...prev, {
+      id: `${idPrefix}-${Date.now()}`,
+      sender: 'assistant',
+      text: message,
+      timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+    }]);
+  };
 
   const handleSwitchUser = (userId: string) => {
     const targetUser = SIMULATED_USERS.find(u => u.id === userId);
@@ -815,6 +844,12 @@ export default function App() {
     e.preventDefault();
     if (!selectedTask || !activeLogAction.trim()) return;
 
+    const blockReason = getEngineerActionBlockReason('工单处置日志追加');
+    if (blockReason) {
+      appendWorkflowNotice(`⚠️ **操作权限提醒**\n${blockReason}`, 'msg-log-blocked');
+      return;
+    }
+
     const newLog = {
       time: new Date().toLocaleString('zh-CN', { hour12: false }).slice(0, 16),
       action: activeLogAction.trim(),
@@ -836,6 +871,12 @@ export default function App() {
   const handleUpdateStatus = (newStatus: TaskStatus) => {
     if (!selectedTask) return;
     if (selectedTask.status === newStatus) return;
+
+    const actionBlockReason = getEngineerActionBlockReason('工单状态流转');
+    if (actionBlockReason) {
+      appendWorkflowNotice(`⚠️ **操作权限提醒**\n${actionBlockReason}`, 'msg-status-role-blocked');
+      return;
+    }
 
     const blockReason = getEngineerStatusBlockReason(selectedTask, newStatus);
     if (blockReason) {
@@ -881,6 +922,12 @@ export default function App() {
 
   // Delete task with confirmation
   const handleDeleteTask = (id: string) => {
+    const blockReason = getEngineerActionBlockReason('工单删除');
+    if (blockReason) {
+      appendWorkflowNotice(`⚠️ **操作权限提醒**\n${blockReason}`, 'msg-delete-blocked');
+      return;
+    }
+
     if (confirm('确认删除此条任务单？删除后不可恢复。')) {
       const filtered = tasks.filter(t => t.id !== id);
       setTasks(filtered);
@@ -908,7 +955,7 @@ export default function App() {
   };
 
   // Filters calculation
-  const filteredTasks = tasks.filter(t => {
+  const filteredTasks = visibleTasks.filter(t => {
     const matchesSearch = 
       t.deviceName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       t.department.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -1079,7 +1126,7 @@ export default function App() {
             <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-black ${
               currentWorkspace === 'tasks' ? 'bg-blue-500 text-white' : 'bg-rose-500 text-white animate-pulse'
             }`}>
-              {tasks.filter(t => !['已归档', '已完成', '已关闭'].includes(t.status)).length}
+              {visibleActiveTaskCount}
             </span>
           </button>
 
@@ -1122,11 +1169,11 @@ export default function App() {
                 <span className="font-bold text-slate-200 font-mono">3 台</span>
               </div>
               <div className="flex items-center justify-between text-xs text-slate-400">
-                <span className="flex items-center gap-1.5 text-slate-400">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
-                  今日应急
-                </span>
-                <span className="font-bold text-slate-200 font-mono">{tasks.filter(t => t.urgency === '生命支持' || t.urgency === '特急').length} 次</span>
+                  <span className="flex items-center gap-1.5 text-slate-400">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                    今日应急
+                  </span>
+                <span className="font-bold text-slate-200 font-mono">{visibleTasks.filter(t => t.urgency === '生命支持' || t.urgency === '特急').length} 次</span>
               </div>
             </div>
           </div>
