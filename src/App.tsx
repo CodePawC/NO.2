@@ -55,6 +55,25 @@ import { getClinicalAcceptanceBlockReason, getEngineerStatusBlockReason, getReco
 import TaskStats from './components/TaskStats';
 import EquipmentArchives from './components/EquipmentArchives';
 
+const getLocalDateIdPart = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}${month}${day}`;
+};
+
+const createNextTaskId = (existingTasks: StructuredTicket[]) => {
+  const datePart = getLocalDateIdPart();
+  const idPattern = new RegExp(`^TKT-${datePart}(\\d+)$`);
+  const maxSequence = existingTasks.reduce((max, task) => {
+    const match = task.id.match(idPattern);
+    if (!match) return max;
+    return Math.max(max, Number(match[1]) || 0);
+  }, 0);
+
+  return `TKT-${datePart}${String(maxSequence + 1).padStart(2, '0')}`;
+};
+
 export default function App() {
   const [tasks, setTasks] = useState<StructuredTicket[]>(() => {
     const saved = localStorage.getItem('hospital_tasks');
@@ -132,7 +151,7 @@ export default function App() {
         ? '较急'
         : '普通';
     const normalizedDept = normalizeDepartmentName(equipment.dept);
-    const newTicketId = `TKT-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}${(tasks.length + 1).toString().padStart(2, '0')}`;
+    const newTicketId = createNextTaskId(tasks);
     const now = new Date();
     const newTicket: StructuredTicket = {
       id: newTicketId,
@@ -747,7 +766,7 @@ export default function App() {
   const handleCreateTicketFromDraft = () => {
     if (!draftTicket) return;
 
-    const newTicketId = `TKT-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}${(tasks.length + 1).toString().padStart(2, '0')}`;
+    const newTicketId = createNextTaskId(tasks);
     
     const currentDept = normalizeDepartmentName(currentSimulatedUser.department || currentSimulatedUser.dept);
     const draftDept = normalizeDepartmentName(draftTicket.department) || draftTicket.department;

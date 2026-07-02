@@ -47,6 +47,29 @@ const getRegistrationStatus = (dateStr?: string) => {
   return { status: 'valid', text: '有效中', diffDays: Math.floor(diffDays) };
 };
 
+const getLocalDateString = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const createQuickRepairWorkOrderNo = (equipments: MedicalEquipment[], date = getLocalDateString()) => {
+  const datePart = date.replace(/-/g, '');
+  const idPattern = new RegExp(`^WO-${datePart}-(\\d+)$`);
+  const maxSequence = equipments.reduce((max, equipment) => {
+    const equipmentMax = (equipment.maintenanceLogs || []).reduce((logMax, log) => {
+      const match = log.workOrderNo?.match(idPattern);
+      if (!match) return logMax;
+      return Math.max(logMax, Number(match[1]) || 0);
+    }, 0);
+
+    return Math.max(max, equipmentMax);
+  }, 0);
+
+  return `WO-${datePart}-${String(maxSequence + 1).padStart(4, '0')}`;
+};
+
 export interface PreviewPage {
   pageNum: number;
   title: string;
@@ -1656,11 +1679,12 @@ Clinical class: Life-saving respiratory device`;
     description: string,
     urgency: 'low' | 'medium' | 'high'
   ) => {
-    const workOrderNo = `WO-20260702-${Math.floor(1000 + Math.random() * 9000)}`;
+    const today = getLocalDateString();
+    const workOrderNo = createQuickRepairWorkOrderNo(equipments, today);
     const repairLog: MaintenanceLog = {
       id: 'm-log-' + Date.now(),
       type: '维修',
-      date: new Date('2026-07-02').toISOString().split('T')[0],
+      date: today,
       technician: '未分派 (待响应)',
       cost: 0,
       description: `【一键快捷报修】紧急度: ${urgency === 'high' ? '高' : urgency === 'medium' ? '中' : '低'}。描述: ${description}`,
