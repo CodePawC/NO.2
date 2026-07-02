@@ -3,10 +3,28 @@ import { isSameDepartment } from './departmentUtils';
 
 const TERMINAL_STATUSES: TaskStatus[] = ['已归档', '已关闭'];
 const STATUS_SEQUENCE: TaskStatus[] = ['待确认', '待派工', '已派工', '处理中', '待科室验收'];
+const EQUIPMENT_DEPARTMENT = '医学装备科';
+
+export const canEngineerCloseTransferredTask = (task: StructuredTicket) => {
+  const recommendedDept = task.recommendedDept?.trim();
+
+  return (
+    task.taskType === '非设备类转派任务' ||
+    (!!recommendedDept && !isSameDepartment(recommendedDept, EQUIPMENT_DEPARTMENT))
+  );
+};
+
+const canCloseWithoutClinicalAcceptance = (task: StructuredTicket) => {
+  return task.status !== '已完成' && !TERMINAL_STATUSES.includes(task.status) && canEngineerCloseTransferredTask(task);
+};
 
 export const getEngineerNextStatus = (task: StructuredTicket): TaskStatus | null => {
   if (task.status === '已完成') {
     return '已归档';
+  }
+
+  if (canCloseWithoutClinicalAcceptance(task)) {
+    return '已关闭';
   }
 
   const currentIndex = STATUS_SEQUENCE.indexOf(task.status);
@@ -21,6 +39,11 @@ export const getEngineerWorkflowHint = (task: StructuredTicket) => {
   if (nextStatus) {
     if (task.status === '已完成') {
       return `临床已完成验收签署，建议下一步归档；如需终止留痕，可选择关闭。`;
+    }
+
+    if (canCloseWithoutClinicalAcceptance(task)) {
+      const targetDept = task.recommendedDept?.trim() || '跨部门责任科室';
+      return `系统判断此单归口【${targetDept}】，装备科完成转派记录后可直接关闭留痕；如仍需装备科继续跟进，也可按常规状态流转。`;
     }
 
     return `当前只能按闭环顺序进入【${nextStatus}】。完成现场维修后，请先转为【待科室验收】，由临床科室签署后自动结单。`;
@@ -44,6 +67,10 @@ export const getEngineerStatusBlockReason = (task: StructuredTicket, nextStatus:
 
   if (TERMINAL_STATUSES.includes(task.status)) {
     return '已归档或已关闭工单不能再变更状态。';
+  }
+
+  if (nextStatus === '已关闭' && canCloseWithoutClinicalAcceptance(task)) {
+    return '';
   }
 
   if (TERMINAL_STATUSES.includes(nextStatus) && task.status !== '已完成') {
