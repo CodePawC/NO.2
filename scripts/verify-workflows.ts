@@ -792,6 +792,37 @@ const checks: Check[] = [
     }
   },
   {
+    name: 'archive quick repair keeps engineer proxy contact distinct from clinical reporter',
+    run: () => {
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const callbackStart = appSource.indexOf('const handleQuickRepairCreated = ({');
+      const callbackEnd = appSource.indexOf('// Role and Auth Simulation States');
+      assert(callbackStart !== -1 && callbackEnd > callbackStart, '应能定位快捷报修回调实现');
+      const callbackSource = appSource.slice(callbackStart, callbackEnd);
+
+      assert(
+        callbackSource.includes('const isClinicalReporter =') &&
+          callbackSource.includes('const reportContactPerson = isClinicalReporter') &&
+          callbackSource.includes("`${normalizedDept || equipment.dept || '设备使用科室'}值班人员`") &&
+          callbackSource.includes('const reportContactPhone = isClinicalReporter') &&
+          callbackSource.includes("'待科室确认'"),
+        '工程师从资产档案代建快捷报修时，主工单联系人应保留为设备所在科室待确认，而不是工程师本人'
+      );
+      assert(
+        callbackSource.includes("const reportSource = isClinicalReporter ? '科室扫码报修' : '工程师手工录入'") &&
+          callbackSource.includes('operatorLabel') &&
+          callbackSource.includes('工程师代建，现场联系人需向'),
+        '工程师代建快捷报修应在来源、日志和备注中明确区别于临床扫码自报'
+      );
+      assert(
+        callbackSource.includes('contactPerson: reportContactPerson') &&
+          callbackSource.includes('contactPhone: reportContactPhone') &&
+          callbackSource.includes('source: reportSource'),
+        '快捷报修生成主工单应使用按角色归一后的联系人、电话和来源字段'
+      );
+    }
+  },
+  {
     name: 'quick archive repair mutates archive only after parent accepts',
     run: () => {
       const archiveSource = readFileSync('src/components/EquipmentArchives.tsx', 'utf8');

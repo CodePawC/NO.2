@@ -223,9 +223,9 @@ export default function App() {
     urgency: 'low' | 'medium' | 'high';
     workOrderNo: string;
   }): boolean => {
+    const isClinicalReporter = currentUserRole === 'medical_staff' && currentSimulatedUser.role === 'medical_staff';
     if (
-      currentUserRole === 'medical_staff' &&
-      currentSimulatedUser.role === 'medical_staff' &&
+      isClinicalReporter &&
       !isSameDepartment(equipment.dept, currentSimulatedUser.department || currentSimulatedUser.dept)
     ) {
       appendWorkflowNotice(`⚠️ **快捷报修权限提醒**\n当前临床账号只能为本科室设备同步主工单。设备【${equipment.deviceName}】归属【${equipment.dept}】，当前账号归属【${currentSimulatedUser.department || currentSimulatedUser.dept}】。`, 'msg-quick-repair-blocked');
@@ -240,17 +240,27 @@ export default function App() {
     const normalizedDept = normalizeDepartmentName(equipment.dept);
     const newTicketId = createNextTaskId(tasks);
     const now = new Date();
+    const reportContactPerson = isClinicalReporter
+      ? currentSimulatedUser.name
+      : `${normalizedDept || equipment.dept || '设备使用科室'}值班人员`;
+    const reportContactPhone = isClinicalReporter
+      ? (currentSimulatedUser.phone || '未录入电话')
+      : '待科室确认';
+    const reportSource = isClinicalReporter ? '科室扫码报修' : '工程师手工录入';
+    const operatorLabel = isClinicalReporter
+      ? `${currentSimulatedUser.name} (${currentSimulatedUser.title})`
+      : `${currentSimulatedUser.name} (${currentSimulatedUser.title}) 代建`;
     const newTicket: StructuredTicket = {
       id: newTicketId,
       taskType: urgencyLevel === '生命支持' ? '生命支持设备应急' : '设备报修',
-      source: '科室扫码报修',
+      source: reportSource,
       department: normalizedDept || equipment.dept || '未录入科室',
       location: `${normalizedDept || equipment.dept || '未录入科室'}设备点位`,
       deviceName: equipment.deviceName,
       deviceId: equipment.id,
       faultPhenomenon: description,
-      contactPerson: currentSimulatedUser.name,
-      contactPhone: currentSimulatedUser.phone || '未录入电话',
+      contactPerson: reportContactPerson,
+      contactPhone: reportContactPhone,
       urgency: urgencyLevel,
       affectClinical: urgency === 'high' || equipment.category === '急救生命支持' ? '是' : '否',
       status: '待确认',
@@ -269,11 +279,13 @@ export default function App() {
         {
           time: now.toLocaleString('zh-CN', { hour12: false }).slice(0, 16),
           action: `资产档案快捷报修同步建单。关联档案维修单号：${workOrderNo}，紧急度：${urgencyLevel}。`,
-          operator: `${currentSimulatedUser.name} (${currentSimulatedUser.title})`
+          operator: operatorLabel
         }
       ],
       rawText: description,
-      notes: `由资产档案快捷报修生成；档案维修单号：${workOrderNo}。`
+      notes: isClinicalReporter
+        ? `由资产档案快捷报修生成；档案维修单号：${workOrderNo}。`
+        : `由资产档案快捷报修生成；档案维修单号：${workOrderNo}。工程师代建，现场联系人需向${normalizedDept || equipment.dept || '使用科室'}确认。`
     };
 
     setTasks(prev => [newTicket, ...prev]);
