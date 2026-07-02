@@ -3541,7 +3541,7 @@ Clinical class: Life-saving respiratory device`;
                     onClick={() => {
                       const csvContent = "data:text/csv;charset=utf-8,\uFEFF" // Include BOM for Chinese encoding support in Excel
                         + ["设备编号,设备名称,科室,品类,品牌/厂商,型号,出厂SN,购置金额,运行状态,下期维保时间,是否强检"]
-                          .concat(matrixFilteredEquipments.map(e => `"${e.id}","${e.deviceName}","${e.dept}","${e.category}","${e.manufacturer}","${e.model}","${e.sn}",${e.purchasePrice},"${e.status}","${e.nextMaintenanceDate || ''}","${e.calibrationRequired ? '是' : '否'}"`))
+                          .concat(matrixFilteredEquipments.map(e => `"${e.id}","${e.deviceName}","${e.dept}","${e.category}","${e.manufacturer}","${e.model}","${e.sn}",${e.purchaseCost},"${e.status}","${e.nextMaintenanceDate || ''}","${e.calibrationRequired ? '是' : '否'}"`))
                           .join("\n");
                       const encodedUri = encodeURI(csvContent);
                       const link = document.createElement("a");
@@ -3646,9 +3646,9 @@ Clinical class: Life-saving respiratory device`;
                     .sort((a, b) => {
                       let valA = (a[matrixSortField as keyof MedicalEquipment] || '').toString();
                       let valB = (b[matrixSortField as keyof MedicalEquipment] || '').toString();
-                      if (matrixSortField === 'purchasePrice') {
-                        const numA = Number(a.purchasePrice) || 0;
-                        const numB = Number(b.purchasePrice) || 0;
+                      if (matrixSortField === 'purchaseCost') {
+                        const numA = Number(a.purchaseCost) || 0;
+                        const numB = Number(b.purchaseCost) || 0;
                         return matrixSortOrder === 'asc' ? numA - numB : numB - numA;
                       }
                       return matrixSortOrder === 'asc' 
@@ -4149,7 +4149,7 @@ Clinical class: Life-saving respiratory device`;
                     <div className="space-y-2 font-mono">
                       {visibleDepartments.filter(dept => dept !== '全部科室')
                         .map(dept => {
-                          const value = visibleEquipments.filter(e => isSameDepartment(e.dept, dept)).reduce((sum, e) => sum + (Number(e.purchasePrice) || 0), 0);
+                          const value = visibleEquipments.filter(e => isSameDepartment(e.dept, dept)).reduce((sum, e) => sum + (Number(e.purchaseCost) || 0), 0);
                           return { dept, value };
                         })
                         .sort((a, b) => b.value - a.value)
@@ -4170,7 +4170,7 @@ Clinical class: Life-saving respiratory device`;
                     </p>
                     <div className="space-y-2 font-mono">
                       {['急救生命支持', '影像诊断', '检验分析', '手术治疗', '其他'].map((cat, idx) => {
-                        const value = visibleEquipments.filter(e => e.category === cat).reduce((sum, e) => sum + (Number(e.purchasePrice) || 0), 0);
+                        const value = visibleEquipments.filter(e => e.category === cat).reduce((sum, e) => sum + (Number(e.purchaseCost) || 0), 0);
                         const ratio = totalAssetsValue > 0 ? ((value / totalAssetsValue) * 100).toFixed(1) : '0';
                         return (
                           <div key={idx} className="flex justify-between items-center text-[11px]">

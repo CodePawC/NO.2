@@ -405,6 +405,12 @@ export default function App() {
     resetProviderConfigs
   } = useAiSettings();
 
+  useEffect(() => {
+    if (currentUserRole === 'medical_staff' && isSettingsOpen) {
+      setIsSettingsOpen(false);
+    }
+  }, [currentUserRole, isSettingsOpen]);
+
   const {
     isListening,
     recognitionError,
@@ -1007,6 +1013,14 @@ export default function App() {
 
   // Clear all and restore presets
   const handleRestoreDefaults = () => {
+    const blockReason = getEngineerActionBlockReason('重置演示数据');
+    if (blockReason) {
+      appendWorkflowNotice(`⚠️ **操作权限提醒**\n${blockReason}`, 'msg-reset-role-blocked');
+      setShowRoleSwitchedToast('临床端无权重置全院演示数据');
+      setTimeout(() => setShowRoleSwitchedToast(null), 4500);
+      return;
+    }
+
     if (confirm('确定要清除所有修改，恢复系统默认内置任务单吗？')) {
       setTasks(INITIAL_TASKS);
       setSelectedTask(INITIAL_TASKS[0]);
@@ -1190,7 +1204,7 @@ export default function App() {
             <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
               currentWorkspace === 'archives' ? 'bg-blue-500 text-white' : 'bg-slate-800 text-slate-400'
             }`}>
-              {allEquipments.length}
+              {visibleEquipments.length}
             </span>
           </button>
 
@@ -1225,31 +1239,41 @@ export default function App() {
 
         {/* Sidebar Footer Operations */}
         <div className="p-4 border-t border-slate-800 bg-slate-950/20 shrink-0 space-y-3">
-          <div className="flex gap-2">
-            <button 
-              onClick={() => {
-                setIsSettingsOpen(true);
-                setIsSidebarOpen(false);
-              }}
-              className="flex-1 flex items-center justify-center gap-1 px-2.5 py-2 text-[11px] font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 active:bg-slate-900 rounded-lg border border-slate-700/80 transition cursor-pointer"
-              title="AI 智能配置与模型切换"
-            >
-              <Settings className="w-3.5 h-3.5 text-slate-400" />
-              <span>AI配置</span>
-            </button>
+          {currentUserRole === 'engineer' ? (
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setIsSettingsOpen(true);
+                  setIsSidebarOpen(false);
+                }}
+                className="flex-1 flex items-center justify-center gap-1 px-2.5 py-2 text-[11px] font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 active:bg-slate-900 rounded-lg border border-slate-700/80 transition cursor-pointer"
+                title="AI 智能配置与模型切换"
+              >
+                <Settings className="w-3.5 h-3.5 text-slate-400" />
+                <span>AI配置</span>
+              </button>
 
-            <button 
-              onClick={() => {
-                handleRestoreDefaults();
-                setIsSidebarOpen(false);
-              }}
-              className="flex-1 flex items-center justify-center gap-1 px-2.5 py-2 text-[11px] font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 active:bg-slate-900 rounded-lg border border-slate-700/80 transition cursor-pointer"
-              title="恢复预置演示数据"
-            >
-              <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
-              <span>重置数据</span>
-            </button>
-          </div>
+              <button
+                onClick={() => {
+                  handleRestoreDefaults();
+                  setIsSidebarOpen(false);
+                }}
+                className="flex-1 flex items-center justify-center gap-1 px-2.5 py-2 text-[11px] font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 active:bg-slate-900 rounded-lg border border-slate-700/80 transition cursor-pointer"
+                title="恢复预置演示数据"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
+                <span>重置数据</span>
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-start gap-2 rounded-xl border border-teal-900/60 bg-teal-950/30 px-3 py-2.5 text-[10px] leading-normal text-teal-100">
+              <ShieldCheck className="w-3.5 h-3.5 text-teal-300 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-teal-100">临床只读运行模式</p>
+                <p className="mt-0.5 text-teal-200/75">AI配置与演示数据重置由医学装备科维护，临床端仅保留报修、验收和本科室档案查看。</p>
+              </div>
+            </div>
+          )}
 
           <div className="bg-slate-950/30 p-2.5 rounded-xl text-slate-400 text-[10px] leading-normal border border-slate-800">
             <p className="font-bold text-slate-300 flex items-center gap-1.5">
@@ -2264,7 +2288,9 @@ export default function App() {
                               </div>
                               <div>
                                 <h5 className={`text-xs font-bold ${isCompleted ? 'text-emerald-700 font-semibold' : 'text-slate-400'}`}>5. 工单安全闭环（满意度归档）</h5>
-                                <p className="text-[11px] text-slate-500 mt-0.5">全流程完整跟踪，已完成闭环档案归档。</p>
+                                <p className="text-[11px] text-slate-500 mt-0.5">
+                                  {isCompleted ? '全流程完整跟踪，已完成闭环档案归档。' : '等待临床验收完成后自动形成闭环归档。'}
+                                </p>
                               </div>
                             </div>
                           );
