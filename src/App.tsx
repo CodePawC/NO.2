@@ -50,6 +50,7 @@ import { MOCK_VOICE_TEMPLATES, PRESET_PROMPTS, SIMULATED_USERS } from './data/ap
 import { useAiSettings } from './hooks/useAiSettings';
 import { useSpeechRecognition } from './hooks/useSpeechRecognition';
 import { sendAssistantChat } from './services/aiApi';
+import { isSameDepartment, normalizeDepartmentName } from './utils/departmentUtils';
 import TaskStats from './components/TaskStats';
 import EquipmentArchives from './components/EquipmentArchives';
 
@@ -112,7 +113,7 @@ export default function App() {
     // Construct pre-filled draft ticket
     setDraftTicket({
       taskType: '设备报修',
-      department: equip.dept,
+      department: normalizeDepartmentName(equip.dept),
       deviceName: equip.deviceName,
       deviceId: equip.id,
       faultPhenomenon: '设备发生故障异常，需紧急现场排故与检修。',
@@ -158,7 +159,7 @@ export default function App() {
       setChatMessages([greetingMsg]);
       
       // Auto-set selected task to their department's first active task if any
-      const deptTasks = tasks.filter(t => t.department === targetUser.department);
+      const deptTasks = tasks.filter(t => isSameDepartment(t.department, targetUser.department || targetUser.dept));
       if (deptTasks.length > 0) {
         setSelectedTask(deptTasks[0]);
       } else {
@@ -387,7 +388,7 @@ export default function App() {
     let department = '';
     const deptMatch = text.match(/(icu|急诊|放射|妇产|胃镜|儿科|外科|内科|手术室|胃镜室|门诊|住院)/i);
     if (deptMatch) {
-      department = deptMatch[0].toUpperCase();
+      department = normalizeDepartmentName(deptMatch[0].toUpperCase());
     }
 
     // 3. Location
@@ -437,6 +438,35 @@ export default function App() {
     };
   };
 
+  const normalizeDraftForCurrentRole = (draft: Partial<StructuredTicket>) => {
+    const normalizedDraft = {
+      ...draft,
+      department: normalizeDepartmentName(draft.department) || draft.department
+    };
+
+    if (currentUserRole !== 'medical_staff') {
+      return normalizedDraft;
+    }
+
+    const currentDept = normalizeDepartmentName(currentSimulatedUser.department || currentSimulatedUser.dept);
+    if (!currentDept) {
+      return normalizedDraft;
+    }
+
+    const hasDeptNormalizationNote = draft.notes?.includes('AI原始识别科室为');
+    const deptNormalizationNote = !hasDeptNormalizationNote && draft.department && draft.department !== currentDept
+      ? `AI原始识别科室为 [${draft.department}]，已按当前登录临床用户归属规范化为 [${currentDept}]。`
+      : '';
+
+    return {
+      ...normalizedDraft,
+      department: currentDept,
+      contactPerson: currentSimulatedUser.name,
+      contactPhone: currentSimulatedUser.phone || draft.contactPhone || '未录入电话',
+      notes: [draft.notes, deptNormalizationNote].filter(Boolean).join('\n') || draft.notes
+    };
+  };
+
   const handleSendMessage = async (textToSend: string) => {
     if (!textToSend.trim()) return;
 
@@ -455,7 +485,7 @@ export default function App() {
     // Test Scenario interceptor (Requirement 7)
     const normalizedMsgText = textToSend.trim();
     if (normalizedMsgText === 'ICU呼吸机一直报警，病人正在用。' || normalizedMsgText.includes('ICU呼吸机一直报警')) {
-      const mockTestDraft: Partial<StructuredTicket> = {
+      const mockTestDraft: Partial<StructuredTicket> = normalizeDraftForCurrentRole({
         taskType: '生命支持设备应急',
         source: 'AI 对话生成',
         department: 'ICU',
@@ -471,7 +501,7 @@ export default function App() {
         needVendorCoop: '否',
         recommendedDept: '医学装备科',
         aiStatus: '已分析',
-      };
+      });
       
       const testSuggestions = [
         '立即通知值班工程师，同时协调备用呼吸机保障患者安全。',
@@ -511,10 +541,10 @@ export default function App() {
       
       // Update draft ticket state
       if (data.extractedInfo) {
-        const updatedDraft = {
+        const updatedDraft = normalizeDraftForCurrentRole({
           ...(draftTicket || {}),
           ...data.extractedInfo
-        };
+        });
         // Auto urgency / severity check (Requirement 3: Urgency upgrading rules)
         const keywords = ['呼吸机', '除颤仪', '麻醉机', '监护仪', '氧气', '负压吸引', '抢救', '生命支持', '病人正在用', '无法通气', '压力不足'];
         const hasUrgentKeyword = keywords.some(kw => 
@@ -554,7 +584,7 @@ export default function App() {
     } catch (err: any) {
       console.error('Gemini API error, falling back to local heuristic parser:', err);
       
-      const fallbackDraft = fallbackParse(textToSend);
+      const fallbackDraft = normalizeDraftForCurrentRole(fallbackParse(textToSend));
       setDraftTicket(prev => ({
         ...(prev || {}),
         ...fallbackDraft
@@ -587,17 +617,28 @@ export default function App() {
 
     const newTicketId = `TKT-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}${(tasks.length + 1).toString().padStart(2, '0')}`;
     
+    const currentDept = normalizeDepartmentName(currentSimulatedUser.department || currentSimulatedUser.dept);
+    const draftDept = normalizeDepartmentName(draftTicket.department) || draftTicket.department;
     const defaultPerson = currentUserRole === 'medical_staff' ? currentSimulatedUser.name : (draftTicket.contactPerson || '未录入联系人');
-    const defaultPhone = currentUserRole === 'medical_staff' ? currentSimulatedUser.phone : (draftTicket.contactPhone || '未录入电话');
-    const defaultDept = currentUserRole === 'medical_staff' ? currentSimulatedUser.department : (draftTicket.department || '未录入科室');
-    const defaultLoc = draftTicket.location && draftTicket.location !== '未录入位置' ? draftTicket.location : (currentUserRole === 'medical_staff' ? `${currentSimulatedUser.department}病房` : '未录入位置');
+    const defaultPhone = currentUserRole === 'medical_staff' ? (currentSimulatedUser.phone || draftTicket.contactPhone || '未录入电话') : (draftTicket.contactPhone || '未录入电话');
+    const defaultDept = currentUserRole === 'medical_staff' ? (currentDept || draftDept || '未录入科室') : (draftDept || '未录入科室');
+    const finalDepartment = currentUserRole === 'medical_staff'
+      ? (currentDept || draftDept || '未录入科室')
+      : (draftDept && draftDept !== '未录入科室' ? draftDept : defaultDept);
+    const defaultLoc = draftTicket.location && draftTicket.location !== '未录入位置' ? draftTicket.location : (currentUserRole === 'medical_staff' ? `${currentDept || currentSimulatedUser.department}病房` : '未录入位置');
+    const deptNormalizationNote = draftTicket.notes?.includes('AI原始识别科室为') ? draftTicket.notes : '';
+    const createLogAction = [
+      `AI 智能建单。任务分类：${draftTicket.taskType || '未分类'}，来源：${draftTicket.source || 'AI 对话生成'}，紧急度判定：${draftTicket.urgency || '普通'}`,
+      forwardDept ? `自动提示转派至【${forwardDept}】` : '',
+      deptNormalizationNote
+    ].filter(Boolean).join('，');
 
     // Fallbacks
     const newTicket: StructuredTicket = {
       id: newTicketId,
       taskType: (draftTicket.taskType as TaskType) || '设备报修',
       source: (draftTicket.source as any) || 'AI 对话生成',
-      department: draftTicket.department && draftTicket.department !== '未录入科室' ? draftTicket.department : defaultDept,
+      department: finalDepartment,
       location: defaultLoc,
       deviceName: draftTicket.deviceName || '未录入设备名称',
       deviceId: draftTicket.deviceId || 'EQ-TEMP-' + Math.floor(Math.random() * 9000 + 1000),
@@ -617,12 +658,12 @@ export default function App() {
       logs: [
         {
           time: new Date().toLocaleString('zh-CN', { hour12: false }).slice(0, 16),
-          action: `AI 智能建单。任务分类：${draftTicket.taskType || '未分类'}，来源：${draftTicket.source || 'AI 对话生成'}，紧急度判定：${draftTicket.urgency || '普通'}${forwardDept ? `，自动提示转派至【${forwardDept}】` : ''}。`,
+          action: createLogAction.endsWith('。') ? createLogAction : `${createLogAction}。`,
           operator: 'AI 智能助手'
         }
       ],
       rawText: chatMessages.filter(m => m.sender === 'user').map(m => m.text).join(' | '),
-      notes: forwardDept ? `系统判断此单归属部门为 [${forwardDept}]。` : ''
+      notes: [draftTicket.notes, forwardDept ? `系统判断此单归属部门为 [${forwardDept}]。` : ''].filter(Boolean).join('\n')
     };
 
     setTasks(prev => [newTicket, ...prev]);
@@ -1785,13 +1826,13 @@ export default function App() {
                 </div>
                 
                 <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                  {tasks.filter(t => t.department === currentSimulatedUser.department).length === 0 ? (
+                  {tasks.filter(t => isSameDepartment(t.department, currentSimulatedUser.department || currentSimulatedUser.dept)).length === 0 ? (
                     <div className="py-12 px-4 text-center text-slate-400 text-xs">
                       <AlertTriangle className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                       您科室尚未提报过任何设备故障，请在左侧 AI 报修通道提报。
                     </div>
                   ) : (
-                    tasks.filter(t => t.department === currentSimulatedUser.department).map(t => {
+                    tasks.filter(t => isSameDepartment(t.department, currentSimulatedUser.department || currentSimulatedUser.dept)).map(t => {
                       const isSelected = selectedTask?.id === t.id;
                       
                       let statusStyle = 'bg-slate-100 text-slate-700 border-slate-200';
@@ -1831,7 +1872,7 @@ export default function App() {
 
               {/* Right Column of Clinical workspace (Timeline Track & Closed-Loop Feedback Panel) */}
               <div className={`${mobileTab === 'detail' ? 'flex flex-1' : 'hidden'} xl:flex xl:flex-1 flex-col min-h-0 bg-slate-50/30 overflow-y-auto`}>
-                {selectedTask && selectedTask.department === currentSimulatedUser.department ? (
+                {selectedTask && isSameDepartment(selectedTask.department, currentSimulatedUser.department || currentSimulatedUser.dept) ? (
                   <div className="p-4 md:p-5 space-y-5 flex-1 flex flex-col">             <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs flex items-start justify-between gap-4">
                       <div>
                         <div className="flex items-center gap-2 mb-1.5">
@@ -1860,7 +1901,7 @@ export default function App() {
 
                     {/* 双向数据穿透：关联医学装备数字档案卡 */}
                     {(() => {
-                      const matchedEquip = allEquipments.find(eq => eq.id === selectedTask.deviceId || eq.sn === selectedTask.deviceId || (eq.deviceName === selectedTask.deviceName && eq.dept === selectedTask.department));
+                      const matchedEquip = allEquipments.find(eq => eq.id === selectedTask.deviceId || eq.sn === selectedTask.deviceId || (eq.deviceName === selectedTask.deviceName && isSameDepartment(eq.dept, selectedTask.department)));
                       if (matchedEquip) {
                         return (
                           <div className="bg-gradient-to-tr from-emerald-50 to-teal-50/40 border border-emerald-200/60 p-3 rounded-xl flex items-center justify-between gap-3 shadow-xs">
@@ -2480,7 +2521,7 @@ export default function App() {
 
                 {/* 双向数据穿透：关联医学装备数字档案卡 */}
                 {(() => {
-                  const matchedEquip = allEquipments.find(eq => eq.id === selectedTask.deviceId || eq.sn === selectedTask.deviceId || (eq.deviceName === selectedTask.deviceName && eq.dept === selectedTask.department));
+                  const matchedEquip = allEquipments.find(eq => eq.id === selectedTask.deviceId || eq.sn === selectedTask.deviceId || (eq.deviceName === selectedTask.deviceName && isSameDepartment(eq.dept, selectedTask.department)));
                   if (matchedEquip) {
                     return (
                       <div className="bg-gradient-to-tr from-emerald-50 to-teal-50/40 border border-emerald-200/60 p-3 rounded-xl flex items-center justify-between gap-3 shadow-xs">

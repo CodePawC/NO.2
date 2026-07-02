@@ -9,6 +9,7 @@ import {
 import { MedicalEquipment, MaintenanceLog, CalibrationLog, Attachment, UserProfile } from '../types';
 import { SIMULATED_USERS } from '../data/appPresets';
 import { analyzeGeminiContent, chatWithGeminiExpert } from '../services/aiApi';
+import { isSameDepartment } from '../utils/departmentUtils';
 import MaintenanceCalendar from './MaintenanceCalendar';
 import BudgetStackedChart from './BudgetStackedChart';
 
@@ -874,7 +875,7 @@ export default function EquipmentArchives({
                           eq.dept.toLowerCase().includes(searchTerm.toLowerCase());
     
     // Default department match
-    let matchesDept = selectedDept === '全部科室' || eq.dept === selectedDept;
+    let matchesDept = selectedDept === '全部科室' || isSameDepartment(eq.dept, selectedDept);
 
     // 临床医护人员登录并且开启了"仅看我科室设备"
     if (currentUser.role === 'medical_staff' && onlyMyDept && currentUser.dept) {
@@ -883,7 +884,7 @@ export default function EquipmentArchives({
         const hasActiveRepairs = eq.status === '故障维修' || eq.maintenanceLogs.some(log => log.type === '维修' && log.status === '进行中');
         if (!hasActiveRepairs) return false;
       }
-      matchesDept = eq.dept === currentUser.dept;
+      matchesDept = isSameDepartment(eq.dept, currentUser.dept);
     }
 
     const matchesCategory = selectedCategory === '全部分类' || eq.category === selectedCategory;
@@ -1819,7 +1820,7 @@ Clinical class: Life-saving respiratory device`;
                     }`}
                   >
                     <span>🚨 我已报修设备</span>
-                    {equipments.filter(eq => eq.dept === currentUser.dept && (eq.status === '故障维修' || eq.maintenanceLogs.some(log => log.type === '维修' && log.status === '进行中'))).length > 0 && (
+                    {equipments.filter(eq => isSameDepartment(eq.dept, currentUser.dept) && (eq.status === '故障维修' || eq.maintenanceLogs.some(log => log.type === '维修' && log.status === '进行中'))).length > 0 && (
                       <span className="absolute -top-1 -right-1 flex h-2 w-2">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
@@ -1831,7 +1832,7 @@ Clinical class: Life-saving respiratory device`;
                 <button
                   type="button"
                   onClick={() => {
-                    const firstDeptEq = equipments.find(eq => eq.dept === currentUser.dept);
+                    const firstDeptEq = equipments.find(eq => isSameDepartment(eq.dept, currentUser.dept));
                     setQuickRepairEquipId(firstDeptEq ? firstDeptEq.id : '');
                     setIsQuickRepairModalOpen(true);
                   }}
@@ -2265,7 +2266,7 @@ Clinical class: Life-saving respiratory device`;
                 >
                   🔔 相关工单
                   <span className="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 rounded-full font-bold font-mono">
-                    {tasks.filter(t => t.deviceId === selectedEquipment.id || t.deviceId === selectedEquipment.sn || (t.deviceName === selectedEquipment.deviceName && t.department === selectedEquipment.dept)).length}
+                    {tasks.filter(t => t.deviceId === selectedEquipment.id || t.deviceId === selectedEquipment.sn || (t.deviceName === selectedEquipment.deviceName && isSameDepartment(t.department, selectedEquipment.dept))).length}
                   </span>
                 </button>
               </div>
@@ -3132,7 +3133,7 @@ Clinical class: Life-saving respiratory device`;
                 })()}
 
                 {activeTab === 'tickets' && (() => {
-                  const relatedTasks = tasks.filter(t => t.deviceId === selectedEquipment.id || t.deviceId === selectedEquipment.sn || (t.deviceName === selectedEquipment.deviceName && t.department === selectedEquipment.dept));
+                  const relatedTasks = tasks.filter(t => t.deviceId === selectedEquipment.id || t.deviceId === selectedEquipment.sn || (t.deviceName === selectedEquipment.deviceName && isSameDepartment(t.department, selectedEquipment.dept)));
                   return (
                     <div className="space-y-4">
                       <div className="flex justify-between items-center pb-2 border-b border-slate-100">
@@ -5587,7 +5588,7 @@ Clinical class: Life-saving respiratory device`;
                   required
                 >
                   <option value="">-- 请选择本科室发生故障的设备 --</option>
-                  {equipments.filter(eq => !currentUser.dept || eq.dept === currentUser.dept).map(eq => (
+                  {equipments.filter(eq => !currentUser.dept || isSameDepartment(eq.dept, currentUser.dept)).map(eq => (
                     <option key={eq.id} value={eq.id}>
                       [{eq.status}] {eq.deviceName} ({eq.model}) (SN: {eq.sn})
                     </option>

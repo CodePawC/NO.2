@@ -6,6 +6,7 @@
 import React from 'react';
 import { StructuredTicket, UserProfile } from '../types';
 import { ShieldCheck, AlertTriangle, Play, CheckCircle2, Clock } from 'lucide-react';
+import { isSameDepartment } from '../utils/departmentUtils';
 
 interface TaskStatsProps {
   tasks: StructuredTicket[];
@@ -19,7 +20,7 @@ export default function TaskStats({ tasks, userRole = 'engineer', simulatedUser 
   
   // Filter tasks based on role: clinical users only see their own department's statistics
   const displayTasks = isClinical 
-    ? tasks.filter(t => t.department === deptName)
+    ? tasks.filter(t => isSameDepartment(t.department, deptName))
     : tasks;
 
   const total = displayTasks.length;
