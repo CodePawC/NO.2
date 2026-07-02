@@ -2,11 +2,17 @@ import type { Attachment, CalibrationLog, ExtractedSnapshot, MaintenanceLog, Med
 import { DEFAULT_EQUIPMENT } from '../data/defaultEquipment';
 
 export const EQUIPMENT_STORAGE_KEY = 'medical_equipment_data';
+const EQUIPMENT_PRESET_MIGRATION_KEY = 'medical_equipment_seeded_preset_ids';
+const EQUIPMENT_PRESET_MIGRATION_IDS = ['eq-006', 'eq-007', 'eq-008'];
 
 const EQUIPMENT_CATEGORIES: MedicalEquipment['category'][] = ['急救生命支持', '影像诊断', '检验分析', '手术治疗', '其他'];
 const EQUIPMENT_STATUSES: MedicalEquipment['status'][] = ['正常运行', '故障维修', '计量中', '已停用'];
 const RISK_LEVELS: MedicalEquipment['riskLevel'][] = ['高', '中', '低'];
 const DEVICE_CLASSES: NonNullable<MedicalEquipment['deviceClass']>[] = ['I类', 'II类', 'III类', '未分类'];
+
+const getBrowserStorage = () => {
+  return typeof localStorage === 'undefined' ? null : localStorage;
+};
 
 const EMPTY_EQUIPMENT: MedicalEquipment = {
   id: '',
@@ -49,6 +55,41 @@ export const cloneEquipmentList = (equipments: MedicalEquipment[]): MedicalEquip
 
 export const getDefaultEquipmentList = (): MedicalEquipment[] => {
   return cloneEquipmentList(DEFAULT_EQUIPMENT);
+};
+
+const getSeededPresetEquipmentIds = () => {
+  const storage = getBrowserStorage();
+  if (!storage) return new Set<string>();
+
+  try {
+    const parsed = JSON.parse(storage.getItem(EQUIPMENT_PRESET_MIGRATION_KEY) || '[]');
+    return new Set(Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : []);
+  } catch (error) {
+    console.warn('Failed to load seeded preset equipment ids:', error);
+    return new Set<string>();
+  }
+};
+
+const markPresetEquipmentMigrationsSeeded = () => {
+  const storage = getBrowserStorage();
+  if (!storage) return;
+
+  const seededPresetIds = getSeededPresetEquipmentIds();
+  const nextSeededPresetIds = new Set([...seededPresetIds, ...EQUIPMENT_PRESET_MIGRATION_IDS]);
+  storage.setItem(EQUIPMENT_PRESET_MIGRATION_KEY, JSON.stringify([...nextSeededPresetIds]));
+};
+
+const mergeMissingPresetEquipments = (equipments: MedicalEquipment[]) => {
+  const storedIds = new Set(equipments.map(equipment => equipment.id));
+  const seededPresetIds = getSeededPresetEquipmentIds();
+  const missingPresetEquipments = DEFAULT_EQUIPMENT.filter(
+    equipment => EQUIPMENT_PRESET_MIGRATION_IDS.includes(equipment.id) && !storedIds.has(equipment.id) && !seededPresetIds.has(equipment.id)
+  );
+  markPresetEquipmentMigrationsSeeded();
+
+  return missingPresetEquipments.length > 0
+    ? [...cloneEquipmentList(missingPresetEquipments), ...equipments]
+    : equipments;
 };
 
 const getDefaultForRecord = (record: Record<string, unknown>) => {
@@ -153,6 +194,7 @@ const normalizeEquipmentRecord = (value: unknown): { equipment: MedicalEquipment
 
 export const parseStoredEquipmentList = (saved: string | null): { equipments: MedicalEquipment[]; shouldPersist: boolean } => {
   if (!saved) {
+    markPresetEquipmentMigrationsSeeded();
     return { equipments: getDefaultEquipmentList(), shouldPersist: true };
   }
 
@@ -172,9 +214,11 @@ export const parseStoredEquipmentList = (saved: string | null): { equipments: Me
       return { equipments: getDefaultEquipmentList(), shouldPersist: true };
     }
 
+    const mergedEquipments = mergeMissingPresetEquipments(equipments);
+
     return {
-      equipments,
-      shouldPersist: normalized.some(item => item.repaired) || equipments.length !== parsed.length
+      equipments: mergedEquipments,
+      shouldPersist: normalized.some(item => item.repaired) || equipments.length !== parsed.length || mergedEquipments.length !== equipments.length
     };
   } catch (error) {
     console.warn('Failed to load persisted equipment, falling back to defaults:', error);

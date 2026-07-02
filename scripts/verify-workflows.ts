@@ -384,6 +384,17 @@ const checks: Check[] = [
         '呼吸内科临床任务列表应能看到默认待验收演示单'
       );
 
+      const linkedDefaultTaskIds = ['TKT-2026062801', 'TKT-2026062802', 'TKT-2026062803', 'TKT-2026062805'];
+      linkedDefaultTaskIds.forEach(taskId => {
+        const task = INITIAL_TASKS.find(item => item.id === taskId);
+        const linkedEquipment = task && DEFAULT_EQUIPMENT.find(equipment => (
+          equipment.id === task.deviceId ||
+          equipment.sn === task.deviceId ||
+          (equipment.deviceName === task.deviceName && isSameDepartment(equipment.dept, task.department))
+        ));
+        assert(!!linkedEquipment, `默认医疗设备工单 ${taskId} 应能关联默认设备档案`);
+      });
+
       const appSource = readFileSync('src/App.tsx', 'utf8');
       const mergeStart = appSource.indexOf('const TASK_PRESET_MIGRATION_IDS');
       const mergeEnd = appSource.indexOf('const getStoredTasks = () => {', mergeStart);
@@ -548,6 +559,26 @@ const checks: Check[] = [
       const emptyStorage = parseStoredEquipmentList(null);
       assert(emptyStorage.equipments.length > 0, '空设备存储应回退默认设备列表');
       assertEqual(emptyStorage.shouldPersist, true, '空设备存储回退后应提示持久化');
+
+      const existingEquipmentStorage = parseStoredEquipmentList(JSON.stringify([
+        createEquipment({ id: 'eq-legacy', deviceName: '既有设备档案', dept: '医学装备科' })
+      ]));
+      assertEqual(existingEquipmentStorage.shouldPersist, true, '已有设备存储缺少新增默认资产时应提示持久化');
+      ['eq-006', 'eq-007', 'eq-008'].forEach(equipmentId => {
+        assert(
+          existingEquipmentStorage.equipments.some(equipment => equipment.id === equipmentId),
+          `已有本地设备库应一次性补入新增默认资产 ${equipmentId}`
+        );
+      });
+
+      const equipmentStorageSource = readFileSync('src/utils/equipmentStorage.ts', 'utf8');
+      assert(
+        equipmentStorageSource.includes("const EQUIPMENT_PRESET_MIGRATION_IDS = ['eq-006', 'eq-007', 'eq-008'];") &&
+          equipmentStorageSource.includes('EQUIPMENT_PRESET_MIGRATION_KEY') &&
+          equipmentStorageSource.includes('!seededPresetIds.has(equipment.id)') &&
+          equipmentStorageSource.includes("typeof localStorage === 'undefined' ? null : localStorage"),
+        '新增默认设备迁移应有一次性标记，避免用户删除后反复补回'
+      );
 
       const corruptStorage = withoutConsoleWarn(() => parseStoredEquipmentList('{not json'));
       assert(corruptStorage.equipments.length > 0, '损坏设备存储应回退默认设备列表');

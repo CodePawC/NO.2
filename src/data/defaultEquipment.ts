@@ -3,6 +3,39 @@ import { MedicalEquipment } from '../types';
 // Preset default equipment data to seed localStorage
 export const DEFAULT_EQUIPMENT: MedicalEquipment[] = [
   {
+    id: 'eq-006',
+    deviceName: '德尔格呼吸机 Evita',
+    model: 'Drager Evita V500',
+    sn: 'EQ-DRG-8812',
+    manufacturer: '德尔格医疗 (Drager)',
+    category: '急救生命支持',
+    dept: '急诊ICU',
+    status: '正常运行',
+    riskLevel: '高',
+    purchaseDate: '2022-03-18',
+    purchaseCost: 268000,
+    maintenanceCycleDays: 90,
+    lastMaintenanceDate: '2026-06-28',
+    nextMaintenanceDate: '2026-09-26',
+    calibrationRequired: true,
+    lastCalibrationDate: '2026-03-12',
+    nextCalibrationDate: '2027-03-11',
+    attachments: [
+      { id: 'a6', name: 'Evita-V500操作维护手册.pdf', type: 'manual', size: '9.6 MB', uploadDate: '2022-03-19' }
+    ],
+    maintenanceLogs: [
+      { id: 'm7', type: '维修', date: '2026-06-28', technician: '张工 (高级工程师)', description: '更换氧电池并完成服务模式自检校准，通气测试平稳。', cost: 150, status: '已完成', workOrderNo: 'TKT-2026062801', faultPhenomenon: '氧浓度传感器失效', verifyPerson: '周护士' }
+    ],
+    calibrationLogs: [
+      { id: 'c5', date: '2026-03-12', agency: '市计量测试院', certificateNo: 'VENT-2026-0312', result: '合格', validUntil: '2027-03-11' }
+    ],
+    registrationNo: '国械注进20173542108',
+    registrationValidUntil: '2027-09-30',
+    deviceClass: 'III类',
+    productionLicenseNo: '国械生产许20170031号',
+    photoUrl: 'https://images.unsplash.com/photo-1587351021759-3e566b3db6f1?auto=format&fit=crop&w=600&h=450&q=80'
+  },
+  {
     id: 'eq-001',
     deviceName: '磁共振成像系统 (MRI)',
     model: 'Siemens Magnetom Vida 3.0T',
@@ -36,6 +69,39 @@ export const DEFAULT_EQUIPMENT: MedicalEquipment[] = [
     deviceClass: 'III类',
     productionLicenseNo: '国械生产许20150012号',
     photoUrl: 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=600&h=450&q=80'
+  },
+  {
+    id: 'eq-007',
+    deviceName: '联影双板 DR (数字化X射线摄影系统)',
+    model: 'uDR 780i Pro',
+    sn: 'EQ-UIH-2026',
+    manufacturer: '联影医疗 (United Imaging Healthcare)',
+    category: '影像诊断',
+    dept: '放射科',
+    status: '正常运行',
+    riskLevel: '高',
+    purchaseDate: '2026-06-20',
+    purchaseCost: 2680000,
+    maintenanceCycleDays: 180,
+    lastMaintenanceDate: '2026-06-28',
+    nextMaintenanceDate: '2026-12-25',
+    calibrationRequired: true,
+    lastCalibrationDate: '2026-06-28',
+    nextCalibrationDate: '2027-06-27',
+    attachments: [
+      { id: 'a7', name: '联影双板DR开箱验收清单.pdf', type: 'certificate', size: '2.6 MB', uploadDate: '2026-06-28' }
+    ],
+    maintenanceLogs: [
+      { id: 'm8', type: '保养', date: '2026-06-28', technician: '李管理员 (资产组)', description: '开箱核对配置、球管和平板探测器序列号，等待联合安装验收。', cost: 0, status: '进行中', workOrderNo: 'TKT-2026062802', faultPhenomenon: '新设备到货开箱验收' }
+    ],
+    calibrationLogs: [
+      { id: 'c6', date: '2026-06-28', agency: '厂家现场验收', certificateNo: 'UIH-DR-ACCEPT-20260628', result: '合格', validUntil: '2027-06-27' }
+    ],
+    registrationNo: '国械注准20223060988',
+    registrationValidUntil: '2029-12-31',
+    deviceClass: 'III类',
+    productionLicenseNo: '沪食药监械生产许20150005号',
+    photoUrl: 'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=600&h=450&q=80'
   },
   {
     id: 'eq-002',
@@ -127,6 +193,35 @@ export const DEFAULT_EQUIPMENT: MedicalEquipment[] = [
     deviceClass: 'II类',
     productionLicenseNo: '国械生产许20160029号',
     photoUrl: 'https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&w=600&h=450&q=80'
+  },
+  {
+    id: 'eq-008',
+    deviceName: '奥林巴斯电子胃镜 CV-290',
+    model: 'Olympus CV-290',
+    sn: 'EQ-OLY-0092',
+    manufacturer: '奥林巴斯 (Olympus)',
+    category: '其他',
+    dept: '胃镜室',
+    status: '故障维修',
+    riskLevel: '高',
+    purchaseDate: '2021-09-10',
+    purchaseCost: 860000,
+    maintenanceCycleDays: 120,
+    lastMaintenanceDate: '2026-02-18',
+    nextMaintenanceDate: '2026-06-18',
+    calibrationRequired: false,
+    attachments: [
+      { id: 'a8', name: 'CV-290电子胃镜维护说明.pdf', type: 'manual', size: '6.1 MB', uploadDate: '2021-09-11' }
+    ],
+    maintenanceLogs: [
+      { id: 'm9', type: '维修', date: '2026-06-28', technician: '赵工 (工程师)', description: '镜体蛇管咬口处漏水，已打包外送奥林巴斯授权售后检测报价。', cost: 0, status: '进行中', workOrderNo: 'TKT-2026062803', faultPhenomenon: '胃镜插入部蛇管漏水' }
+    ],
+    calibrationLogs: [],
+    registrationNo: '国械注进20163062244',
+    registrationValidUntil: '2027-08-31',
+    deviceClass: 'II类',
+    productionLicenseNo: '国械生产许20140018号',
+    photoUrl: 'https://images.unsplash.com/photo-1581595219315-a187dd40c322?auto=format&fit=crop&w=600&h=450&q=80'
   },
   {
     id: 'eq-005',
