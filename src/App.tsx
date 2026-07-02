@@ -96,11 +96,21 @@ const getTaskAcceptanceDisplay = (task: StructuredTicket) => {
   };
 };
 
+const getStoredTasks = () => {
+  const saved = localStorage.getItem('hospital_tasks');
+  if (!saved) return INITIAL_TASKS;
+
+  try {
+    const parsed = JSON.parse(saved);
+    return Array.isArray(parsed) ? parsed : INITIAL_TASKS;
+  } catch (error) {
+    console.warn('Failed to load persisted tasks, falling back to defaults:', error);
+    return INITIAL_TASKS;
+  }
+};
+
 export default function App() {
-  const [tasks, setTasks] = useState<StructuredTicket[]>(() => {
-    const saved = localStorage.getItem('hospital_tasks');
-    return saved ? JSON.parse(saved) : INITIAL_TASKS;
-  });
+  const [tasks, setTasks] = useState<StructuredTicket[]>(getStoredTasks);
 
   const [currentWorkspace, setCurrentWorkspace] = useState<'tasks' | 'archives'>('tasks');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -309,7 +319,7 @@ export default function App() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedTask, setSelectedTask] = useState<StructuredTicket | null>(INITIAL_TASKS[0]);
+  const [selectedTask, setSelectedTask] = useState<StructuredTicket | null>(() => tasks[0] || null);
   
   // Local states for filtering and searching
   const [searchQuery, setSearchQuery] = useState('');
@@ -361,6 +371,15 @@ export default function App() {
       window.removeEventListener('deep-link-ticket', handleDeepLinkTicket);
     };
   }, [tasks, isClinicalUser, currentUserDepartment]);
+
+  useEffect(() => {
+    if (!selectedTask) return;
+
+    const latestSelectedTask = tasks.find(task => task.id === selectedTask.id);
+    if (latestSelectedTask && latestSelectedTask !== selectedTask) {
+      setSelectedTask(latestSelectedTask);
+    }
+  }, [tasks, selectedTask?.id]);
 
   useEffect(() => {
     if (!isClinicalUser || !selectedTask || canCurrentUserSeeTask(selectedTask)) {
@@ -987,7 +1006,7 @@ export default function App() {
       const filtered = tasks.filter(t => t.id !== id);
       setTasks(filtered);
       if (selectedTask?.id === id) {
-        setSelectedTask(filtered[0] || null);
+        setSelectedTask(filtered.find(canCurrentUserSeeTask) || null);
       }
     }
   };
