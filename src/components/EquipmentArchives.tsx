@@ -7,10 +7,10 @@ import {
   HelpCircle, CheckSquare, Layers, Copy, Printer, User, BarChart2, LayoutGrid, Table, Filter, ArrowUpDown
 } from 'lucide-react';
 import { MedicalEquipment, MaintenanceLog, CalibrationLog, Attachment, UserProfile, StructuredTicket } from '../types';
-import { DEFAULT_EQUIPMENT } from '../data/defaultEquipment';
 import { SIMULATED_USERS } from '../data/appPresets';
 import { analyzeGeminiContent, chatWithGeminiExpert } from '../services/aiApi';
 import { isSameDepartment } from '../utils/departmentUtils';
+import { EQUIPMENT_STORAGE_KEY, parseStoredEquipmentList } from '../utils/equipmentStorage';
 import MaintenanceCalendar from './MaintenanceCalendar';
 import BudgetStackedChart from './BudgetStackedChart';
 
@@ -462,28 +462,14 @@ export default function EquipmentArchives({
   }, [currentUser.id]);
 
   // 1. Data States
-  const [equipments, setEquipments] = useState<MedicalEquipment[]>(() => {
-    const saved = localStorage.getItem('medical_equipment_data');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error('Error parsing equipment from localStorage', e);
-      }
-    }
-    return DEFAULT_EQUIPMENT;
-  });
+  const [equipments, setEquipments] = useState<MedicalEquipment[]>(() => (
+    parseStoredEquipmentList(localStorage.getItem(EQUIPMENT_STORAGE_KEY)).equipments
+  ));
 
   // Selected Equipment Focus state
   const [selectedId, setSelectedId] = useState<string>(() => {
-    const saved = localStorage.getItem('medical_equipment_data');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.length > 0) return parsed[0].id;
-      } catch (e) {}
-    }
-    return DEFAULT_EQUIPMENT[0].id;
+    const { equipments: storedEquipments } = parseStoredEquipmentList(localStorage.getItem(EQUIPMENT_STORAGE_KEY));
+    return storedEquipments[0]?.id || '';
   });
 
   // Filter States
@@ -752,7 +738,7 @@ export default function EquipmentArchives({
 
   // Save to local storage whenever equipment state changes
   useEffect(() => {
-    localStorage.setItem('medical_equipment_data', JSON.stringify(equipments));
+    localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(equipments));
   }, [equipments]);
 
   // Listen to deep linking events to select equipment
@@ -1549,7 +1535,7 @@ Clinical class: Life-saving respiratory device`;
     });
 
     setEquipments(updatedEquipments);
-    localStorage.setItem('medical_equipment_data', JSON.stringify(updatedEquipments));
+    localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(updatedEquipments));
 
     onQuickRepairCreated?.({
       equipment: targetEq,

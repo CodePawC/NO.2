@@ -47,13 +47,13 @@ import {
 } from 'lucide-react';
 import { StructuredTicket, ChatMessage, TaskType, UrgencyLevel, ClinicalImpact, TaskStatus, LLMConfig, MedicalEquipment } from './types';
 import { INITIAL_TASKS } from './data/defaultTasks';
-import { DEFAULT_EQUIPMENT } from './data/defaultEquipment';
 import { MOCK_VOICE_TEMPLATES, PRESET_PROMPTS, SIMULATED_USERS } from './data/appPresets';
 import { useAiSettings } from './hooks/useAiSettings';
 import { useSpeechRecognition } from './hooks/useSpeechRecognition';
 import { sendAssistantChat } from './services/aiApi';
 import { isSameDepartment, normalizeDepartmentName } from './utils/departmentUtils';
 import { syncTasksToEquipmentArchives } from './utils/equipmentSync';
+import { EQUIPMENT_STORAGE_KEY, parseStoredEquipmentList } from './utils/equipmentStorage';
 import { getDepartmentTasks, sortTasksByOperationalPriority } from './utils/taskOrdering';
 import { getClinicalAcceptanceBlockReason, getEngineerNextStatus, getEngineerStatusBlockReason, getEngineerWorkflowHint, getRecommendedRoutingForTask } from './utils/taskWorkflow';
 import TaskStats from './components/TaskStats';
@@ -116,22 +116,15 @@ export default function App() {
   const [currentWorkspace, setCurrentWorkspace] = useState<'tasks' | 'archives'>('tasks');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  const [allEquipments, setAllEquipments] = useState<MedicalEquipment[]>(() => {
-    const saved = localStorage.getItem('medical_equipment_data');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
-    }
-    return DEFAULT_EQUIPMENT;
-  });
+  const [allEquipments, setAllEquipments] = useState<MedicalEquipment[]>(() => (
+    parseStoredEquipmentList(localStorage.getItem(EQUIPMENT_STORAGE_KEY)).equipments
+  ));
 
   useEffect(() => {
-    const saved = localStorage.getItem('medical_equipment_data');
-    if (saved) {
-      try {
-        setAllEquipments(JSON.parse(saved));
-      } catch (e) {}
-    } else {
-      setAllEquipments(DEFAULT_EQUIPMENT);
+    const { equipments, shouldPersist } = parseStoredEquipmentList(localStorage.getItem(EQUIPMENT_STORAGE_KEY));
+    setAllEquipments(equipments);
+    if (shouldPersist) {
+      localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(equipments));
     }
   }, [currentWorkspace]);
 
@@ -466,12 +459,11 @@ export default function App() {
 
     // Automatically sync latest tasks status to equipment archives
     try {
-      const savedEquips = localStorage.getItem('medical_equipment_data');
-      const equipmentSource = savedEquips ? JSON.parse(savedEquips) : DEFAULT_EQUIPMENT;
+      const { equipments: equipmentSource, shouldPersist } = parseStoredEquipmentList(localStorage.getItem(EQUIPMENT_STORAGE_KEY));
       const { equipments: equipmentsList, changed } = syncTasksToEquipmentArchives(tasks, equipmentSource);
 
-      if (changed || !savedEquips) {
-        localStorage.setItem('medical_equipment_data', JSON.stringify(equipmentsList));
+      if (changed || shouldPersist) {
+        localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(equipmentsList));
         setAllEquipments(equipmentsList);
       }
     } catch (err) {
