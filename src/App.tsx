@@ -74,6 +74,25 @@ const createNextTaskId = (existingTasks: StructuredTicket[]) => {
   return `TKT-${datePart}${String(maxSequence + 1).padStart(2, '0')}`;
 };
 
+const getTaskAcceptanceDisplay = (task: StructuredTicket) => {
+  if (task.clinicalAcceptance) {
+    return task.clinicalAcceptance;
+  }
+
+  const legacyNote = task.notes?.includes('[科室验收意见]')
+    ? task.notes.split('[科室验收意见]')[1].trim()
+    : '';
+  const legacyRating = Number(legacyNote.match(/^(\d+)星：/)?.[1]);
+
+  return {
+    rating: Number.isFinite(legacyRating) && legacyRating >= 1 && legacyRating <= 5 ? legacyRating : 5,
+    comment: legacyNote ? legacyNote.replace(/^\d+星：/, '') : '设备试运行良好，已正常投用',
+    acceptedBy: task.contactPerson || '临床科室',
+    acceptedByTitle: '科室验收人',
+    acceptedAt: task.updatedAt
+  };
+};
+
 export default function App() {
   const [tasks, setTasks] = useState<StructuredTicket[]>(() => {
     const saved = localStorage.getItem('hospital_tasks');
@@ -463,7 +482,7 @@ export default function App() {
                   status: '已完成',
                   workOrderNo: ticket.id,
                   faultPhenomenon: ticket.faultPhenomenon,
-                  verifyPerson: ticket.contactPerson || '科室管理员'
+                  verifyPerson: ticket.clinicalAcceptance?.acceptedBy || ticket.contactPerson || '科室管理员'
                 };
                 equip.maintenanceLogs = [newMaintLog, ...(equip.maintenanceLogs || [])];
                 
@@ -879,12 +898,20 @@ export default function App() {
       action: logMessage,
       operator: `${currentSimulatedUser.name} (${currentSimulatedUser.title})`
     };
+    const acceptedAt = new Date().toISOString();
 
     const updatedTask: StructuredTicket = {
       ...targetTask,
       status: '已完成',
       logs: [...targetTask.logs, newLog],
-      updatedAt: new Date().toISOString(),
+      updatedAt: acceptedAt,
+      clinicalAcceptance: {
+        rating: ratingValue,
+        comment: ratingComment.trim() || '设备使用一切正常',
+        acceptedBy: currentSimulatedUser.name,
+        acceptedByTitle: currentSimulatedUser.title,
+        acceptedAt
+      },
       notes: targetTask.notes 
         ? `${targetTask.notes}\n[科室验收意见] ${ratingValue}星：${ratingComment.trim() || '设备使用一切正常'}`
         : `[科室验收意见] ${ratingValue}星：${ratingComment.trim() || '设备使用一切正常'}`
@@ -2376,25 +2403,32 @@ export default function App() {
                       </div>
                     )}
 
-                    {selectedTask.status === '已完成' && (
-                      <div className="bg-emerald-50/40 p-4 rounded-xl border border-emerald-100 flex items-start gap-3">
-                        <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-                        <div>
-                          <h4 className="text-xs font-bold text-slate-800">已闭环验收</h4>
-                          <div className="flex items-center gap-1.5 mt-1">
-                            <span className="text-[11px] text-slate-500">临床满意度评分:</span>
-                            <div className="flex items-center">
-                              {[1, 2, 3, 4, 5].map((star) => (
-                                <Star key={star} className={`w-3.5 h-3.5 ${star <= ratingValue ? 'text-amber-400 fill-amber-400' : 'text-slate-200'}`} />
-                              ))}
+                    {selectedTask.status === '已完成' && (() => {
+                      const acceptance = getTaskAcceptanceDisplay(selectedTask);
+
+                      return (
+                        <div className="bg-emerald-50/40 p-4 rounded-xl border border-emerald-100 flex items-start gap-3">
+                          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                          <div>
+                            <h4 className="text-xs font-bold text-slate-800">已闭环验收</h4>
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <span className="text-[11px] text-slate-500">临床满意度评分:</span>
+                              <div className="flex items-center">
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                  <Star key={star} className={`w-3.5 h-3.5 ${star <= acceptance.rating ? 'text-amber-400 fill-amber-400' : 'text-slate-200'}`} />
+                                ))}
+                              </div>
+                              <span className="text-[10px] text-slate-400">
+                                {acceptance.acceptedBy} · {new Date(acceptance.acceptedAt).toLocaleDateString('zh-CN')}
+                              </span>
                             </div>
+                            <p className="text-[11px] text-slate-600 mt-1.5">
+                              “ {acceptance.comment} ”
+                            </p>
                           </div>
-                          <p className="text-[11px] text-slate-600 mt-1.5">
-                            “ {selectedTask.notes?.includes('[科室验收意见]') ? selectedTask.notes.split('[科室验收意见]')[1].trim().replace(/^\d+星：/, '') : '设备试运行良好，已正常投用'} ”
-                          </p>
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {/* Operational Logs History for transparency */}
                     <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs flex-1 flex flex-col min-h-0">
