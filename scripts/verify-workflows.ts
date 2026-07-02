@@ -489,6 +489,15 @@ const checks: Check[] = [
           archiveSource.includes('overflow-x-auto max-w-full'),
         '资产档案页头部搜索区不能覆盖视图切换按钮，维保日历/看板入口必须可点击'
       );
+      assert(
+        archiveSource.includes('setIsFormModalOpen(false);') &&
+          archiveSource.includes('setIsAiParserOpen(false);') &&
+          archiveSource.includes('setIsLogModalOpen(false);') &&
+          archiveSource.includes('setIsAttachmentModalOpen(false);') &&
+          archiveSource.includes("setFormMode('create');") &&
+          archiveSource.includes('setCurrentEditId(null);'),
+        '切换到临床档案视图时应清理工程师档案管理弹窗和编辑态'
+      );
     }
   },
   {

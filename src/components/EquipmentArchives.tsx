@@ -626,9 +626,12 @@ export default function EquipmentArchives({
 
   useEffect(() => {
     if (canManageEquipmentArchive) return;
+    setIsFormModalOpen(false);
     setIsAiParserOpen(false);
     setIsLogModalOpen(false);
     setIsAttachmentModalOpen(false);
+    setFormMode('create');
+    setCurrentEditId(null);
   }, [canManageEquipmentArchive]);
 
   const visibleEquipments = equipments.filter(canCurrentUserViewEquipment);
