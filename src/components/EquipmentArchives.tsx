@@ -7,6 +7,8 @@ import {
   HelpCircle, CheckSquare, Layers, Copy, Printer, User, BarChart2, LayoutGrid, Table, Filter, ArrowUpDown
 } from 'lucide-react';
 import { MedicalEquipment, MaintenanceLog, CalibrationLog, Attachment, UserProfile } from '../types';
+import { SIMULATED_USERS } from '../data/appPresets';
+import { analyzeGeminiContent, chatWithGeminiExpert } from '../services/aiApi';
 import MaintenanceCalendar from './MaintenanceCalendar';
 import BudgetStackedChart from './BudgetStackedChart';
 
@@ -361,109 +363,6 @@ export const generatePreviewData = (equipment: MedicalEquipment, file: Attachmen
     };
   }
 };
-
-export const SIMULATED_USERS: UserProfile[] = [
-  {
-    id: 'ENG-5021',
-    name: '张明华',
-    title: '装备科主任工程师',
-    dept: '医学装备科',
-    role: 'engineer',
-    avatarText: '张',
-    avatarColor: 'bg-indigo-600',
-    phone: '内线 8001'
-  },
-  {
-    id: 'ENG-5022',
-    name: '李建国',
-    title: '资深生物医学工程师',
-    dept: '医学装备科',
-    role: 'engineer',
-    avatarText: '李',
-    avatarColor: 'bg-blue-600',
-    phone: '内线 8002'
-  },
-  {
-    id: 'ENG-5023',
-    name: '赵安平',
-    title: '临床安全工程师',
-    dept: '医学装备科',
-    role: 'engineer',
-    avatarText: '赵',
-    avatarColor: 'bg-teal-600',
-    phone: '内线 8003'
-  },
-  {
-    id: 'NU-0822',
-    name: '王静',
-    title: '急诊科主管护师',
-    dept: '急诊科',
-    role: 'medical_staff',
-    avatarText: '王',
-    avatarColor: 'bg-emerald-600',
-    phone: '内线 8120'
-  },
-  {
-    id: 'DR-3011',
-    name: '赵晓东',
-    title: '呼吸内科主治医生',
-    dept: '呼吸内科',
-    role: 'medical_staff',
-    avatarText: '赵',
-    avatarColor: 'bg-sky-600',
-    phone: '分机 5610'
-  },
-  {
-    id: 'NU-1402',
-    name: '陈美兰',
-    title: '手术室护士长',
-    dept: '手术室',
-    role: 'medical_staff',
-    avatarText: '陈',
-    avatarColor: 'bg-amber-600',
-    phone: '内线 6102'
-  },
-  {
-    id: 'NU-8801',
-    name: '张丽',
-    title: '重症医学科 (ICU) 护士长',
-    dept: '重症医学科 (ICU)',
-    role: 'medical_staff',
-    avatarText: '丽',
-    avatarColor: 'bg-rose-600',
-    phone: '内线 8812'
-  },
-  {
-    id: 'DR-9902',
-    name: '王健',
-    title: '放射科主管医生',
-    dept: '放射科',
-    role: 'medical_staff',
-    avatarText: '健',
-    avatarColor: 'bg-teal-600',
-    phone: '内线 8902'
-  },
-  {
-    id: 'DR-9903',
-    name: '刘洋',
-    title: '超声诊断中心医生',
-    dept: '超声科',
-    role: 'medical_staff',
-    avatarText: '洋',
-    avatarColor: 'bg-violet-600',
-    phone: '分机 3302'
-  },
-  {
-    id: 'DR-9905',
-    name: '赵凯',
-    title: '检验科技术主管',
-    dept: '检验科',
-    role: 'medical_staff',
-    avatarText: '凯',
-    avatarColor: 'bg-pink-600',
-    phone: '分机 4405'
-  }
-];
 
 // Preset default equipment data to seed localStorage
 const DEFAULT_EQUIPMENT: MedicalEquipment[] = [
@@ -1430,15 +1329,7 @@ Clinical class: Life-saving respiratory device`;
     }
 
     // Call the server Gemini analyze endpoint
-    fetch('/api/gemini/analyze', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ textContext: sampleText })
-    })
-      .then(res => {
-        if (!res.ok) throw new Error('AI 服务请求失败');
-        return res.json();
-      })
+    analyzeGeminiContent({ textContext: sampleText })
       .then(result => {
         setIsAnalyzing(false);
         if (result.error) {
@@ -1479,15 +1370,7 @@ Clinical class: Life-saving respiratory device`;
     setIsAnalyzing(true);
     setAnalyzerError(null);
 
-    fetch('/api/gemini/analyze', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ textContext: aiInputText })
-    })
-      .then(res => {
-        if (!res.ok) throw new Error('AI 服务处理异常');
-        return res.json();
-      })
+    analyzeGeminiContent({ textContext: aiInputText }, 'AI 服务处理异常')
       .then(result => {
         setIsAnalyzing(false);
         if (result.error) {
@@ -1534,18 +1417,10 @@ Clinical class: Life-saving respiratory device`;
       parts: [{ text: m.text }]
     }));
 
-    fetch('/api/gemini/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        deviceContext: selectedEquipment,
-        messageHistory: formattedHistory
-      })
+    chatWithGeminiExpert({
+      deviceContext: selectedEquipment,
+      messageHistory: formattedHistory
     })
-      .then(res => {
-        if (!res.ok) throw new Error('AI 智脑服务连接中断');
-        return res.json();
-      })
       .then(result => {
         setIsChatSending(false);
         if (result.text) {
@@ -1578,19 +1453,11 @@ Clinical class: Life-saving respiratory device`;
       const data = parts[1];
 
       // Call API
-      fetch('/api/gemini/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          imageBase64: data,
-          mimeType: mimeType,
-          textContext: `This is an uploaded file name: ${file.name}`
-        })
+      analyzeGeminiContent({
+        imageBase64: data,
+        mimeType: mimeType,
+        textContext: `This is an uploaded file name: ${file.name}`
       })
-        .then(res => {
-          if (!res.ok) throw new Error('AI 服务请求失败');
-          return res.json();
-        })
         .then(result => {
           setIsAnalyzing(false);
           if (result.error) {
