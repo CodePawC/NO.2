@@ -1,7 +1,7 @@
 import { addLocalDays, getDateDiffDaysFromToday, getLocalDateString, getLocalDateTimeString } from '../src/utils/dateUtils.ts';
 import { isSameDepartment } from '../src/utils/departmentUtils.ts';
 import { parseStoredEquipmentList } from '../src/utils/equipmentStorage.ts';
-import { syncTasksToEquipmentArchives } from '../src/utils/equipmentSync.ts';
+import { findUniqueEquipmentMatchForDraft, syncTasksToEquipmentArchives } from '../src/utils/equipmentSync.ts';
 import { getDepartmentTasks } from '../src/utils/taskOrdering.ts';
 import { getPresetPromptsForUser, PRESET_PROMPTS } from '../src/data/appPresets.ts';
 import {
@@ -280,6 +280,39 @@ const checks: Check[] = [
   {
     name: 'equipment archive sync updates real equipment work orders only',
     run: () => {
+      const matchedRespiratoryEquipment = findUniqueEquipmentMatchForDraft(
+        [
+          createEquipment({ id: 'eq-resp', deviceName: '无创呼吸机', dept: '呼吸内科' }),
+          createEquipment({ id: 'eq-rad', deviceName: 'DR机房转运监护仪', dept: '放射科' })
+        ],
+        { department: '呼吸内科', deviceName: '呼吸机' }
+      );
+      assertEqual(matchedRespiratoryEquipment?.id, 'eq-resp', '临床草稿应能唯一匹配本科室在册设备');
+
+      const brandedRespiratoryEquipment = findUniqueEquipmentMatchForDraft(
+        [
+          createEquipment({ id: 'eq-resp', deviceName: '无创呼吸机', dept: '呼吸内科' }),
+          createEquipment({ id: 'eq-rad', deviceName: 'DR机房转运监护仪', dept: '放射科' })
+        ],
+        { department: '呼吸内科', deviceName: '德尔格呼吸机' }
+      );
+      assertEqual(brandedRespiratoryEquipment?.id, 'eq-resp', '临床草稿包含品牌名时仍应匹配本科室同类在册设备');
+
+      const noCrossDepartmentMatch = findUniqueEquipmentMatchForDraft(
+        [createEquipment({ id: 'eq-icu', deviceName: '多参数监护仪', dept: '重症医学科 (ICU)' })],
+        { department: '急诊科', deviceName: '监护仪' }
+      );
+      assertEqual(noCrossDepartmentMatch, null, '临床草稿不能自动匹配外科室设备');
+
+      const ambiguousRespiratoryEquipment = findUniqueEquipmentMatchForDraft(
+        [
+          createEquipment({ id: 'eq-resp-1', deviceName: '无创呼吸机', dept: '呼吸内科' }),
+          createEquipment({ id: 'eq-resp-2', deviceName: '转运呼吸机', dept: '呼吸内科' })
+        ],
+        { department: '呼吸内科', deviceName: '呼吸机' }
+      );
+      assertEqual(ambiguousRespiratoryEquipment, null, '同科室多台同类设备时不能自动关联，需人工选择');
+
       const activeTask = createTask({
         id: 'TKT-ACTIVE',
         status: '处理中',

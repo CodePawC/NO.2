@@ -53,7 +53,7 @@ import { useSpeechRecognition } from './hooks/useSpeechRecognition';
 import { sendAssistantChat } from './services/aiApi';
 import { getDateDiffDaysFromToday } from './utils/dateUtils';
 import { isSameDepartment, normalizeDepartmentName } from './utils/departmentUtils';
-import { syncTasksToEquipmentArchives } from './utils/equipmentSync';
+import { findUniqueEquipmentMatchForDraft, syncTasksToEquipmentArchives } from './utils/equipmentSync';
 import { EQUIPMENT_STORAGE_KEY, parseStoredEquipmentList } from './utils/equipmentStorage';
 import { getDepartmentTasks, sortTasksByOperationalPriority } from './utils/taskOrdering';
 import { getClinicalAcceptanceBlockReason, getEngineerNextStatus, getEngineerStatusBlockReason, getEngineerWorkflowHint, getRecommendedRoutingForTask, needsClinicalAcceptance } from './utils/taskWorkflow';
@@ -781,9 +781,20 @@ export default function App() {
     
     const currentDept = normalizeDepartmentName(currentSimulatedUser.department || currentSimulatedUser.dept);
     const draftDept = normalizeDepartmentName(draftTicket.department) || draftTicket.department;
-    const linkedEquipment = allEquipments.find(eq => eq.id === draftTicket.deviceId || eq.sn === draftTicket.deviceId);
-    const canUseLinkedEquipment = !linkedEquipment || canCurrentUserUseEquipment(linkedEquipment);
     const routing = getRecommendedRoutingForTask(draftTicket.taskType as TaskType, `${draftTicket.faultPhenomenon || ''} ${draftTicket.deviceName || ''} ${draftTicket.notes || ''}`);
+    const autoMatchedEquipment = currentUserRole === 'medical_staff' && needsClinicalAcceptance(draftTicket as StructuredTicket)
+      ? findUniqueEquipmentMatchForDraft(visibleEquipments, {
+          department: currentDept || draftDept,
+          deviceName: draftTicket.deviceName
+        })
+      : null;
+    const selectedEquipment = allEquipments.find(eq => eq.id === draftTicket.deviceId || eq.sn === draftTicket.deviceId);
+    const linkedEquipment = selectedEquipment || autoMatchedEquipment;
+    const canUseLinkedEquipment = !linkedEquipment || canCurrentUserUseEquipment(linkedEquipment);
+    const shouldUseAutoMatchedEquipment = !selectedEquipment && !!autoMatchedEquipment && canUseLinkedEquipment;
+    const effectiveDeviceId = canUseLinkedEquipment
+      ? (selectedEquipment?.id || autoMatchedEquipment?.id || draftTicket.deviceId || 'EQ-TEMP-' + Math.floor(Math.random() * 9000 + 1000))
+      : 'EQ-TEMP-' + Math.floor(Math.random() * 9000 + 1000);
     const effectiveRecommendedDept = forwardDept || draftTicket.recommendedDept || routing.recommendedDept;
     const effectiveNeedVendorCoop = routing.needVendorCoop === '是' ? '是' : (draftTicket.needVendorCoop || '否');
     const routingNote = routing.routingNote && !draftTicket.notes?.includes(routing.routingNote) ? routing.routingNote : '';
@@ -817,9 +828,9 @@ export default function App() {
       taskType: (draftTicket.taskType as TaskType) || '设备报修',
       source: finalSource,
       department: finalDepartment,
-      location: defaultLoc,
+      location: linkedEquipment && canUseLinkedEquipment ? `${linkedEquipment.dept}设备点位` : defaultLoc,
       deviceName: canUseLinkedEquipment ? (draftTicket.deviceName || '未录入设备名称') : '未录入设备名称',
-      deviceId: canUseLinkedEquipment ? (draftTicket.deviceId || 'EQ-TEMP-' + Math.floor(Math.random() * 9000 + 1000)) : 'EQ-TEMP-' + Math.floor(Math.random() * 9000 + 1000),
+      deviceId: effectiveDeviceId,
       faultPhenomenon: draftTicket.faultPhenomenon || '暂未提供具体描述',
       contactPerson: finalContactPerson,
       contactPhone: finalContactPhone,
@@ -845,6 +856,7 @@ export default function App() {
         draftTicket.notes,
         routingNote,
         effectiveRecommendedDept && effectiveRecommendedDept !== '医学装备科' ? `系统判断此单归属部门为 [${effectiveRecommendedDept}]。` : '',
+        shouldUseAutoMatchedEquipment ? `系统已按当前科室与设备名称自动关联在册资产 [${autoMatchedEquipment.id}]。` : '',
         !canUseLinkedEquipment && linkedEquipment ? `临床账号尝试关联外科室资产 [${linkedEquipment.id}]，系统已移除该资产绑定并按本科室工单提交。` : ''
       ].filter(Boolean).join('\n')
     };

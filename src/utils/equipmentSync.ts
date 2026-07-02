@@ -1,4 +1,5 @@
 import { MaintenanceLog, MedicalEquipment, StructuredTicket, TaskStatus } from '../types';
+import { isSameDepartment } from './departmentUtils';
 import { canEngineerCloseTransferredTask } from './taskWorkflow';
 
 const ACTIVE_TASK_STATUSES: TaskStatus[] = ['待确认', '待派工', '已派工', '处理中', '待科室验收'];
@@ -24,6 +25,65 @@ const isSameOrLaterDateString = (nextDate: string, currentDate?: string) => {
 
 const isTaskForEquipment = (task: StructuredTicket, equipment: MedicalEquipment) => {
   return equipment.id === task.deviceId || equipment.sn === task.deviceId;
+};
+
+const normalizeEquipmentText = (value = '') => value
+  .toLowerCase()
+  .replace(/[（）()【】\[\]\s,，.。-]/g, '');
+
+const EQUIPMENT_KEYWORDS = [
+  '呼吸机',
+  '监护仪',
+  '除颤仪',
+  '麻醉机',
+  '输液泵',
+  '注射泵',
+  '血气分析仪',
+  '生化分析仪',
+  '分析仪',
+  '超声',
+  'dr',
+  'mri',
+  '磁共振',
+  '胃镜'
+].map(normalizeEquipmentText);
+
+const getEquipmentKeywords = (value = '') => {
+  const normalizedValue = normalizeEquipmentText(value);
+  return EQUIPMENT_KEYWORDS.filter(keyword => normalizedValue.includes(keyword));
+};
+
+export const findUniqueEquipmentMatchForDraft = (
+  equipmentArchives: MedicalEquipment[],
+  draft: Pick<StructuredTicket, 'department' | 'deviceName'> | Partial<StructuredTicket>
+) => {
+  const draftDeviceName = normalizeEquipmentText(draft.deviceName || '');
+  const draftDepartment = draft.department || '';
+  const draftKeywords = getEquipmentKeywords(draft.deviceName || '');
+
+  if (!draftDeviceName || !draftDepartment) {
+    return null;
+  }
+
+  const matches = equipmentArchives.filter(equipment => {
+    if (!isSameDepartment(equipment.dept, draftDepartment)) {
+      return false;
+    }
+
+    const equipmentName = normalizeEquipmentText(equipment.deviceName);
+    const manufacturer = normalizeEquipmentText(equipment.manufacturer);
+    const model = normalizeEquipmentText(equipment.model);
+    const combined = `${manufacturer}${equipmentName}${model}`;
+    const equipmentKeywords = getEquipmentKeywords(`${equipment.deviceName} ${equipment.manufacturer} ${equipment.model}`);
+    const hasSharedKeyword = draftKeywords.some(keyword => equipmentKeywords.includes(keyword));
+
+    return equipmentName.includes(draftDeviceName) ||
+      draftDeviceName.includes(equipmentName) ||
+      combined.includes(draftDeviceName) ||
+      hasSharedKeyword;
+  });
+
+  return matches.length === 1 ? matches[0] : null;
 };
 
 const shouldSyncTaskToEquipmentArchive = (task: StructuredTicket, equipment: MedicalEquipment) => {
