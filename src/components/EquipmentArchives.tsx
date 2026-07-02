@@ -745,9 +745,14 @@ export default function EquipmentArchives({
   const [isScannerModalOpen, setIsScannerModalOpen] = useState(false);
   const [scannedSnResult, setScannedSnResult] = useState('');
   const [scannerCameraError, setScannerCameraError] = useState<string | null>(null);
+  const [scannerMatchError, setScannerMatchError] = useState<string | null>(null);
   const [isScannerCameraActive, setIsScannerCameraActive] = useState(false);
   const scannerVideoRef = useRef<HTMLVideoElement | null>(null);
   const scannerStreamRef = useRef<MediaStream | null>(null);
+
+  const canCurrentUserReportEquipment = (equipment: MedicalEquipment) => {
+    return currentUser.role !== 'medical_staff' || !currentUser.dept || isSameDepartment(equipment.dept, currentUser.dept);
+  };
 
   // 启动系统相机扫描仪
   const startScannerCamera = async () => {
@@ -789,6 +794,7 @@ export default function EquipmentArchives({
   // 相机模态框开关生命周期监听
   useEffect(() => {
     if (isScannerModalOpen) {
+      setScannerMatchError(null);
       startScannerCamera();
     } else {
       stopScannerCamera();
@@ -804,6 +810,7 @@ export default function EquipmentArchives({
   const handleScannedSn = (snCode: string) => {
     const snTrimmed = snCode.trim();
     if (!snTrimmed) return;
+    setScannerMatchError(null);
     
     const matched = equipments.find(eq => 
       eq.sn.trim().toLowerCase() === snTrimmed.toLowerCase() ||
@@ -811,6 +818,11 @@ export default function EquipmentArchives({
     );
 
     if (matched) {
+      if (!canCurrentUserReportEquipment(matched)) {
+        setScannerMatchError(`已识别设备【${matched.deviceName}】，但其归属科室为【${matched.dept}】。当前临床账号只能为【${currentUser.dept}】设备发起扫码报修。`);
+        return;
+      }
+
       setSelectedId(matched.id);
       setQuickRepairEquipId(matched.id);
       setIsScannerModalOpen(false);
@@ -820,7 +832,7 @@ export default function EquipmentArchives({
       setQuickRepairUrgency('high'); // 扫码报修通常用于紧急的床旁或现场报修，默认置高
       setIsQuickRepairModalOpen(true);
     } else {
-      alert(`⚠️ 扫码匹配提示：\n未找到原厂SN序列号为 【${snTrimmed}】 的在册医疗设备档案。\n请核对设备标签或前往手动新增。`);
+      setScannerMatchError(`未找到原厂SN序列号为【${snTrimmed}】的在册医疗设备档案，请核对设备标签或前往手动新增。`);
     }
   };
 
@@ -1567,6 +1579,12 @@ Clinical class: Life-saving respiratory device`;
   };
 
   const handleQuickRepair = () => {
+    if (!canCurrentUserReportEquipment(selectedEquipment)) {
+      setQuickRepairToast(`当前临床账号只能为本科室设备发起报修：${currentUser.dept}`);
+      setTimeout(() => setQuickRepairToast(null), 5000);
+      return;
+    }
+
     if (window.confirm(`确认要将设备 【${selectedEquipment.deviceName}】 的状态更改为“故障维修”并紧急派单至医学装备科吗？`)) {
       const description = '科室通过快速报修渠道紧急申报，描述：设备发生突发性故障，无法正常开机或运行中断。';
       const urgency: 'medium' | 'high' = selectedEquipment.category === '急救生命支持' || selectedEquipment.riskLevel === '高' ? 'high' : 'medium';
@@ -3278,16 +3296,26 @@ Clinical class: Life-saving respiratory device`;
                   </button>
                   <button 
                     onClick={() => setIsScannerModalOpen(true)}
-                    className="px-2.5 py-2 sm:px-4 sm:py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white rounded-lg text-xs font-bold shadow-sm shadow-indigo-100 flex items-center justify-center gap-1.5 transition-all flex-1 sm:flex-initial text-center whitespace-nowrap"
-                    title="调用相机扫描SN码快速填充报修"
+                    disabled={!canCurrentUserReportEquipment(selectedEquipment)}
+                    className={`px-2.5 py-2 sm:px-4 sm:py-2 rounded-lg text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 transition-all flex-1 sm:flex-initial text-center whitespace-nowrap ${
+                      canCurrentUserReportEquipment(selectedEquipment)
+                        ? 'bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white shadow-indigo-100'
+                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    }`}
+                    title={canCurrentUserReportEquipment(selectedEquipment) ? '调用相机扫描SN码快速填充报修' : '当前临床账号只能为本科室设备发起扫码报修'}
                   >
                     <QrCode className="w-4 h-4 flex-shrink-0 animate-pulse" />
                     <span>扫码报修</span>
                   </button>
                   <button 
                     onClick={handleQuickRepair}
-                    className="px-2.5 py-2 sm:px-4 sm:py-2 bg-blue-600 text-white rounded-lg text-xs font-bold shadow-sm shadow-blue-200 hover:bg-blue-700 flex items-center justify-center gap-1.5 transition-all flex-1 sm:flex-initial text-center whitespace-nowrap"
-                    title="立即一键报修"
+                    disabled={!canCurrentUserReportEquipment(selectedEquipment)}
+                    className={`px-2.5 py-2 sm:px-4 sm:py-2 rounded-lg text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 transition-all flex-1 sm:flex-initial text-center whitespace-nowrap ${
+                      canCurrentUserReportEquipment(selectedEquipment)
+                        ? 'bg-blue-600 text-white shadow-blue-200 hover:bg-blue-700'
+                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    }`}
+                    title={canCurrentUserReportEquipment(selectedEquipment) ? '立即一键报修' : '当前临床账号只能为本科室设备发起一键报修'}
                   >
                     <Wrench className="w-4 h-4 flex-shrink-0" />
                     <span>一键报修</span>
@@ -5770,7 +5798,7 @@ Clinical class: Life-saving respiratory device`;
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
-                  {equipments.map(eq => (
+                  {equipments.filter(canCurrentUserReportEquipment).map(eq => (
                     <button
                       key={eq.id}
                       type="button"
@@ -5795,6 +5823,11 @@ Clinical class: Life-saving respiratory device`;
                     </button>
                   ))}
                 </div>
+                {equipments.filter(canCurrentUserReportEquipment).length === 0 && (
+                  <div className="rounded-lg border border-slate-800 bg-slate-950 p-3 text-[10px] text-slate-400">
+                    当前账号暂无可扫码报修的本科室设备。
+                  </div>
+                )}
               </div>
 
               {/* Manual SN entry fallback */}
@@ -5806,7 +5839,10 @@ Clinical class: Life-saving respiratory device`;
                   <input
                     type="text"
                     value={scannedSnResult}
-                    onChange={(e) => setScannedSnResult(e.target.value)}
+                    onChange={(e) => {
+                      setScannedSnResult(e.target.value);
+                      setScannerMatchError(null);
+                    }}
                     placeholder="如：MR-SI-99201A 或直接输入系统自编ID..."
                     className="flex-1 bg-slate-950 text-slate-100 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 outline-none placeholder-slate-600 font-mono font-bold"
                   />
@@ -5818,6 +5854,11 @@ Clinical class: Life-saving respiratory device`;
                     确认定位
                   </button>
                 </div>
+                {scannerMatchError && (
+                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[10px] leading-relaxed text-amber-200">
+                    {scannerMatchError}
+                  </div>
+                )}
               </div>
 
               {/* Advantage Explanation Badge */}
