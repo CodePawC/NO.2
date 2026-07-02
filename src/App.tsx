@@ -1204,6 +1204,24 @@ export default function App() {
 
   // Risk Priority Sorting and Automatic Pinning (Requirement 5)
   const sortedAndFilteredTasks = sortTasksByOperationalPriority(filteredTasks);
+  const sortedAndFilteredTaskIds = sortedAndFilteredTasks.map(task => task.id).join('|');
+
+  useEffect(() => {
+    if (currentUserRole !== 'engineer') return;
+
+    const selectedTaskStillVisible = selectedTask
+      ? sortedAndFilteredTasks.some(task => task.id === selectedTask.id)
+      : false;
+
+    if (selectedTaskStillVisible) return;
+
+    const fallbackTask = sortedAndFilteredTasks[0] || null;
+    setSelectedTask(fallbackTask);
+
+    if (!fallbackTask && mobileTab === 'detail') {
+      setMobileTab('list');
+    }
+  }, [currentUserRole, selectedTask?.id, sortedAndFilteredTaskIds, mobileTab]);
 
   return (
     <div className="h-screen max-h-screen overflow-hidden bg-slate-100 flex flex-col md:flex-row font-sans text-slate-800 antialiased relative" id="root">

@@ -262,6 +262,30 @@ const checks: Check[] = [
     }
   },
   {
+    name: 'engineer filtered task list keeps detail selection in sync',
+    run: () => {
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const filterStart = appSource.indexOf('// Filters calculation');
+      const renderStart = appSource.indexOf('return (', filterStart);
+      assert(filterStart !== -1 && renderStart > filterStart, '应能定位任务筛选与渲染前状态联动逻辑');
+      const filterSource = appSource.slice(filterStart, renderStart);
+
+      assert(
+        filterSource.includes("const sortedAndFilteredTaskIds = sortedAndFilteredTasks.map(task => task.id).join('|');") &&
+          filterSource.includes("if (currentUserRole !== 'engineer') return;") &&
+          filterSource.includes('sortedAndFilteredTasks.some(task => task.id === selectedTask.id)') &&
+          filterSource.includes('const fallbackTask = sortedAndFilteredTasks[0] || null;') &&
+          filterSource.includes('setSelectedTask(fallbackTask);'),
+        '工程师搜索/筛选任务后，右侧详情应自动同步到当前可见结果，避免左侧结果与右侧详情不一致'
+      );
+      assert(
+        filterSource.includes("if (!fallbackTask && mobileTab === 'detail')") &&
+          filterSource.includes("setMobileTab('list');"),
+        '工程师移动端筛选无结果时应退出详情页，避免继续展示已被过滤掉的工单'
+      );
+    }
+  },
+  {
     name: 'transferred non-equipment tasks can be closed without polluting medical repair flow',
     run: () => {
       const transferTask = createTask({
