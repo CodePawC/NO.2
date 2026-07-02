@@ -170,6 +170,59 @@ const checks: Check[] = [
     }
   },
   {
+    name: 'equipment repair closes only after clinical acceptance record is captured',
+    run: () => {
+      const acceptingTask = createTask({
+        id: 'TKT-VERIFY-ACCEPT',
+        status: '待科室验收',
+        department: '急诊科',
+        taskType: '设备报修',
+        deviceName: '监护仪',
+        deviceId: 'eq-verify-001',
+        logs: [
+          { time: '2026-07-03 08:00', action: 'AI 自动受理并建单。', operator: 'AI 智能助手' },
+          { time: '2026-07-03 08:20', action: '人工更改工单状态为【处理中】。', operator: '医学装备科人员' },
+          { time: '2026-07-03 08:40', action: '人工更改工单状态为【待科室验收】。', operator: '医学装备科人员' }
+        ]
+      });
+      const emergencyNurse = createUser({
+        id: 'NU-VERIFY-ER',
+        name: '王静',
+        department: '急诊科',
+        title: '主管护师'
+      });
+      const acceptedAt = '2026-07-03T09:00:00+08:00';
+      const acceptedTask: StructuredTicket = {
+        ...acceptingTask,
+        status: '已完成',
+        updatedAt: acceptedAt,
+        logs: [
+          ...acceptingTask.logs,
+          {
+            time: '2026-07-03 09:00',
+            action: '临床科室进行验收。确认评价：【5星】。评价意见：设备运行正常。',
+            operator: `${emergencyNurse.name} (${emergencyNurse.title})`
+          }
+        ],
+        clinicalAcceptance: {
+          rating: 5,
+          comment: '设备运行正常',
+          acceptedBy: emergencyNurse.name,
+          acceptedByTitle: emergencyNurse.title,
+          acceptedAt
+        }
+      };
+
+      assertEqual(getClinicalAcceptanceBlockReason(acceptingTask, emergencyNurse, 'medical_staff'), '', '本科室临床应能签署待验收设备维修单');
+      assertEqual(acceptedTask.status, '已完成', '临床验收后设备维修单应进入已完成');
+      assertEqual(acceptedTask.clinicalAcceptance?.acceptedBy, '王静', '验收记录应保留签署人');
+      assertEqual(acceptedTask.clinicalAcceptance?.rating, 5, '验收记录应保留满意度评分');
+      assertEqual(getEngineerNextStatus(acceptedTask), '已归档', '临床验收后工程师下一步应归档');
+      assertEqual(getEngineerStatusBlockReason(acceptedTask, '已归档'), '', '已完成设备维修单应允许归档');
+      assertIncludes(getEngineerStatusBlockReason(acceptedTask, '处理中'), '只能进入归档或关闭', '已完成设备维修单不能回退到维修中');
+    }
+  },
+  {
     name: 'transferred non-equipment tasks can be closed without polluting medical repair flow',
     run: () => {
       const transferTask = createTask({
