@@ -455,6 +455,26 @@ const checks: Check[] = [
     }
   },
   {
+    name: 'mobile task stats follows current role scope',
+    run: () => {
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const mobileStatsStart = appSource.indexOf('<div className="xl:hidden pb-1">');
+      const mobileStatsEnd = appSource.indexOf('</div>', mobileStatsStart);
+      assert(mobileStatsStart !== -1 && mobileStatsEnd > mobileStatsStart, '应能定位移动端任务统计看板');
+      const mobileStatsSource = appSource.slice(mobileStatsStart, mobileStatsEnd);
+
+      assert(
+        mobileStatsSource.includes('userRole={currentUserRole}') &&
+          mobileStatsSource.includes('simulatedUser={currentSimulatedUser}'),
+        '移动端任务统计看板应按当前角色/科室统计，临床端不能显示全院任务统计'
+      );
+      assert(
+        !mobileStatsSource.includes('<TaskStats tasks={tasks} />'),
+        '移动端任务统计看板不能省略角色参数，否则会回退到工程师全院口径'
+      );
+    }
+  },
+  {
     name: 'default data includes a clinical acceptance demo task',
     run: () => {
       const respiratoryDoctor = createUser({

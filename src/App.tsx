@@ -2014,7 +2014,11 @@ export default function App() {
           {/* Scrollable Task List Cards */}
           <div className="flex-1 overflow-y-auto bg-slate-50/50 p-3 space-y-3">
             <div className="xl:hidden pb-1">
-              <TaskStats tasks={tasks} />
+              <TaskStats
+                tasks={tasks}
+                userRole={currentUserRole}
+                simulatedUser={currentSimulatedUser}
+              />
             </div>
 
             {sortedAndFilteredTasks.length === 0 ? (
