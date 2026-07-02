@@ -48,6 +48,7 @@ import { StructuredTicket, ChatMessage, TaskType, UrgencyLevel, ClinicalImpact, 
 import { INITIAL_TASKS } from './data/defaultTasks';
 import { MOCK_VOICE_TEMPLATES, PRESET_PROMPTS, SIMULATED_USERS } from './data/appPresets';
 import { useAiSettings } from './hooks/useAiSettings';
+import { useSpeechRecognition } from './hooks/useSpeechRecognition';
 import { sendAssistantChat } from './services/aiApi';
 import TaskStats from './components/TaskStats';
 import EquipmentArchives from './components/EquipmentArchives';
@@ -212,12 +213,14 @@ export default function App() {
     resetProviderConfigs
   } = useAiSettings();
 
-  // Voice Repair Recognition States
-  const [isListening, setIsListening] = useState(false);
-  const [recognitionError, setRecognitionError] = useState<string | null>(null);
-  const [speechSupported, setSpeechSupported] = useState(true);
-  const [showVoiceMockModal, setShowVoiceMockModal] = useState(false);
-  const recognitionRef = useRef<any>(null);
+  const {
+    isListening,
+    recognitionError,
+    speechSupported,
+    showVoiceMockModal,
+    setShowVoiceMockModal,
+    toggleListening
+  } = useSpeechRecognition({ setInputMessage });
 
   // Voice Simulation States
   const [selectedMockScript, setSelectedMockScript] = useState(0);
@@ -251,98 +254,6 @@ export default function App() {
       }
     };
   }, []);
-
-  // Initialize Speech Recognition
-  useEffect(() => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setSpeechSupported(false);
-      return;
-    }
-
-    try {
-      const rec = new SpeechRecognition();
-      rec.continuous = true;
-      rec.interimResults = true;
-      rec.lang = 'zh-CN';
-
-      rec.onstart = () => {
-        setIsListening(true);
-        setRecognitionError(null);
-      };
-
-      rec.onresult = (event: any) => {
-        let interimTranscript = '';
-        let finalTranscript = '';
-
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
-          } else {
-            interimTranscript += event.results[i][0].transcript;
-          }
-        }
-
-        const currentText = finalTranscript || interimTranscript;
-        if (currentText) {
-          setInputMessage(currentText);
-        }
-      };
-
-      rec.onerror = (event: any) => {
-        console.warn('Speech recognition warning/error:', event);
-        if (event.error === 'not-allowed') {
-          setRecognitionError('麦克风权限被拒绝，请在浏览器或手机上授予麦克风权限。');
-        } else if (event.error === 'no-speech') {
-          // ignore silent warning
-        } else {
-          setRecognitionError(`识别错误: ${event.error}`);
-        }
-        setIsListening(false);
-      };
-
-      rec.onend = () => {
-        setIsListening(false);
-      };
-
-      recognitionRef.current = rec;
-    } catch (e) {
-      console.error('Failed to init speech recognition:', e);
-      setSpeechSupported(false);
-    }
-
-    return () => {
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.abort();
-        } catch (err) {}
-      }
-    };
-  }, []);
-
-  const toggleListening = () => {
-    if (!speechSupported) {
-      setShowVoiceMockModal(true);
-      return;
-    }
-
-    if (isListening) {
-      try {
-        recognitionRef.current?.stop();
-      } catch (e) {}
-      setIsListening(false);
-    } else {
-      setInputMessage('');
-      setRecognitionError(null);
-      try {
-        recognitionRef.current?.start();
-      } catch (e: any) {
-        console.error('Start recognition error:', e);
-        setRecognitionError('启动语音硬件失败。已自动切换为仿真智能语音输入。');
-        setShowVoiceMockModal(true);
-      }
-    }
-  };
 
   // Status modify form inside task detail
   const [activeLogAction, setActiveLogAction] = useState('');
