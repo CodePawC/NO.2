@@ -51,6 +51,7 @@ import { useAiSettings } from './hooks/useAiSettings';
 import { useSpeechRecognition } from './hooks/useSpeechRecognition';
 import { sendAssistantChat } from './services/aiApi';
 import { isSameDepartment, normalizeDepartmentName } from './utils/departmentUtils';
+import { syncTasksToEquipmentArchives } from './utils/equipmentSync';
 import { getClinicalAcceptanceBlockReason, getEngineerStatusBlockReason, getRecommendedRoutingForTask } from './utils/taskWorkflow';
 import TaskStats from './components/TaskStats';
 import EquipmentArchives from './components/EquipmentArchives';
@@ -442,63 +443,7 @@ export default function App() {
     try {
       const savedEquips = localStorage.getItem('medical_equipment_data');
       if (savedEquips) {
-        let equipmentsList = JSON.parse(savedEquips);
-        let changed = false;
-        
-        tasks.forEach(ticket => {
-          let matchedIndex = equipmentsList.findIndex((eq: any) => eq.id === ticket.deviceId || eq.sn === ticket.deviceId);
-          if (matchedIndex !== -1) {
-            const equip = equipmentsList[matchedIndex];
-            
-            // Sync status
-            const activeStatus = ['待确认', '待派工', '已派工', '处理中', '待科室验收'];
-            const completedStatus = ['已完成', '已归档', '已关闭'];
-            
-            let targetStatus = equip.status;
-            if (activeStatus.includes(ticket.status)) {
-              targetStatus = '故障维修';
-            } else if (completedStatus.includes(ticket.status) && equip.status === '故障维修') {
-              // Return to normal
-              targetStatus = '正常运行';
-            }
-            
-            if (equip.status !== targetStatus) {
-              equip.status = targetStatus;
-              changed = true;
-            }
-            
-            // Auto add maintenance log if completed
-            if (completedStatus.includes(ticket.status)) {
-              const logExists = equip.maintenanceLogs.some((l: any) => l.workOrderNo === ticket.id);
-              if (!logExists) {
-                const lastLog = ticket.logs[ticket.logs.length - 1]?.action || '确认闭合验收';
-                const newMaintLog = {
-                  id: `ML-${Date.now()}-${Math.floor(Math.random()*1000)}`,
-                  type: ticket.taskType.includes('保养') || ticket.taskType.includes('PM') ? '保养' : '维修',
-                  date: new Date().toISOString().slice(0, 10),
-                  technician: ticket.logs.find(l => l.operator.includes('工程师'))?.operator || '值班科室工程师',
-                  description: `【智能闭环系统】工单 [${ticket.id}] 完成后自动归档。原故障描述：${ticket.faultPhenomenon || '无'}。最后维保说明：${lastLog}`,
-                  cost: ticket.taskType === '生命支持设备应急' ? 150 : 0,
-                  status: '已完成',
-                  workOrderNo: ticket.id,
-                  faultPhenomenon: ticket.faultPhenomenon,
-                  verifyPerson: ticket.clinicalAcceptance?.acceptedBy || ticket.contactPerson || '科室管理员'
-                };
-                equip.maintenanceLogs = [newMaintLog, ...(equip.maintenanceLogs || [])];
-                
-                // Also update last maintenance dates
-                equip.lastMaintenanceDate = new Date().toISOString().slice(0, 10);
-                const nextDate = new Date();
-                nextDate.setDate(nextDate.getDate() + (equip.maintenanceCycleDays || 180));
-                equip.nextMaintenanceDate = nextDate.toISOString().slice(0, 10);
-                
-                changed = true;
-              }
-            }
-            
-            equipmentsList[matchedIndex] = equip;
-          }
-        });
+        const { equipments: equipmentsList, changed } = syncTasksToEquipmentArchives(tasks, JSON.parse(savedEquips));
         
         if (changed) {
           localStorage.setItem('medical_equipment_data', JSON.stringify(equipmentsList));
