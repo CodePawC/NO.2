@@ -47,6 +47,7 @@ import {
 } from 'lucide-react';
 import { StructuredTicket, ChatMessage, TaskType, UrgencyLevel, ClinicalImpact, TaskStatus, LLMConfig, MedicalEquipment } from './types';
 import { INITIAL_TASKS } from './data/defaultTasks';
+import { DEFAULT_EQUIPMENT } from './data/defaultEquipment';
 import { MOCK_VOICE_TEMPLATES, PRESET_PROMPTS, SIMULATED_USERS } from './data/appPresets';
 import { useAiSettings } from './hooks/useAiSettings';
 import { useSpeechRecognition } from './hooks/useSpeechRecognition';
@@ -120,7 +121,7 @@ export default function App() {
     if (saved) {
       try { return JSON.parse(saved); } catch (e) {}
     }
-    return [];
+    return DEFAULT_EQUIPMENT;
   });
 
   useEffect(() => {
@@ -129,6 +130,8 @@ export default function App() {
       try {
         setAllEquipments(JSON.parse(saved));
       } catch (e) {}
+    } else {
+      setAllEquipments(DEFAULT_EQUIPMENT);
     }
   }, [currentWorkspace]);
 
