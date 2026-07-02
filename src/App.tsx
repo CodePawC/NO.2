@@ -42,7 +42,8 @@ import {
   Mic,
   MicOff,
   Menu,
-  X
+  X,
+  Info
 } from 'lucide-react';
 import { StructuredTicket, ChatMessage, TaskType, UrgencyLevel, ClinicalImpact, TaskStatus, LLMConfig, MedicalEquipment } from './types';
 import { INITIAL_TASKS } from './data/defaultTasks';
@@ -52,7 +53,7 @@ import { useSpeechRecognition } from './hooks/useSpeechRecognition';
 import { sendAssistantChat } from './services/aiApi';
 import { isSameDepartment, normalizeDepartmentName } from './utils/departmentUtils';
 import { syncTasksToEquipmentArchives } from './utils/equipmentSync';
-import { getClinicalAcceptanceBlockReason, getEngineerStatusBlockReason, getRecommendedRoutingForTask } from './utils/taskWorkflow';
+import { getClinicalAcceptanceBlockReason, getEngineerNextStatus, getEngineerStatusBlockReason, getEngineerWorkflowHint, getRecommendedRoutingForTask } from './utils/taskWorkflow';
 import TaskStats from './components/TaskStats';
 import EquipmentArchives from './components/EquipmentArchives';
 
@@ -2716,13 +2717,20 @@ export default function App() {
 
               {/* Status and Action Quick Controllers */}
               <div className="bg-slate-50 p-3 border-b border-slate-100 shrink-0">
-                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">流转状态快速调节器：</p>
+                <div className="flex flex-col gap-1.5 mb-2">
+                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">流转状态快速调节器：</p>
+                  <div className="text-[11px] text-slate-600 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5">
+                    <Info className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+                    <span>{getEngineerWorkflowHint(selectedTask)}</span>
+                  </div>
+                </div>
                 <div className="flex flex-wrap gap-1.5">
                   {([
                     '待确认', '待派工', '已派工', '处理中', '待科室验收', '已完成', '已归档', '已关闭'
                   ] as TaskStatus[]).map((st) => {
                     const blockReason = getEngineerStatusBlockReason(selectedTask, st);
                     const isBlocked = !!blockReason;
+                    const isNextStatus = st === getEngineerNextStatus(selectedTask);
                     return (
                       <button
                         key={st}
@@ -2732,6 +2740,8 @@ export default function App() {
                         className={`text-[11px] px-2.5 py-1 rounded-lg font-semibold border transition ${
                           selectedTask.status === st
                             ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
+                            : isNextStatus
+                              ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100 cursor-pointer shadow-xs'
                             : isBlocked
                               ? 'bg-slate-100 border-slate-200 text-slate-300 cursor-not-allowed'
                               : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 cursor-pointer'
