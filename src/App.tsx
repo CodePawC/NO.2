@@ -795,8 +795,14 @@ export default function App() {
     
     const currentDept = normalizeDepartmentName(currentSimulatedUser.department || currentSimulatedUser.dept);
     const draftDept = normalizeDepartmentName(draftTicket.department) || draftTicket.department;
-    const routing = getRecommendedRoutingForTask(draftTicket.taskType as TaskType, `${draftTicket.faultPhenomenon || ''} ${draftTicket.deviceName || ''} ${draftTicket.notes || ''}`);
-    const autoMatchedEquipment = currentUserRole === 'medical_staff' && needsClinicalAcceptance(draftTicket as StructuredTicket)
+    const routingBasisText = `${draftTicket.faultPhenomenon || ''} ${draftTicket.deviceName || ''} ${draftTicket.notes || ''}`;
+    const routing = getRecommendedRoutingForTask(draftTicket.taskType as TaskType, routingBasisText);
+    const normalizedTaskType = currentUserRole === 'medical_staff'
+      ? (routing.recommendedDept !== '医学装备科'
+        ? '非设备类转派任务'
+        : (draftTicket.taskType === '非设备类转派任务' ? '设备报修' : ((draftTicket.taskType as TaskType) || '设备报修')))
+      : ((draftTicket.taskType as TaskType) || '设备报修');
+    const autoMatchedEquipment = currentUserRole === 'medical_staff' && normalizedTaskType !== '非设备类转派任务'
       ? findUniqueEquipmentMatchForDraft(visibleEquipments, {
           department: currentDept || draftDept,
           deviceName: draftTicket.deviceName
@@ -809,7 +815,9 @@ export default function App() {
     const effectiveDeviceId = canUseLinkedEquipment
       ? (selectedEquipment?.id || autoMatchedEquipment?.id || draftTicket.deviceId || 'EQ-TEMP-' + Math.floor(Math.random() * 9000 + 1000))
       : 'EQ-TEMP-' + Math.floor(Math.random() * 9000 + 1000);
-    const effectiveRecommendedDept = forwardDept || draftTicket.recommendedDept || routing.recommendedDept;
+    const effectiveRecommendedDept = currentUserRole === 'medical_staff'
+      ? routing.recommendedDept
+      : (forwardDept || draftTicket.recommendedDept || routing.recommendedDept);
     const effectiveNeedVendorCoop = routing.needVendorCoop === '是' ? '是' : (draftTicket.needVendorCoop || '否');
     const routingNote = routing.routingNote && !draftTicket.notes?.includes(routing.routingNote) ? routing.routingNote : '';
     const defaultPerson = currentUserRole === 'medical_staff' ? currentSimulatedUser.name : (draftTicket.contactPerson || '未录入联系人');
@@ -839,7 +847,7 @@ export default function App() {
     // Fallbacks
     const newTicket: StructuredTicket = {
       id: newTicketId,
-      taskType: (draftTicket.taskType as TaskType) || '设备报修',
+      taskType: normalizedTaskType,
       source: finalSource,
       department: finalDepartment,
       location: linkedEquipment && canUseLinkedEquipment ? `${linkedEquipment.dept}设备点位` : defaultLoc,
@@ -2551,7 +2559,8 @@ export default function App() {
                       <select 
                         value={draftTicket.taskType || '设备报修'}
                         onChange={(e) => handleUpdateDraftField('taskType', e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                        disabled={currentUserRole === 'medical_staff'}
+                        className="w-full bg-white disabled:bg-slate-100 disabled:text-slate-400 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                       >
                         <option value="设备报修">设备报修</option>
                         <option value="生命支持设备应急">生命支持设备应急</option>
@@ -2563,6 +2572,9 @@ export default function App() {
                         <option value="普通杂项任务">普通杂项任务</option>
                         <option value="非设备类转派任务">非设备类转派任务</option>
                       </select>
+                      {currentUserRole === 'medical_staff' && (
+                        <p className="text-[9px] text-slate-400 mt-1">临床端由系统按故障描述自动判定任务类型。</p>
+                      )}
                     </div>
 
                     <div>
@@ -3175,7 +3187,8 @@ export default function App() {
                   <select 
                     value={draftTicket.taskType || '设备报修'}
                     onChange={(e) => handleUpdateDraftField('taskType', e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none font-medium"
+                    disabled={currentUserRole === 'medical_staff'}
+                    className="w-full bg-slate-50 disabled:bg-slate-100 disabled:text-slate-400 border border-slate-200 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none font-medium"
                   >
                     <option value="设备报修">设备报修</option>
                     <option value="生命支持设备应急">生命支持设备应急</option>
@@ -3187,6 +3200,9 @@ export default function App() {
                     <option value="普通杂项任务">普通杂项任务</option>
                     <option value="非设备类转派任务">非设备类转派任务</option>
                   </select>
+                  {currentUserRole === 'medical_staff' && (
+                    <p className="text-[9px] text-slate-400 mt-1">临床端由系统按故障描述自动判定任务类型，防止误转派绕过验收闭环。</p>
+                  )}
                   {visibleEquipments.length === 0 && (
                     <p className="text-[9px] text-amber-700 mt-1 font-medium">当前账号暂无可关联的本科室在册资产，可继续手动录入设备信息。</p>
                   )}
@@ -3335,9 +3351,13 @@ export default function App() {
                       handleUpdateDraftField('recommendedDept', e.target.value);
                       setForwardDept(e.target.value);
                     }}
+                    disabled={currentUserRole === 'medical_staff'}
                     placeholder="如：医学装备科 / 后勤保障科 / 信息科"
-                    className="w-full bg-slate-50 border border-slate-200 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none font-semibold"
+                    className="w-full bg-slate-50 disabled:bg-slate-100 disabled:text-slate-400 border border-slate-200 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none font-semibold"
                   />
+                  {currentUserRole === 'medical_staff' && (
+                    <p className="text-[9px] text-slate-400 mt-1">临床端不可手动改派，系统会按故障描述自动判断是否转信息科或后勤。</p>
+                  )}
                 </div>
 
                 {/* 11. 联系人 */}

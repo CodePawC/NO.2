@@ -260,6 +260,45 @@ const checks: Check[] = [
       const vendorRouting = getRecommendedRoutingForTask('供应商协同', '奥林巴斯设备需要返厂寄修');
       assertEqual(vendorRouting.recommendedDept, '医学装备科', '供应商协同应由医学装备科牵头');
       assertEqual(vendorRouting.needVendorCoop, '是', '供应商协同应标记厂家协同');
+
+      const equipmentLeakRouting = getRecommendedRoutingForTask('供应商协同', '奥林巴斯胃镜插入管漏水，需要厂家协同检测');
+      assertEqual(equipmentLeakRouting.recommendedDept, '医学装备科', '医学设备漏水不应被误判为后勤水电问题');
+    }
+  },
+  {
+    name: 'recommended department alone cannot bypass clinical equipment acceptance',
+    run: () => {
+      const equipmentTaskWithExternalDept = createTask({
+        taskType: '设备报修',
+        recommendedDept: '信息科',
+        deviceName: '呼吸机',
+        faultPhenomenon: '呼吸机报警无法正常通气'
+      });
+
+      assertEqual(
+        canEngineerCloseTransferredTask(equipmentTaskWithExternalDept),
+        false,
+        '设备维修单不能仅因建议责任部门被改成信息科就转为可关闭留痕'
+      );
+      assertEqual(
+        needsClinicalAcceptance(equipmentTaskWithExternalDept),
+        true,
+        '设备维修单即便建议责任部门异常，也必须保留临床验收闭环'
+      );
+      assertIncludes(
+        getEngineerStatusBlockReason(equipmentTaskWithExternalDept, '已关闭'),
+        '临床验收',
+        '设备维修单不能绕过临床验收直接关闭'
+      );
+
+      const trueTransferTask = createTask({
+        taskType: '非设备类转派任务',
+        recommendedDept: '信息科',
+        deviceName: '诊室电脑',
+        faultPhenomenon: 'HIS 系统无法登录，网络红叉'
+      });
+      assert(canEngineerCloseTransferredTask(trueTransferTask), '真实非设备转派任务仍应可关闭留痕');
+      assertEqual(needsClinicalAcceptance(trueTransferTask), false, '真实非设备转派任务不要求临床设备验收');
     }
   },
   {
@@ -536,6 +575,63 @@ const checks: Check[] = [
         dept: '医学装备科'
       }));
       assertEqual(engineerPresets, PRESET_PROMPTS, '工程师端应继续保留全院演示快捷预设');
+    }
+  },
+  {
+    name: 'clinical draft creation cannot manually reroute equipment repairs',
+    run: () => {
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const createStart = appSource.indexOf('const handleCreateTicketFromDraft = () => {');
+      const createEnd = appSource.indexOf('// Handle Clinical Closed-loop Sign-off & Rating', createStart);
+      assert(createStart !== -1 && createEnd > createStart, '应能定位草稿建单逻辑');
+      const createSource = appSource.slice(createStart, createEnd);
+
+      assert(
+        createSource.includes("const effectiveRecommendedDept = currentUserRole === 'medical_staff'") &&
+          createSource.includes('? routing.recommendedDept') &&
+          createSource.includes(': (forwardDept || draftTicket.recommendedDept || routing.recommendedDept)'),
+        '临床端建单时建议责任部门应按故障内容重算，不能采用手动改派值'
+      );
+      assert(
+        createSource.includes("const normalizedTaskType = currentUserRole === 'medical_staff'") &&
+          createSource.includes("routing.recommendedDept !== '医学装备科'") &&
+          createSource.includes("? '非设备类转派任务'"),
+        '临床端只有系统识别为非装备科问题时才应生成转派任务'
+      );
+      assert(
+        createSource.includes("draftTicket.taskType === '非设备类转派任务' ? '设备报修'"),
+        '临床端不能通过手动把任务类型改为非设备转派来绕过设备维修闭环'
+      );
+
+      const inlineTaskTypeStart = appSource.indexOf('<label className="text-[10px] font-bold text-slate-500 block mb-1">任务分类</label>');
+      const inlineTaskTypeEnd = appSource.indexOf('<label className="text-[10px] font-bold text-slate-500 block mb-1">任务来源</label>', inlineTaskTypeStart);
+      assert(inlineTaskTypeStart !== -1 && inlineTaskTypeEnd > inlineTaskTypeStart, '应能定位侧边草稿中的任务分类字段');
+      const inlineTaskTypeSource = appSource.slice(inlineTaskTypeStart, inlineTaskTypeEnd);
+      assert(
+        inlineTaskTypeSource.includes("disabled={currentUserRole === 'medical_staff'}") &&
+          inlineTaskTypeSource.includes('临床端由系统按故障描述自动判定任务类型'),
+        '侧边草稿应禁止临床手动修改任务类型'
+      );
+
+      const modalTaskTypeStart = appSource.indexOf('<label className="text-slate-600 font-bold block mb-1 text-xs">1. 任务类型</label>');
+      const modalTaskTypeEnd = appSource.indexOf('{/* 2. 任务来源 */}', modalTaskTypeStart);
+      assert(modalTaskTypeStart !== -1 && modalTaskTypeEnd > modalTaskTypeStart, '应能定位完整草稿中的任务类型字段');
+      const modalTaskTypeSource = appSource.slice(modalTaskTypeStart, modalTaskTypeEnd);
+      assert(
+        modalTaskTypeSource.includes("disabled={currentUserRole === 'medical_staff'}") &&
+          modalTaskTypeSource.includes('防止误转派绕过验收闭环'),
+        '完整草稿弹窗应禁止临床手动修改任务类型'
+      );
+
+      const recommendedDeptStart = appSource.indexOf('{/* 10. 建议责任部门 */}');
+      const recommendedDeptEnd = appSource.indexOf('{/* 11. 联系人 */}', recommendedDeptStart);
+      assert(recommendedDeptStart !== -1 && recommendedDeptEnd > recommendedDeptStart, '应能定位完整草稿中的建议责任部门字段');
+      const recommendedDeptSource = appSource.slice(recommendedDeptStart, recommendedDeptEnd);
+      assert(
+        recommendedDeptSource.includes("disabled={currentUserRole === 'medical_staff'}") &&
+          recommendedDeptSource.includes('临床端不可手动改派'),
+        '完整草稿弹窗应禁止临床手动修改建议责任部门，并给出自动判定说明'
+      );
     }
   },
   {
