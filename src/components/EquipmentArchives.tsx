@@ -12,6 +12,7 @@ import { analyzeGeminiContent, chatWithGeminiExpert } from '../services/aiApi';
 import { isSameDepartment } from '../utils/departmentUtils';
 import { EQUIPMENT_STORAGE_KEY, parseStoredEquipmentList } from '../utils/equipmentStorage';
 import { addLocalDays, getDateDiffDaysFromToday, getLocalDateString, getLocalDateTimeString } from '../utils/dateUtils';
+import { needsClinicalAcceptance } from '../utils/taskWorkflow';
 import MaintenanceCalendar from './MaintenanceCalendar';
 import BudgetStackedChart from './BudgetStackedChart';
 
@@ -607,6 +608,7 @@ export default function EquipmentArchives({
   };
   const getRelatedTasksForEquipment = (equipment: MedicalEquipment) => {
     return tasks
+      .filter(needsClinicalAcceptance)
       .filter(t => t.deviceId === equipment.id || t.deviceId === equipment.sn || (t.deviceName === equipment.deviceName && isSameDepartment(t.department, equipment.dept)))
       .filter(canCurrentUserViewTicket);
   };

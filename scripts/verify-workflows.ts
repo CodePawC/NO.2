@@ -664,6 +664,38 @@ const checks: Check[] = [
       assertEqual(transferSync.changed, false, '转派关闭单不应触发设备档案变更');
       assertEqual(transferSync.equipments[0].maintenanceLogs.length, 0, '转派关闭单不应写入医疗设备维保履历');
       assertEqual(transferSync.equipments[0].status, '正常运行', '转派关闭单不应改变设备运行状态');
+
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const createStart = appSource.indexOf('const handleCreateTicketFromDraft = () => {');
+      const createEnd = appSource.indexOf('// Handle Clinical Closed-loop Sign-off & Rating', createStart);
+      assert(createStart !== -1 && createEnd > createStart, '应能定位草稿建单逻辑');
+      const createSource = appSource.slice(createStart, createEnd);
+      assert(
+        createSource.includes("const isNonEquipmentTransferTask = normalizedTaskType === '非设备类转派任务'") &&
+          createSource.includes('const effectiveDeviceId = isNonEquipmentTransferTask') &&
+          createSource.includes('`NON-EQUIPMENT-${newTicketId}`') &&
+          createSource.includes('非设备类转派任务不绑定医学设备电子档案。'),
+        '非设备类转派任务即使草稿携带设备编号，也应使用非设备占位编号并写明不绑定设备档案'
+      );
+
+      const taskDetailMatches = appSource.match(/const requiresClinicalAcceptance = needsClinicalAcceptance\(selectedTask\);[\s\S]{0,240}const matchedEquip = requiresClinicalAcceptance/g) || [];
+      assertEqual(taskDetailMatches.length, 2, '临床与工程师任务详情中的设备档案卡都应先判断是否需要设备验收');
+      assert(
+        appSource.includes('非设备转派单不绑定设备档案') &&
+          appSource.includes('仅保留流转记录，不写入医学设备维修档案'),
+        '非设备转派单详情应明确提示不绑定设备档案，避免误导为漏绑或设备维修单'
+      );
+
+      const archiveSource = readFileSync('src/components/EquipmentArchives.tsx', 'utf8');
+      const relatedStart = archiveSource.indexOf('const getRelatedTasksForEquipment = (equipment: MedicalEquipment) => {');
+      const relatedEnd = archiveSource.indexOf('const canManageEquipmentArchive', relatedStart);
+      assert(relatedStart !== -1 && relatedEnd > relatedStart, '应能定位设备档案相关工单聚合逻辑');
+      const relatedSource = archiveSource.slice(relatedStart, relatedEnd);
+      assert(
+        archiveSource.includes("import { needsClinicalAcceptance } from '../utils/taskWorkflow';") &&
+          relatedSource.includes('.filter(needsClinicalAcceptance)'),
+        '设备档案相关工单列表应排除非设备转派单，防止电脑/HIS/后勤问题挂到医疗设备链条'
+      );
     }
   },
   {

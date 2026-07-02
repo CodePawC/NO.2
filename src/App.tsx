@@ -896,9 +896,13 @@ export default function App() {
     const linkedEquipment = selectedEquipment || autoMatchedEquipment;
     const canUseLinkedEquipment = !linkedEquipment || canCurrentUserUseEquipment(linkedEquipment);
     const shouldUseAutoMatchedEquipment = !selectedEquipment && !!autoMatchedEquipment && canUseLinkedEquipment;
-    const effectiveDeviceId = canUseLinkedEquipment
-      ? (selectedEquipment?.id || autoMatchedEquipment?.id || draftTicket.deviceId || 'EQ-TEMP-' + Math.floor(Math.random() * 9000 + 1000))
-      : 'EQ-TEMP-' + Math.floor(Math.random() * 9000 + 1000);
+    const isNonEquipmentTransferTask = normalizedTaskType === '非设备类转派任务';
+    const shouldLinkEquipmentToTicket = !isNonEquipmentTransferTask && canUseLinkedEquipment;
+    const effectiveDeviceId = isNonEquipmentTransferTask
+      ? `NON-EQUIPMENT-${newTicketId}`
+      : canUseLinkedEquipment
+        ? (selectedEquipment?.id || autoMatchedEquipment?.id || draftTicket.deviceId || 'EQ-TEMP-' + Math.floor(Math.random() * 9000 + 1000))
+        : 'EQ-TEMP-' + Math.floor(Math.random() * 9000 + 1000);
     const effectiveRecommendedDept = currentUserRole === 'medical_staff'
       ? routing.recommendedDept
       : (forwardDept || draftTicket.recommendedDept || routing.recommendedDept);
@@ -934,8 +938,8 @@ export default function App() {
       taskType: normalizedTaskType,
       source: finalSource,
       department: finalDepartment,
-      location: linkedEquipment && canUseLinkedEquipment ? `${linkedEquipment.dept}设备点位` : defaultLoc,
-      deviceName: canUseLinkedEquipment ? (draftTicket.deviceName || '未录入设备名称') : '未录入设备名称',
+      location: linkedEquipment && shouldLinkEquipmentToTicket ? `${linkedEquipment.dept}设备点位` : defaultLoc,
+      deviceName: canUseLinkedEquipment ? (draftTicket.deviceName || (normalizedTaskType === '非设备类转派任务' ? '非设备转派事项' : '未录入设备名称')) : '未录入设备名称',
       deviceId: effectiveDeviceId,
       faultPhenomenon: draftTicket.faultPhenomenon || '暂未提供具体描述',
       contactPerson: finalContactPerson,
@@ -963,6 +967,7 @@ export default function App() {
         routingNote,
         effectiveRecommendedDept && effectiveRecommendedDept !== '医学装备科' ? `系统判断此单归属部门为 [${effectiveRecommendedDept}]。` : '',
         shouldUseAutoMatchedEquipment ? `系统已按当前科室与设备名称自动关联在册资产 [${autoMatchedEquipment.id}]。` : '',
+        normalizedTaskType === '非设备类转派任务' ? '非设备类转派任务不绑定医学设备电子档案。' : '',
         !canUseLinkedEquipment && linkedEquipment ? `临床账号尝试关联外科室资产 [${linkedEquipment.id}]，系统已移除该资产绑定并按本科室工单提交。` : ''
       ].filter(Boolean).join('\n')
     };
@@ -2277,7 +2282,10 @@ export default function App() {
 
                     {/* 双向数据穿透：关联医学装备数字档案卡 */}
                     {(() => {
-                      const matchedEquip = allEquipments.find(eq => eq.id === selectedTask.deviceId || eq.sn === selectedTask.deviceId || (eq.deviceName === selectedTask.deviceName && isSameDepartment(eq.dept, selectedTask.department)));
+                      const requiresClinicalAcceptance = needsClinicalAcceptance(selectedTask);
+                      const matchedEquip = requiresClinicalAcceptance
+                        ? allEquipments.find(eq => eq.id === selectedTask.deviceId || eq.sn === selectedTask.deviceId || (eq.deviceName === selectedTask.deviceName && isSameDepartment(eq.dept, selectedTask.department)))
+                        : null;
                       if (matchedEquip) {
                         return (
                           <div className="bg-gradient-to-tr from-emerald-50 to-teal-50/40 border border-emerald-200/60 p-3 rounded-xl flex items-center justify-between gap-3 shadow-xs">
@@ -2311,9 +2319,13 @@ export default function App() {
                         return (
                           <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl">
                             <div className="space-y-0.5">
-                              <div className="text-[10px] font-bold text-slate-500">设备电子档案未关联</div>
+                              <div className="text-[10px] font-bold text-slate-500">
+                                {requiresClinicalAcceptance ? '设备电子档案未关联' : '非设备转派单不绑定设备档案'}
+                              </div>
                               <p className="text-[11px] text-slate-600 font-medium">
-                                当前工单尚未绑定医院在册设备，请等待医学装备科完成检索建档。
+                                {requiresClinicalAcceptance
+                                  ? '当前工单尚未绑定医院在册设备，请等待医学装备科完成检索建档。'
+                                  : `此单已转派${selectedTask.recommendedDept || '责任科室'}处理，仅保留流转记录，不写入医学设备维修档案。`}
                               </p>
                             </div>
                           </div>
@@ -2950,7 +2962,10 @@ export default function App() {
 
                 {/* 双向数据穿透：关联医学装备数字档案卡 */}
                 {(() => {
-                  const matchedEquip = allEquipments.find(eq => eq.id === selectedTask.deviceId || eq.sn === selectedTask.deviceId || (eq.deviceName === selectedTask.deviceName && isSameDepartment(eq.dept, selectedTask.department)));
+                  const requiresClinicalAcceptance = needsClinicalAcceptance(selectedTask);
+                  const matchedEquip = requiresClinicalAcceptance
+                    ? allEquipments.find(eq => eq.id === selectedTask.deviceId || eq.sn === selectedTask.deviceId || (eq.deviceName === selectedTask.deviceName && isSameDepartment(eq.dept, selectedTask.department)))
+                    : null;
                   if (matchedEquip) {
                     return (
                       <div className="bg-gradient-to-tr from-emerald-50 to-teal-50/40 border border-emerald-200/60 p-3 rounded-xl flex items-center justify-between gap-3 shadow-xs">
@@ -2984,18 +2999,26 @@ export default function App() {
                     return (
                       <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl flex items-center justify-between gap-3">
                         <div className="space-y-0.5">
-                          <div className="text-[10px] font-bold text-slate-500">设备电子档案未关联</div>
-                          <p className="text-[11px] text-slate-600 font-medium">当前工单尚未绑定医院在册设备。</p>
+                          <div className="text-[10px] font-bold text-slate-500">
+                            {requiresClinicalAcceptance ? '设备电子档案未关联' : '非设备转派单不绑定设备档案'}
+                          </div>
+                          <p className="text-[11px] text-slate-600 font-medium">
+                            {requiresClinicalAcceptance
+                              ? '当前工单尚未绑定医院在册设备。'
+                              : `此单已转派${selectedTask.recommendedDept || '责任科室'}处理，仅保留流转记录，不写入医学设备维修档案。`}
+                          </p>
                         </div>
-                        <button
-                          onClick={() => {
-                            setCurrentWorkspace('archives');
-                          }}
-                          className="flex items-center gap-1 text-[11px] font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-2.5 py-1.5 rounded-lg transition cursor-pointer shrink-0"
-                        >
-                          <Plus className="w-3.5 h-3.5 text-slate-400" />
-                          <span>检索建档</span>
-                        </button>
+                        {requiresClinicalAcceptance && (
+                          <button
+                            onClick={() => {
+                              setCurrentWorkspace('archives');
+                            }}
+                            className="flex items-center gap-1 text-[11px] font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-2.5 py-1.5 rounded-lg transition cursor-pointer shrink-0"
+                          >
+                            <Plus className="w-3.5 h-3.5 text-slate-400" />
+                            <span>检索建档</span>
+                          </button>
+                        )}
                       </div>
                     );
                   }
