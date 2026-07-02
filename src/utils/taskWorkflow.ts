@@ -2,6 +2,7 @@ import { StructuredTicket, TaskStatus, TaskType, UserProfile } from '../types';
 import { isSameDepartment } from './departmentUtils';
 
 const TERMINAL_STATUSES: TaskStatus[] = ['已归档', '已关闭'];
+const STATUS_SEQUENCE: TaskStatus[] = ['待确认', '待派工', '已派工', '处理中', '待科室验收'];
 
 export const getEngineerStatusBlockReason = (task: StructuredTicket, nextStatus: TaskStatus) => {
   if (task.status === nextStatus) {
@@ -12,12 +13,27 @@ export const getEngineerStatusBlockReason = (task: StructuredTicket, nextStatus:
     return '已归档或已关闭工单不能再变更状态。';
   }
 
+  if (TERMINAL_STATUSES.includes(nextStatus) && task.status !== '已完成') {
+    return '工单必须先完成临床验收签署，才能归档或关闭。';
+  }
+
   if (task.status === '已完成' && !TERMINAL_STATUSES.includes(nextStatus)) {
     return '已完成工单已完成临床验收签署，只能进入归档或关闭。';
   }
 
   if (nextStatus === '已完成') {
     return '工程师不能直接结单，请先转为【待科室验收】，由临床科室签署后自动完成。';
+  }
+
+  if (task.status === '待科室验收') {
+    return '已发起科室验收的工单需等待临床签署，不能由工程师回退状态。';
+  }
+
+  const currentIndex = STATUS_SEQUENCE.indexOf(task.status);
+  const nextIndex = STATUS_SEQUENCE.indexOf(nextStatus);
+
+  if (currentIndex !== -1 && nextIndex !== -1 && nextIndex !== currentIndex + 1) {
+    return `请按工单闭环顺序流转：当前【${task.status}】下一步只能进入【${STATUS_SEQUENCE[currentIndex + 1]}】。`;
   }
 
   return '';
