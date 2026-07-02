@@ -568,7 +568,7 @@ export default function EquipmentArchives({
   const [quickRepairEquipId, setQuickRepairEquipId] = useState<string>('');
   const [quickRepairDesc, setQuickRepairDesc] = useState<string>('');
   const [quickRepairUrgency, setQuickRepairUrgency] = useState<'low' | 'medium' | 'high'>('medium');
-  const [quickRepairToast, setQuickRepairToast] = useState<string | null>(null);
+  const [quickRepairToast, setQuickRepairToast] = useState<{ type: 'success' | 'warning'; message: string } | null>(null);
 
   useEffect(() => {
     if (propCurrentUser) {
@@ -768,9 +768,25 @@ export default function EquipmentArchives({
   };
   const canManageEquipmentArchive = currentUser.role === 'engineer';
   const showArchiveManageBlockedToast = (actionName: string) => {
-    setQuickRepairToast(`当前临床账号只能查看本科室设备并发起报修，不能执行${actionName}。请切换到医学装备科工程师账号后再操作。`);
+    setQuickRepairToast({
+      type: 'warning',
+      message: `当前临床账号只能查看本科室设备并发起报修，不能执行${actionName}。请切换到医学装备科工程师账号后再操作。`
+    });
     setTimeout(() => setQuickRepairToast(null), 5000);
   };
+  const ensureCanManageEquipmentArchive = (actionName: string) => {
+    if (canManageEquipmentArchive) return true;
+    showArchiveManageBlockedToast(actionName);
+    return false;
+  };
+
+  useEffect(() => {
+    if (canManageEquipmentArchive) return;
+    setIsAiParserOpen(false);
+    setIsLogModalOpen(false);
+    setIsAttachmentModalOpen(false);
+  }, [canManageEquipmentArchive]);
+
   const visibleEquipments = equipments.filter(canCurrentUserViewEquipment);
   const visibleDepartments: string[] = ['全部科室', ...Array.from(new Set(visibleEquipments.map(eq => eq.dept))).filter((dept): dept is string => Boolean(dept))];
   const assetScopeLabel = currentUser.role === 'medical_staff' ? '本科室' : '全院';
@@ -882,7 +898,10 @@ export default function EquipmentArchives({
         const found = equipments.find(eq => eq.id === equipId || eq.sn === equipId);
         if (found) {
           if (!canCurrentUserViewEquipment(found)) {
-            setQuickRepairToast(`当前临床账号只能查看本科室设备：${currentUserDepartment}`);
+            setQuickRepairToast({
+              type: 'warning',
+              message: `当前临床账号只能查看本科室设备：${currentUserDepartment}`
+            });
             setTimeout(() => setQuickRepairToast(null), 5000);
             return;
           }
@@ -1196,18 +1215,30 @@ export default function EquipmentArchives({
 
     const targetEq = equipments.find(eq => eq.id === quickRepairEquipId);
     if (!targetEq) return;
+    if (!canCurrentUserReportEquipment(targetEq)) {
+      setQuickRepairToast({
+        type: 'warning',
+        message: `当前临床账号只能为本科室设备发起报修：${currentUserDepartment}`
+      });
+      setTimeout(() => setQuickRepairToast(null), 5000);
+      return;
+    }
 
     const workOrderNo = createQuickRepairRecord(targetEq, quickRepairDesc.trim(), quickRepairUrgency);
     setIsQuickRepairModalOpen(false);
     setQuickRepairDesc('');
     setQuickRepairUrgency('medium');
-    setQuickRepairToast(`报修成功：${targetEq.deviceName} 已同步生成主工单与档案维修记录 ${workOrderNo}`);
+    setQuickRepairToast({
+      type: 'success',
+      message: `报修成功：${targetEq.deviceName} 已同步生成主工单与档案维修记录 ${workOrderNo}`
+    });
     setTimeout(() => setQuickRepairToast(null), 5000);
   };
 
   // Add Log Entry (Maintenance)
   const handleAddMaintenanceLog = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!ensureCanManageEquipmentArchive('新增维保工单')) return;
     if (!newLogTechnician.trim() || !newLogDescription.trim()) {
       alert('请填写技术员姓名与工作描述！');
       return;
@@ -1260,6 +1291,7 @@ export default function EquipmentArchives({
   // Add Calibration Log
   const handleAddCalibrationLog = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!ensureCanManageEquipmentArchive('登记计量证书')) return;
     if (!newCalAgency.trim() || !newCalCertificateNo.trim() || !newCalValidUntil) {
       alert('请填写完整计量单位、证书编号及有效期！');
       return;
@@ -1304,6 +1336,7 @@ export default function EquipmentArchives({
 
   // Delete Maintenance Log
   const handleDeleteMaintenanceLog = (logId: string) => {
+    if (!ensureCanManageEquipmentArchive('删除维保履历记录')) return;
     if (!window.confirm('您确定要永久删除此条维保履历记录吗？')) return;
     setEquipments(equipments.map(eq => {
       if (eq.id === selectedId) {
@@ -1318,6 +1351,7 @@ export default function EquipmentArchives({
 
   // Delete Calibration Log
   const handleDeleteCalibrationLog = (calId: string) => {
+    if (!ensureCanManageEquipmentArchive('注销计量证书')) return;
     if (!window.confirm('您确定要永久删除此条法定计量强检记录及证书档案吗？')) return;
     setEquipments(equipments.map(eq => {
       if (eq.id === selectedId) {
@@ -1330,9 +1364,24 @@ export default function EquipmentArchives({
     }));
   };
 
+  const handleDeleteExtractedSnapshot = (snapshotId: string) => {
+    if (!ensureCanManageEquipmentArchive('解除技术手册快照关联')) return;
+
+    setEquipments(equipments.map(eq => {
+      if (eq.id === selectedEquipment.id) {
+        return {
+          ...eq,
+          extractedSnapshots: (eq.extractedSnapshots || []).filter(s => s.id !== snapshotId)
+        };
+      }
+      return eq;
+    }));
+  };
+
   // Add Attachment Item
   const handleAddAttachment = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!ensureCanManageEquipmentArchive('上传资料附件')) return;
     if (!newAttachName.trim()) {
       alert('请填写资料附件名称！');
       return;
@@ -1362,6 +1411,7 @@ export default function EquipmentArchives({
 
   // AI OCR Parser simulation with presets
   const runPresetOcr = (presetNum: number) => {
+    if (!ensureCanManageEquipmentArchive('AI 扫码入库')) return;
     setIsAnalyzing(true);
     setAnalyzerError(null);
     let sampleText = '';
@@ -1424,6 +1474,7 @@ Clinical class: Life-saving respiratory device`;
 
   // Run Custom Text OCR or Image upload OCR via Gemini API
   const handleCustomOcrAnalyze = () => {
+    if (!ensureCanManageEquipmentArchive('AI 扫码入库')) return;
     if (!aiInputText.trim()) {
       alert('请输入铭牌描述、规格单据文本或上传附件描述！');
       return;
@@ -1498,6 +1549,7 @@ Clinical class: Life-saving respiratory device`;
 
   // Process OCR files (images of nameplates, invoices, labels)
   const processOcrFile = (file: File) => {
+    if (!ensureCanManageEquipmentArchive('AI 扫码入库')) return;
     setIsAnalyzing(true);
     setAnalyzerError(null);
 
@@ -1561,6 +1613,7 @@ Clinical class: Life-saving respiratory device`;
 
   // Process selected or dropped attachment files
   const processAttachFile = (file: File) => {
+    if (!ensureCanManageEquipmentArchive('上传资料附件')) return;
     setNewAttachName(file.name);
     
     // Auto calculate formatted size
@@ -1644,7 +1697,10 @@ Clinical class: Life-saving respiratory device`;
 
   const handleQuickRepair = () => {
     if (!canCurrentUserReportEquipment(selectedEquipment)) {
-      setQuickRepairToast(`当前临床账号只能为本科室设备发起报修：${currentUserDepartment}`);
+      setQuickRepairToast({
+        type: 'warning',
+        message: `当前临床账号只能为本科室设备发起报修：${currentUserDepartment}`
+      });
       setTimeout(() => setQuickRepairToast(null), 5000);
       return;
     }
@@ -1653,7 +1709,10 @@ Clinical class: Life-saving respiratory device`;
       const description = '科室通过快速报修渠道紧急申报，描述：设备发生突发性故障，无法正常开机或运行中断。';
       const urgency: 'medium' | 'high' = selectedEquipment.category === '急救生命支持' || selectedEquipment.riskLevel === '高' ? 'high' : 'medium';
       const workOrderNo = createQuickRepairRecord(selectedEquipment, description, urgency);
-      setQuickRepairToast(`报修成功：${selectedEquipment.deviceName} 已同步生成主工单与档案维修记录 ${workOrderNo}`);
+      setQuickRepairToast({
+        type: 'success',
+        message: `报修成功：${selectedEquipment.deviceName} 已同步生成主工单与档案维修记录 ${workOrderNo}`
+      });
       setTimeout(() => setQuickRepairToast(null), 5000);
     }
   };
@@ -1664,6 +1723,7 @@ Clinical class: Life-saving respiratory device`;
   };
 
   const handleExtractSnapshot = (page: PreviewPage) => {
+    if (!ensureCanManageEquipmentArchive('提取技术手册快照')) return;
     if (!previewFile || !selectedEquipment) return;
     setIsExtractingSnapshot(true);
     
@@ -1707,11 +1767,23 @@ Clinical class: Life-saving respiratory device`;
   return (
     <div id="app_root" className="flex flex-col h-screen h-[100dvh] w-full bg-[#F0F2F5] p-2 sm:p-3 md:p-6 pb-16 md:pb-6 overflow-hidden font-sans">
       {quickRepairToast && (
-        <div className="fixed top-4 right-4 z-40 max-w-sm rounded-xl border border-emerald-200 bg-white px-4 py-3 shadow-xl shadow-emerald-900/10 flex items-start gap-2.5">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
+        <div className={`fixed top-4 right-4 z-40 max-w-sm rounded-xl border bg-white px-4 py-3 shadow-xl flex items-start gap-2.5 ${
+          quickRepairToast.type === 'success'
+            ? 'border-emerald-200 shadow-emerald-900/10'
+            : 'border-amber-200 shadow-amber-900/10'
+        }`}>
+          {quickRepairToast.type === 'success' ? (
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
+          ) : (
+            <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+          )}
           <div>
-            <p className="text-xs font-black text-emerald-800">快捷报修已同步</p>
-            <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">{quickRepairToast}</p>
+            <p className={`text-xs font-black ${
+              quickRepairToast.type === 'success' ? 'text-emerald-800' : 'text-amber-800'
+            }`}>
+              {quickRepairToast.type === 'success' ? '快捷报修已同步' : '操作权限提醒'}
+            </p>
+            <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">{quickRepairToast.message}</p>
           </div>
         </div>
       )}
@@ -2661,13 +2733,19 @@ Clinical class: Life-saving respiratory device`;
                         <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider">维保全履历跟踪</h4>
                         <p className="text-[10px] text-slate-400 mt-0.5">点击任意维保卡片可查看并打印标准电子派工单</p>
                       </div>
-                      <button 
-                        onClick={() => { setLogType('维保'); setIsLogModalOpen(true); }}
-                        className="text-xs text-blue-600 font-bold hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-2.5 py-1.5 rounded-lg border border-blue-100 hover:border-blue-200 transition-all shadow-2xs"
-                      >
-                        <PlusCircle className="w-3.5 h-3.5" />
-                        <span>新增维保工单</span>
-                      </button>
+                      {canManageEquipmentArchive ? (
+                        <button
+                          onClick={() => { setLogType('维保'); setIsLogModalOpen(true); }}
+                          className="text-xs text-blue-600 font-bold hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-2.5 py-1.5 rounded-lg border border-blue-100 hover:border-blue-200 transition-all shadow-2xs"
+                        >
+                          <PlusCircle className="w-3.5 h-3.5" />
+                          <span>新增维保工单</span>
+                        </button>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 bg-slate-100 border border-slate-200 px-2 py-1 rounded-md">
+                          临床只读履历
+                        </span>
+                      )}
                     </div>
 
                     <BudgetStackedChart 
@@ -2724,17 +2802,18 @@ Clinical class: Life-saving respiratory device`;
                                 <div className="text-right flex-shrink-0 flex flex-col items-end">
                                   <div className="flex items-center gap-1.5">
                                     <span className="font-mono font-bold text-slate-800">¥{log.cost}</span>
-                                    {/* Stop propagation so delete button click doesn't trigger the view modal */}
-                                    <button 
-                                      onClick={(e) => { 
-                                        e.stopPropagation(); 
-                                        handleDeleteMaintenanceLog(log.id); 
-                                      }}
-                                      className="md:opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded transition-all"
-                                      title="删除此工单"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
+                                    {canManageEquipmentArchive && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDeleteMaintenanceLog(log.id);
+                                        }}
+                                        className="md:opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded transition-all"
+                                        title="删除此工单"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
                                   </div>
                                   <p className="text-[9px] text-slate-400 font-mono mt-1">{log.date}</p>
                                 </div>
@@ -2768,7 +2847,7 @@ Clinical class: Life-saving respiratory device`;
                         <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider">法定计量强检记录</h4>
                         <p className="text-[10px] text-slate-400 mt-0.5">国家质监总局要求: 强检目录设备必须100%持证运转并张贴绿标</p>
                       </div>
-                      {selectedEquipment.calibrationRequired ? (
+                      {selectedEquipment.calibrationRequired && canManageEquipmentArchive ? (
                         <button 
                           onClick={() => { setLogType('计量'); setIsLogModalOpen(true); }}
                           className="text-xs text-emerald-600 font-bold hover:text-emerald-700 flex items-center gap-1 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-100 hover:border-emerald-200 transition-all shadow-2xs"
@@ -2779,7 +2858,7 @@ Clinical class: Life-saving respiratory device`;
                       ) : (
                         <span className="text-[9px] text-slate-400 bg-slate-100 border border-slate-200 px-2 py-1 rounded-md flex items-center gap-1">
                           <Info className="w-3 h-3 text-slate-400" />
-                          <span>本台非强检类设备</span>
+                          <span>{selectedEquipment.calibrationRequired ? '临床只读证书' : '本台非强检类设备'}</span>
                         </span>
                       )}
                     </div>
@@ -2834,16 +2913,18 @@ Clinical class: Life-saving respiratory device`;
                                 </span>
                               </div>
                               
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteCalibrationLog(cal.id);
-                                }}
-                                className="md:opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded transition-all mt-1"
-                                title="注销此证书"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              {canManageEquipmentArchive && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteCalibrationLog(cal.id);
+                                  }}
+                                  className="md:opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded transition-all mt-1"
+                                  title="注销此证书"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -2901,13 +2982,19 @@ Clinical class: Life-saving respiratory device`;
                     <div className="space-y-5">
                       <div className="flex justify-between items-center">
                         <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">电子技术档案归档</h4>
-                        <button 
-                          onClick={() => setIsAttachmentModalOpen(true)}
-                          className="text-xs text-blue-600 font-bold hover:underline flex items-center gap-1 cursor-pointer"
-                        >
-                          <PlusCircle className="w-4 h-4" />
-                          <span>上传资料附件</span>
-                        </button>
+                        {canManageEquipmentArchive ? (
+                          <button
+                            onClick={() => setIsAttachmentModalOpen(true)}
+                            className="text-xs text-blue-600 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                          >
+                            <PlusCircle className="w-4 h-4" />
+                            <span>上传资料附件</span>
+                          </button>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 bg-slate-100 border border-slate-200 px-2 py-1 rounded-md">
+                            临床只读附件
+                          </span>
+                        )}
                       </div>
 
                       {/* 📊 档案完整度智能质检与组成占比看板 */}
@@ -3209,24 +3296,18 @@ Clinical class: Life-saving respiratory device`;
                                     <span>提取时间：{snap.extractedAt}</span>
                                   </div>
                                 </div>
-                                <button 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setEquipments(equipments.map(eq => {
-                                      if (eq.id === selectedEquipment.id) {
-                                        return {
-                                          ...eq,
-                                          extractedSnapshots: (eq.extractedSnapshots || []).filter(s => s.id !== snap.id)
-                                        };
-                                      }
-                                      return eq;
-                                    }));
-                                  }}
-                                  className="md:opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all absolute top-2 right-2 cursor-pointer"
-                                  title="解除快照关联"
-                                >
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
+                                {canManageEquipmentArchive && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteExtractedSnapshot(snap.id);
+                                    }}
+                                    className="md:opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all absolute top-2 right-2 cursor-pointer"
+                                    title="解除快照关联"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -3234,14 +3315,22 @@ Clinical class: Life-saving respiratory device`;
                       )}
                       
                       {/* Simulated Attachment drag/drop info */}
-                      <div 
-                        onClick={() => setIsAttachmentModalOpen(true)}
-                        className="border-2 border-dashed border-slate-200 hover:border-blue-400 p-6 rounded-xl text-center text-xs text-slate-400 cursor-pointer transition-all bg-slate-50/20"
-                      >
-                        <FileUp className="w-7 h-7 mx-auto mb-2 text-slate-300" />
-                        <p className="text-slate-600 font-semibold">拖拽任何相关的说明书、合格证PDF至此处</p>
-                        <p className="text-[10px] text-slate-400 mt-1">支持最大 50MB 的 PDF/Word/JPG 文档格式，自动建立系统索引</p>
-                      </div>
+                      {canManageEquipmentArchive ? (
+                        <div
+                          onClick={() => setIsAttachmentModalOpen(true)}
+                          className="border-2 border-dashed border-slate-200 hover:border-blue-400 p-6 rounded-xl text-center text-xs text-slate-400 cursor-pointer transition-all bg-slate-50/20"
+                        >
+                          <FileUp className="w-7 h-7 mx-auto mb-2 text-slate-300" />
+                          <p className="text-slate-600 font-semibold">拖拽任何相关的说明书、合格证PDF至此处</p>
+                          <p className="text-[10px] text-slate-400 mt-1">支持最大 50MB 的 PDF/Word/JPG 文档格式，自动建立系统索引</p>
+                        </div>
+                      ) : (
+                        <div className="border border-dashed border-slate-200 bg-slate-50/60 p-5 rounded-xl text-center text-xs text-slate-500">
+                          <FileText className="w-6 h-6 mx-auto mb-2 text-slate-300" />
+                          <p className="font-semibold">临床端可查看已归档技术资料</p>
+                          <p className="text-[10px] text-slate-400 mt-1">新增、删除或提取档案快照请联系医学装备科工程师。</p>
+                        </div>
+                      )}
                     </div>
                   );
                 })()}
@@ -3917,7 +4006,10 @@ Clinical class: Life-saving respiratory device`;
                                     type="button"
                                     onClick={() => {
                                       if (!canCurrentUserReportEquipment(eq)) {
-                                        setQuickRepairToast(`当前临床账号只能为本科室设备发起报修：${currentUserDepartment}`);
+                                        setQuickRepairToast({
+                                          type: 'warning',
+                                          message: `当前临床账号只能为本科室设备发起报修：${currentUserDepartment}`
+                                        });
                                         setTimeout(() => setQuickRepairToast(null), 5000);
                                         return;
                                       }
@@ -6599,23 +6691,30 @@ Clinical class: Life-saving respiratory device`;
                       </div>
 
                       {/* Sparkles premium extract page snapshot button */}
-                      <button
-                        onClick={() => handleExtractSnapshot(activePageData)}
-                        disabled={isExtractingSnapshot}
-                        className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-slate-700 disabled:to-slate-800 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
-                      >
-                        {isExtractingSnapshot ? (
-                          <>
-                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                            <span>正在进行 AI OCR 智能提取...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                            <span>📌 提取当前页为设备关联快照</span>
-                          </>
-                        )}
-                      </button>
+                      {canManageEquipmentArchive ? (
+                        <button
+                          onClick={() => handleExtractSnapshot(activePageData)}
+                          disabled={isExtractingSnapshot}
+                          className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-slate-700 disabled:to-slate-800 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
+                        >
+                          {isExtractingSnapshot ? (
+                            <>
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              <span>正在进行 AI OCR 智能提取...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                              <span>📌 提取当前页为设备关联快照</span>
+                            </>
+                          )}
+                        </button>
+                      ) : (
+                        <div className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-slate-800 text-slate-300 px-4 py-2 rounded-lg text-xs font-bold border border-slate-700">
+                          <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
+                          <span>临床只读预览</span>
+                        </div>
+                      )}
 
                     </div>
 
