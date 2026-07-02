@@ -288,6 +288,13 @@ const checks: Check[] = [
   {
     name: 'routing recognizes information, logistics, and vendor cases',
     run: () => {
+      const lifeSupportRouting = getRecommendedRoutingForTask('生命支持设备应急', 'ICU 呼吸机持续报警，病人正在使用，需要立即处理');
+      assertEqual(lifeSupportRouting.recommendedDept, '医学装备科', '生命支持设备不能因“使用”等泛化词误判为信息科');
+      assertEqual(lifeSupportRouting.needVendorCoop, '否', '普通呼吸机急修不应默认厂家协同');
+
+      const equipmentSystemRouting = getRecommendedRoutingForTask('设备报修', '监护仪系统报警，病人正在使用中');
+      assertEqual(equipmentSystemRouting.recommendedDept, '医学装备科', '医疗设备系统报警仍应归医学装备科');
+
       const infoRouting = getRecommendedRoutingForTask('非设备类转派任务', '诊室电脑 HIS 系统无法登录，网络红叉');
       assertEqual(infoRouting.recommendedDept, '信息科', '电脑网络类问题应建议信息科');
       assertEqual(infoRouting.needVendorCoop, '否', '信息科转派不应标记厂家协同');

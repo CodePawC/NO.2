@@ -129,7 +129,7 @@ export const getClinicalAcceptanceBlockReason = (
 
 export const getRecommendedRoutingForTask = (taskType?: TaskType, text = '') => {
   const normalizedText = text.toLowerCase();
-  const isInformationIssue = /电脑|网络|网线|系统|his|pacs|lis|打印机|扫码枪|处方|开立|登录|his系统/i.test(normalizedText);
+  const isInformationIssue = /电脑|网络|网线|his系统|his|pacs|lis|打印机|扫码枪|处方|开立|登录|信息系统|办公系统/i.test(normalizedText);
   const isMedicalEquipmentIssue = /呼吸机|除颤仪|麻醉机|监护仪|氧气|负压吸引|胃镜|内镜|dr机|dr房|注射泵|输液泵|超声|胎心|血气|生化|医学装备|医疗设备/i.test(normalizedText);
   const isEquipmentLeakIssue = /漏水/i.test(normalizedText) && /胃镜|内镜|奥林巴斯|插入管|探头|管路|设备|泵|机/i.test(normalizedText);
   const isLogisticsIssue = /后勤|跳闸|照明|插座|强电|水管|空调|门锁|电源插座|漏电|配电/i.test(normalizedText) || (/漏水/i.test(normalizedText) && !isEquipmentLeakIssue);
@@ -140,6 +140,14 @@ export const getRecommendedRoutingForTask = (taskType?: TaskType, text = '') => 
       recommendedDept: '医学装备科',
       needVendorCoop: '是' as const,
       routingNote: '系统识别需厂家或售后协同，建议由医学装备科牵头联系供应商。'
+    };
+  }
+
+  if (isMedicalEquipmentIssue) {
+    return {
+      recommendedDept: '医学装备科',
+      needVendorCoop: taskType === '验收安装协同' ? '是' as const : '否' as const,
+      routingNote: ''
     };
   }
 
