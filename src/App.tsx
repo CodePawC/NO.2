@@ -2757,17 +2757,18 @@ export default function App() {
                     '待确认', '待派工', '已派工', '处理中', '待科室验收', '已完成', '已归档', '已关闭'
                   ] as TaskStatus[]).map((st) => {
                     const blockReason = getEngineerStatusBlockReason(selectedTask, st);
+                    const isCurrentStatus = selectedTask.status === st;
                     const isBlocked = !!blockReason;
                     const isNextStatus = st === getEngineerNextStatus(selectedTask);
                     return (
                       <button
                         key={st}
                         onClick={() => handleUpdateStatus(st)}
-                        disabled={isBlocked}
-                        title={blockReason || `切换至${st}`}
+                        disabled={isCurrentStatus || isBlocked}
+                        title={isCurrentStatus ? '当前状态' : (blockReason || `切换至${st}`)}
                         className={`text-[11px] px-2.5 py-1 rounded-lg font-semibold border transition ${
-                          selectedTask.status === st
-                            ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
+                          isCurrentStatus
+                            ? 'bg-slate-900 border-slate-900 text-white shadow-xs cursor-default'
                             : isNextStatus
                               ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100 cursor-pointer shadow-xs'
                             : isBlocked

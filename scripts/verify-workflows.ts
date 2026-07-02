@@ -12,6 +12,7 @@ import {
   getRecommendedRoutingForTask
 } from '../src/utils/taskWorkflow.ts';
 import type { MedicalEquipment, StructuredTicket, UserProfile } from '../src/types.ts';
+import { readFileSync } from 'node:fs';
 
 type Check = {
   name: string;
@@ -289,6 +290,25 @@ const checks: Check[] = [
       const corruptStorage = withoutConsoleWarn(() => parseStoredEquipmentList('{not json'));
       assert(corruptStorage.equipments.length > 0, '损坏设备存储应回退默认设备列表');
       assertEqual(corruptStorage.shouldPersist, true, '损坏设备存储回退后应提示持久化');
+    }
+  },
+  {
+    name: 'engineer status control keeps current state read-only',
+    run: () => {
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+
+      assert(
+        appSource.includes('const isCurrentStatus = selectedTask.status === st;'),
+        '状态快控应明确识别当前状态'
+      );
+      assert(
+        appSource.includes('disabled={isCurrentStatus || isBlocked}'),
+        '当前状态按钮应禁用，避免工程师误以为可重复点击'
+      );
+      assert(
+        appSource.includes("title={isCurrentStatus ? '当前状态' : (blockReason || `切换至${st}`)}"),
+        '当前状态按钮应给出明确提示'
+      );
     }
   }
 ];
