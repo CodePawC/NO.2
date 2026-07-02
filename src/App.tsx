@@ -51,6 +51,7 @@ import { useAiSettings } from './hooks/useAiSettings';
 import { useSpeechRecognition } from './hooks/useSpeechRecognition';
 import { sendAssistantChat } from './services/aiApi';
 import { isSameDepartment, normalizeDepartmentName } from './utils/departmentUtils';
+import { getClinicalAcceptanceBlockReason, getEngineerStatusBlockReason } from './utils/taskWorkflow';
 import TaskStats from './components/TaskStats';
 import EquipmentArchives from './components/EquipmentArchives';
 
@@ -690,6 +691,17 @@ export default function App() {
     const targetTask = tasks.find(t => t.id === taskId);
     if (!targetTask) return;
 
+    const blockReason = getClinicalAcceptanceBlockReason(targetTask, currentSimulatedUser, currentUserRole);
+    if (blockReason) {
+      setChatMessages(prev => [...prev, {
+        id: `msg-accept-blocked-${Date.now()}`,
+        sender: 'assistant',
+        text: `⚠️ **无法完成验收签署**\n${blockReason}`,
+        timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+      }]);
+      return;
+    }
+
     const logMessage = `临床科室进行验收。确认评价：【${ratingValue}星】。评价意见：${ratingComment.trim() || '设备运行正常，质量完好，确认验收并结单。'}`;
     const newLog = {
       time: new Date().toLocaleString('zh-CN', { hour12: false }).slice(0, 16),
@@ -753,6 +765,31 @@ export default function App() {
   // Update status of selected task
   const handleUpdateStatus = (newStatus: TaskStatus) => {
     if (!selectedTask) return;
+    if (selectedTask.status === newStatus) return;
+
+    const blockReason = getEngineerStatusBlockReason(selectedTask, newStatus);
+    if (blockReason) {
+      const newLog = {
+        time: new Date().toLocaleString('zh-CN', { hour12: false }).slice(0, 16),
+        action: `状态变更被系统拦截：尝试从【${selectedTask.status}】改为【${newStatus}】。原因：${blockReason}`,
+        operator: activeLogOperator.trim() || '医学装备科人员'
+      };
+      const updatedTask: StructuredTicket = {
+        ...selectedTask,
+        logs: [...selectedTask.logs, newLog],
+        updatedAt: new Date().toISOString()
+      };
+
+      setTasks(prev => prev.map(t => t.id === selectedTask.id ? updatedTask : t));
+      setSelectedTask(updatedTask);
+      setChatMessages(prev => [...prev, {
+        id: `msg-status-blocked-${Date.now()}`,
+        sender: 'assistant',
+        text: `⚠️ **流转规则提醒**\n${blockReason}`,
+        timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+      }]);
+      return;
+    }
 
     const logMessage = `人工更改工单状态为【${newStatus}】。`;
     const newLog = {
@@ -2499,20 +2536,28 @@ export default function App() {
                 <div className="flex flex-wrap gap-1.5">
                   {([
                     '待确认', '待派工', '已派工', '处理中', '待科室验收', '已完成', '已归档', '已关闭'
-                  ] as TaskStatus[]).map((st) => (
-                    <button
-                      key={st}
-                      onClick={() => handleUpdateStatus(st)}
-                      className={`text-[11px] px-2.5 py-1 rounded-lg font-semibold border transition cursor-pointer ${
-                        selectedTask.status === st
-                          ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
-                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                      }`}
-                      id={`status-set-${st}`}
-                    >
-                      {st}
-                    </button>
-                  ))}
+                  ] as TaskStatus[]).map((st) => {
+                    const blockReason = getEngineerStatusBlockReason(selectedTask, st);
+                    const isBlocked = !!blockReason;
+                    return (
+                      <button
+                        key={st}
+                        onClick={() => handleUpdateStatus(st)}
+                        disabled={isBlocked}
+                        title={blockReason || `切换至${st}`}
+                        className={`text-[11px] px-2.5 py-1 rounded-lg font-semibold border transition ${
+                          selectedTask.status === st
+                            ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
+                            : isBlocked
+                              ? 'bg-slate-100 border-slate-200 text-slate-300 cursor-not-allowed'
+                              : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 cursor-pointer'
+                        }`}
+                        id={`status-set-${st}`}
+                      >
+                        {st}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
