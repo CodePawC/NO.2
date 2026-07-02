@@ -55,6 +55,7 @@ import { getDateDiffDaysFromToday } from './utils/dateUtils';
 import { isSameDepartment, normalizeDepartmentName } from './utils/departmentUtils';
 import { findUniqueEquipmentMatchForDraft, syncTasksToEquipmentArchives } from './utils/equipmentSync';
 import { EQUIPMENT_STORAGE_KEY, parseStoredEquipmentList } from './utils/equipmentStorage';
+import { repairMisroutedEquipmentTasks } from './utils/taskRepair';
 import { getDepartmentTasks, sortTasksByOperationalPriority } from './utils/taskOrdering';
 import { getClinicalAcceptanceBlockReason, getEngineerNextStatus, getEngineerStatusBlockReason, getEngineerWorkflowHint, getRecommendedRoutingForTask, needsClinicalAcceptance } from './utils/taskWorkflow';
 import TaskStats from './components/TaskStats';
@@ -142,7 +143,17 @@ const getStoredTasks = () => {
 
   try {
     const parsed = JSON.parse(saved);
-    return Array.isArray(parsed) ? mergeMissingPresetTasks(parsed) : INITIAL_TASKS;
+    if (!Array.isArray(parsed)) {
+      return INITIAL_TASKS;
+    }
+
+    const mergedTasks = mergeMissingPresetTasks(parsed);
+    const { tasks, repaired } = repairMisroutedEquipmentTasks(mergedTasks);
+    if (repaired || tasks.length !== parsed.length) {
+      localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(tasks));
+    }
+
+    return tasks;
   } catch (error) {
     console.warn('Failed to load persisted tasks, falling back to defaults:', error);
     return INITIAL_TASKS;

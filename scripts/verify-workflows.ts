@@ -2,6 +2,7 @@ import { addLocalDays, getDateDiffDaysFromToday, getLocalDateString, getLocalDat
 import { isSameDepartment } from '../src/utils/departmentUtils.ts';
 import { parseStoredEquipmentList } from '../src/utils/equipmentStorage.ts';
 import { findUniqueEquipmentMatchForDraft, syncTasksToEquipmentArchives } from '../src/utils/equipmentSync.ts';
+import { repairMisroutedEquipmentTasks } from '../src/utils/taskRepair.ts';
 import { getDepartmentTasks } from '../src/utils/taskOrdering.ts';
 import { getPresetPromptsForUser, PRESET_PROMPTS } from '../src/data/appPresets.ts';
 import { INITIAL_TASKS } from '../src/data/defaultTasks.ts';
@@ -344,6 +345,78 @@ const checks: Check[] = [
       });
       assert(canEngineerCloseTransferredTask(trueTransferTask), '真实非设备转派任务仍应可关闭留痕');
       assertEqual(needsClinicalAcceptance(trueTransferTask), false, '真实非设备转派任务不要求临床设备验收');
+    }
+  },
+  {
+    name: 'stored task repair restores misrouted medical equipment closures',
+    run: () => {
+      const now = new Date('2026-07-03T10:00:00+08:00');
+      const dirtyOpenTask = createTask({
+        id: 'TKT-VERIFY-DIRTY-OPEN',
+        taskType: '非设备类转派任务',
+        recommendedDept: '信息科',
+        deviceName: '呼吸机',
+        deviceId: 'EQ-DRG-8812',
+        urgency: '生命支持',
+        status: '待确认',
+        faultPhenomenon: 'ICU 呼吸机持续报警，病人正在使用'
+      });
+      const dirtyClosedTask = createTask({
+        id: 'TKT-VERIFY-DIRTY-CLOSED',
+        taskType: '非设备类转派任务',
+        recommendedDept: '信息科',
+        deviceName: '监护仪',
+        urgency: '生命支持',
+        status: '已关闭',
+        faultPhenomenon: '监护仪系统报警，病人正在使用中',
+        clinicalAcceptance: undefined
+      });
+      const trueTransferTask = createTask({
+        id: 'TKT-VERIFY-TRUE-TRANSFER',
+        taskType: '非设备类转派任务',
+        recommendedDept: '信息科',
+        deviceName: '诊室电脑',
+        status: '已关闭',
+        faultPhenomenon: '诊室电脑 HIS 系统无法登录，网络红叉'
+      });
+
+      const { tasks, repaired } = repairMisroutedEquipmentTasks([dirtyOpenTask, dirtyClosedTask, trueTransferTask], now);
+      const repairedOpenTask = tasks.find(task => task.id === dirtyOpenTask.id);
+      const repairedClosedTask = tasks.find(task => task.id === dirtyClosedTask.id);
+      const untouchedTransferTask = tasks.find(task => task.id === trueTransferTask.id);
+
+      assert(repaired, '历史误分类医学装备单应触发修正');
+      assertEqual(repairedOpenTask?.taskType, '生命支持设备应急', '误标转派的呼吸机单应恢复为生命支持设备应急');
+      assertEqual(repairedOpenTask?.recommendedDept, '医学装备科', '误标转派的呼吸机单应恢复医学装备科归口');
+      assertIncludes(repairedOpenTask?.notes || '', '历史误分类', '修正后的开放工单应保留自愈说明');
+
+      assertEqual(repairedClosedTask?.taskType, '生命支持设备应急', '误标转派的监护仪单应恢复为生命支持设备应急');
+      assertEqual(repairedClosedTask?.status, '待确认', '误关闭且未临床验收的医学装备单应重新开放到待确认');
+      assertEqual(repairedClosedTask?.updatedAt, now.toISOString(), '重新开放的医学装备单应更新时间戳');
+      assert(
+        repairedClosedTask?.logs.some(log => log.operator === '系统自愈' && log.action.includes('重新开放历史误关闭医学装备单')),
+        '重新开放的医学装备单应写入系统自愈日志'
+      );
+
+      assertEqual(untouchedTransferTask?.taskType, '非设备类转派任务', '真实电脑网络转派单不能被历史修正误改');
+      assertEqual(untouchedTransferTask?.status, '已关闭', '真实电脑网络转派单应保持原关闭状态');
+
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const storedStart = appSource.indexOf('const getStoredTasks = () => {');
+      const storedEnd = appSource.indexOf('export default function App()', storedStart);
+      assert(storedStart !== -1 && storedEnd > storedStart, '应能定位本地任务读取逻辑');
+      const storedSource = appSource.slice(storedStart, storedEnd);
+      assert(
+        storedSource.includes('repairMisroutedEquipmentTasks(mergedTasks)') &&
+          storedSource.includes('localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(tasks));'),
+        '修正后的历史任务应写回本地存储，避免每次加载重复修补'
+      );
+
+      const misroutedRouting = getRecommendedRoutingForTask('非设备类转派任务', 'ICU 呼吸机持续报警，病人正在使用');
+      assertEqual(misroutedRouting.recommendedDept, '医学装备科', '误分类的呼吸机历史单应能被识别为医学装备科');
+
+      const trueTransferRouting = getRecommendedRoutingForTask('非设备类转派任务', '诊室电脑 HIS 系统无法登录，网络红叉');
+      assertEqual(trueTransferRouting.recommendedDept, '信息科', '真实电脑网络历史转派单不能被历史修正误改');
     }
   },
   {
