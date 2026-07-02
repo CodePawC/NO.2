@@ -376,6 +376,25 @@ const checks: Check[] = [
         '档案快捷报修必须在父组件接受后再更新资产档案'
       );
     }
+  },
+  {
+    name: 'clinical task detail does not expose archive creation action',
+    run: () => {
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const clinicalStart = appSource.indexOf("{currentUserRole === 'medical_staff' ? (");
+      const engineerStart = appSource.indexOf(') : selectedTask ? (', clinicalStart);
+      assert(clinicalStart !== -1 && engineerStart > clinicalStart, '应能定位临床任务详情视图');
+      const clinicalDetailSource = appSource.slice(clinicalStart, engineerStart);
+
+      assert(
+        clinicalDetailSource.includes('请等待医学装备科完成检索建档'),
+        '临床端未关联档案时应显示等待装备科处理的只读提示'
+      );
+      assert(
+        !clinicalDetailSource.includes('<span>检索建档</span>'),
+        '临床端任务详情不能暴露工程师检索建档按钮'
+      );
+    }
   }
 ];
 

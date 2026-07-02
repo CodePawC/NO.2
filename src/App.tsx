@@ -2177,20 +2177,13 @@ export default function App() {
                         );
                       } else {
                         return (
-                          <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl flex items-center justify-between gap-3">
+                          <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl">
                             <div className="space-y-0.5">
                               <div className="text-[10px] font-bold text-slate-500">设备电子档案未关联</div>
-                              <p className="text-[11px] text-slate-600 font-medium">当前工单尚未绑定医院在册设备。</p>
+                              <p className="text-[11px] text-slate-600 font-medium">
+                                当前工单尚未绑定医院在册设备，请等待医学装备科完成检索建档。
+                              </p>
                             </div>
-                            <button
-                              onClick={() => {
-                                setCurrentWorkspace('archives');
-                              }}
-                              className="flex items-center gap-1 text-[11px] font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-2.5 py-1.5 rounded-lg transition cursor-pointer shrink-0"
-                            >
-                              <Plus className="w-3.5 h-3.5 text-slate-400" />
-                              <span>检索建档</span>
-                            </button>
                           </div>
                         );
                       }
