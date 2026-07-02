@@ -173,14 +173,14 @@ export default function App() {
     description: string;
     urgency: 'low' | 'medium' | 'high';
     workOrderNo: string;
-  }) => {
+  }): boolean => {
     if (
       currentUserRole === 'medical_staff' &&
       currentSimulatedUser.role === 'medical_staff' &&
       !isSameDepartment(equipment.dept, currentSimulatedUser.department || currentSimulatedUser.dept)
     ) {
       appendWorkflowNotice(`⚠️ **快捷报修权限提醒**\n当前临床账号只能为本科室设备同步主工单。设备【${equipment.deviceName}】归属【${equipment.dept}】，当前账号归属【${currentSimulatedUser.department || currentSimulatedUser.dept}】。`, 'msg-quick-repair-blocked');
-      return;
+      return false;
     }
 
     const urgencyLevel: UrgencyLevel = urgency === 'high'
@@ -237,6 +237,7 @@ export default function App() {
       text: `🚑 **资产档案快捷报修已同步主工单**\n设备：**${equipment.deviceName}**\n主工单：**${newTicketId}**\n档案维修单：**${workOrderNo}**\n\n工程师现在可以在任务流转助手中接单处理，后续仍需临床科室验收闭环。`,
       timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
     }]);
+    return true;
   };
 
   // Role and Auth Simulation States

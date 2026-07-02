@@ -401,7 +401,7 @@ export default function EquipmentArchives({
 }: {
   onBackToTasks?: () => void;
   onReportRepairFromEquip?: (equip: MedicalEquipment) => void;
-  onQuickRepairCreated?: (request: QuickRepairRequest) => void;
+  onQuickRepairCreated?: (request: QuickRepairRequest) => boolean | void;
   tasks?: StructuredTicket[];
   currentUser?: UserProfile;
   onUserChange?: (user: UserProfile) => void;
@@ -1066,6 +1066,8 @@ export default function EquipmentArchives({
     }
 
     const workOrderNo = createQuickRepairRecord(targetEq, quickRepairDesc.trim(), quickRepairUrgency);
+    if (!workOrderNo) return;
+
     setIsQuickRepairModalOpen(false);
     setQuickRepairDesc('');
     setQuickRepairUrgency('medium');
@@ -1497,8 +1499,33 @@ Clinical class: Life-saving respiratory device`;
     description: string,
     urgency: 'low' | 'medium' | 'high'
   ) => {
+    if (!canCurrentUserReportEquipment(targetEq)) {
+      setQuickRepairToast({
+        type: 'warning',
+        message: `当前临床账号只能为本科室设备发起报修：${currentUserDepartment}`
+      });
+      setTimeout(() => setQuickRepairToast(null), 5000);
+      return '';
+    }
+
     const today = getLocalDateString();
     const workOrderNo = createQuickRepairWorkOrderNo(equipments, today);
+    const parentAccepted = onQuickRepairCreated?.({
+      equipment: targetEq,
+      description,
+      urgency,
+      workOrderNo
+    });
+
+    if (parentAccepted === false) {
+      setQuickRepairToast({
+        type: 'warning',
+        message: `当前登录身份无法同步该设备主工单，请确认设备归属科室：${targetEq.dept}`
+      });
+      setTimeout(() => setQuickRepairToast(null), 5000);
+      return '';
+    }
+
     const repairLog: MaintenanceLog = {
       id: 'm-log-' + Date.now(),
       type: '维修',
@@ -1527,13 +1554,6 @@ Clinical class: Life-saving respiratory device`;
     setEquipments(updatedEquipments);
     localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(updatedEquipments));
 
-    onQuickRepairCreated?.({
-      equipment: targetEq,
-      description,
-      urgency,
-      workOrderNo
-    });
-
     return workOrderNo;
   };
 
@@ -1551,6 +1571,8 @@ Clinical class: Life-saving respiratory device`;
       const description = '科室通过快速报修渠道紧急申报，描述：设备发生突发性故障，无法正常开机或运行中断。';
       const urgency: 'medium' | 'high' = selectedEquipment.category === '急救生命支持' || selectedEquipment.riskLevel === '高' ? 'high' : 'medium';
       const workOrderNo = createQuickRepairRecord(selectedEquipment, description, urgency);
+      if (!workOrderNo) return;
+
       setQuickRepairToast({
         type: 'success',
         message: `报修成功：${selectedEquipment.deviceName} 已同步生成主工单与档案维修记录 ${workOrderNo}`

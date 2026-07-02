@@ -345,8 +345,35 @@ const checks: Check[] = [
         '快捷报修回调应校验设备归属科室'
       );
       assert(
-        callbackSource.includes('msg-quick-repair-blocked') && callbackSource.includes('return;'),
+        callbackSource.includes('msg-quick-repair-blocked') && callbackSource.includes('return false;'),
         '快捷报修回调应阻断跨科室设备同步主工单'
+      );
+      assert(
+        callbackSource.includes('return true;'),
+        '快捷报修回调成功同步主工单后应返回确认结果'
+      );
+    }
+  },
+  {
+    name: 'quick archive repair mutates archive only after parent accepts',
+    run: () => {
+      const archiveSource = readFileSync('src/components/EquipmentArchives.tsx', 'utf8');
+      const createStart = archiveSource.indexOf('const createQuickRepairRecord = (');
+      const createEnd = archiveSource.indexOf('const handleQuickRepair = () =>');
+      assert(createStart !== -1 && createEnd > createStart, '应能定位档案快捷报修写入逻辑');
+      const createSource = archiveSource.slice(createStart, createEnd);
+
+      assert(
+        createSource.includes('const parentAccepted = onQuickRepairCreated?.({'),
+        '档案快捷报修应先请求父组件同步主工单'
+      );
+      assert(
+        createSource.includes('if (parentAccepted === false)'),
+        '父组件拒绝同步主工单时，档案快捷报修应停止写入'
+      );
+      assert(
+        createSource.indexOf('const parentAccepted = onQuickRepairCreated?.({') < createSource.indexOf('setEquipments(updatedEquipments)'),
+        '档案快捷报修必须在父组件接受后再更新资产档案'
       );
     }
   }
