@@ -116,7 +116,7 @@ export default function App() {
   const [currentWorkspace, setCurrentWorkspace] = useState<'tasks' | 'archives'>('tasks');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  const [allEquipments, setAllEquipments] = useState<any[]>(() => {
+  const [allEquipments, setAllEquipments] = useState<MedicalEquipment[]>(() => {
     const saved = localStorage.getItem('medical_equipment_data');
     if (saved) {
       try { return JSON.parse(saved); } catch (e) {}
@@ -467,13 +467,12 @@ export default function App() {
     // Automatically sync latest tasks status to equipment archives
     try {
       const savedEquips = localStorage.getItem('medical_equipment_data');
-      if (savedEquips) {
-        const { equipments: equipmentsList, changed } = syncTasksToEquipmentArchives(tasks, JSON.parse(savedEquips));
-        
-        if (changed) {
-          localStorage.setItem('medical_equipment_data', JSON.stringify(equipmentsList));
-          setAllEquipments(equipmentsList);
-        }
+      const equipmentSource = savedEquips ? JSON.parse(savedEquips) : DEFAULT_EQUIPMENT;
+      const { equipments: equipmentsList, changed } = syncTasksToEquipmentArchives(tasks, equipmentSource);
+
+      if (changed || !savedEquips) {
+        localStorage.setItem('medical_equipment_data', JSON.stringify(equipmentsList));
+        setAllEquipments(equipmentsList);
       }
     } catch (err) {
       console.error("Auto-sync tasks to equipments error:", err);
