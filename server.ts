@@ -33,9 +33,42 @@ app.get('/api/health', (req, res) => {
 });
 
 /// Helper to generate a structured fallback payload when Gemini is unavailable or not configured
+const DEPARTMENT_ALIASES: Record<string, string> = {
+  ICU: '重症医学科 (ICU)',
+  重症: '重症医学科 (ICU)',
+  重症科: '重症医学科 (ICU)',
+  重症医学科: '重症医学科 (ICU)',
+  急诊: '急诊科',
+  急诊科: '急诊科',
+  放射: '放射科',
+  放射科: '放射科',
+  妇产: '妇产科',
+  妇产科: '妇产科',
+  胃镜: '胃镜室',
+  胃镜室: '胃镜室',
+  手术: '手术室',
+  手术室: '手术室',
+  呼吸: '呼吸内科',
+  呼吸内科: '呼吸内科',
+  儿科: '儿科',
+  检验: '检验科',
+  检验科: '检验科',
+  超声: '超声科',
+  超声科: '超声科'
+};
+
+function normalizeDepartmentName(department?: string) {
+  const cleaned = department?.trim();
+  if (!cleaned) return '';
+
+  return DEPARTMENT_ALIASES[cleaned.toUpperCase()] || DEPARTMENT_ALIASES[cleaned] || cleaned;
+}
+
 function getRuleBasedFallback(message: string, currentDraft: any, isApiError: boolean = false, currentUser?: any) {
   const textLower = message.toLowerCase();
   const draft = currentDraft || {};
+  const currentUserDepartment = normalizeDepartmentName(currentUser?.department || currentUser?.dept);
+  const isClinicalUser = currentUser?.role === 'medical_staff' && !!currentUserDepartment;
   
   // 1. Task Type
   let taskType = '设备报修';
@@ -58,10 +91,13 @@ function getRuleBasedFallback(message: string, currentDraft: any, isApiError: bo
   }
 
   // 2. Department
-  let department = draft.department || null;
-  const deptMatch = message.match(/(icu|急诊|放射|妇产|胃镜|儿科|外科|内科|手术室|胃镜室|门诊|住院)/i);
-  if (deptMatch) {
-    department = deptMatch[0].toUpperCase();
+  let department = draft.department ? normalizeDepartmentName(draft.department) : null;
+  const deptMatch = message.match(/(呼吸内科|重症医学科|急诊科|放射科|妇产科|胃镜室|手术室|检验科|超声科|icu|急诊|放射|妇产|胃镜|儿科|呼吸|手术)/i);
+  const extractedDepartment = deptMatch ? normalizeDepartmentName(deptMatch[0]) : '';
+  if (isClinicalUser) {
+    department = currentUserDepartment;
+  } else if (extractedDepartment) {
+    department = extractedDepartment;
   }
 
   // 3. Location
@@ -94,17 +130,21 @@ function getRuleBasedFallback(message: string, currentDraft: any, isApiError: bo
   const recommendedDept = taskType === '非设备类转派任务' ? '信息科' : (draft.recommendedDept || '医学装备科');
 
   // 9. Contacts
-  let contactPerson = draft.contactPerson || '科室医护人员';
+  let contactPerson = isClinicalUser ? currentUser.name : (draft.contactPerson || '科室医护人员');
   const contactMatch = message.match(/(周医生|王护士|李医生|张医生|刘护士|陈工|赵主任)/);
-  if (contactMatch) {
+  if (!isClinicalUser && contactMatch) {
     contactPerson = contactMatch[0];
   }
   
-  let contactPhone = draft.contactPhone || '未提取';
+  let contactPhone = isClinicalUser ? (currentUser.phone || draft.contactPhone || '未提取') : (draft.contactPhone || '未提取');
   const phoneMatch = message.match(/(1[3-9]\d{9}|\d{3,4}-\d{7,8}|\d{4})/);
-  if (phoneMatch) {
+  if (!isClinicalUser && phoneMatch) {
     contactPhone = phoneMatch[0];
   }
+
+  const notes = isClinicalUser && extractedDepartment && extractedDepartment !== currentUserDepartment
+    ? `AI原始识别科室为 [${extractedDepartment}]，已按当前登录临床用户归属规范化为 [${currentUserDepartment}]。`
+    : (draft.notes || '');
 
   const faultPhenomenon = message;
 
@@ -133,7 +173,8 @@ function getRuleBasedFallback(message: string, currentDraft: any, isApiError: bo
       recommendedDept,
       aiStatus: 'AI待补全',
       contactPerson,
-      contactPhone
+      contactPhone,
+      notes
     },
     aiSuggestions: [
       '已启用本地应急智能过滤规则自动研判。',
@@ -270,7 +311,9 @@ app.post('/api/assistant/test-config', async (req, res) => {
 
 // API: Core AI Assistant Chat Endpoint
 app.post('/api/assistant/chat', async (req, res) => {
-  const { message, currentDraft, history, config, user } = req.body;
+  const { message, currentDraft, history } = req.body;
+  const config = req.body?.config || req.body?.activeConfig;
+  const user = req.body?.user || req.body?.currentUser;
   if (!message) {
     res.status(400).json({ error: 'Message cannot be empty' });
     return;
@@ -380,7 +423,7 @@ app.post('/api/assistant/chat', async (req, res) => {
       const apiKeyToUse = configToUse.apiKey || process.env.GEMINI_API_KEY;
       if (!apiKeyToUse) {
         console.log('No Gemini API key specified for native client. Falling back to local heuristics.');
-        const fallbackPayload = getRuleBasedFallback(message, currentDraft, false);
+        const fallbackPayload = getRuleBasedFallback(message, currentDraft, false, user);
         res.json(fallbackPayload);
         return;
       }
@@ -579,7 +622,7 @@ app.post('/api/assistant/chat', async (req, res) => {
   } catch (error: any) {
     console.error('Error handling assistant chat, triggering rule-based fallback:', error);
     try {
-      const fallbackPayload = getRuleBasedFallback(message, currentDraft, true);
+      const fallbackPayload = getRuleBasedFallback(message, currentDraft, true, user);
       res.json(fallbackPayload);
     } catch (fallbackError: any) {
       console.error('Fatal failure in fallback generator:', fallbackError);

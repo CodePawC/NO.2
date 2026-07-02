@@ -572,6 +572,40 @@ const checks: Check[] = [
         '切回临床同科室时应保留当前聚焦工单，避免关闭转派单被列表排序切走'
       );
     }
+  },
+  {
+    name: 'assistant fallback keeps clinical user context on the server',
+    run: () => {
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+      assert(
+        appSource.includes('activeConfig: activeConfig') && appSource.includes('currentUser: currentSimulatedUser'),
+        '前端应把当前模型配置与当前用户上下文发给服务端'
+      );
+
+      const serverSource = readFileSync('server.ts', 'utf8');
+      assert(
+        serverSource.includes("req.body?.config || req.body?.activeConfig") &&
+          serverSource.includes("req.body?.user || req.body?.currentUser"),
+        '服务端应兼容前端 activeConfig/currentUser 字段'
+      );
+      assert(
+        serverSource.includes("currentUser?.role === 'medical_staff'") &&
+          serverSource.includes('department = currentUserDepartment') &&
+          serverSource.includes('AI原始识别科室为'),
+        '服务端本地降级应按临床登录科室规范化草稿科室'
+      );
+      assert(
+        serverSource.includes('getRuleBasedFallback(message, currentDraft, false, user)') &&
+          serverSource.includes('getRuleBasedFallback(message, currentDraft, true, user)'),
+        '无 API Key 或模型异常时，服务端 fallback 都应保留当前用户上下文'
+      );
+
+      const indexSource = readFileSync('index.html', 'utf8');
+      assert(
+        indexSource.includes('<title>医学装备数字化平台</title>'),
+        '浏览器标签标题应使用产品名称而不是模板默认名'
+      );
+    }
   }
 ];
 
