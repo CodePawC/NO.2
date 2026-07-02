@@ -45,9 +45,9 @@ export default function MaintenanceCalendar({
   setIsLogModalOpen,
   currentUser
 }: MaintenanceCalendarProps) {
-  // Current calendar view date: default to July 2026 (matching system metadata local time)
-  const [currentYear, setCurrentYear] = useState(2026);
-  const [currentMonth, setCurrentMonth] = useState(6); // July (0-indexed, so 6 is July)
+  const today = new Date();
+  const [currentYear, setCurrentYear] = useState(() => today.getFullYear());
+  const [currentMonth, setCurrentMonth] = useState(() => today.getMonth());
 
   // Simulated logged-in engineer workspace state
   const [currentEngineer, setCurrentEngineer] = useState<string>('all'); // 'all' or specific engineer name
@@ -93,7 +93,7 @@ export default function MaintenanceCalendar({
   const [isDeployMode, setIsDeployMode] = useState(false);
   const [deployEquipmentId, setDeployEquipmentId] = useState('');
   const [deployTaskType, setDeployTaskType] = useState<'maintenance' | 'calibration' | 'repair'>('maintenance');
-  const [deployDate, setDeployDate] = useState('2026-07-15');
+  const [deployDate, setDeployDate] = useState(getLocalDateString);
   const [deployEngineer, setDeployEngineer] = useState('王强');
   const [deployNotes, setDeployNotes] = useState('');
   const [deploySearchQuery, setDeploySearchQuery] = useState('');

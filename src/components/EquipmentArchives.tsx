@@ -11,7 +11,7 @@ import { SIMULATED_USERS } from '../data/appPresets';
 import { analyzeGeminiContent, chatWithGeminiExpert } from '../services/aiApi';
 import { isSameDepartment } from '../utils/departmentUtils';
 import { EQUIPMENT_STORAGE_KEY, parseStoredEquipmentList } from '../utils/equipmentStorage';
-import { getDateDiffDaysFromToday, getLocalDateString, getLocalDateTimeString } from '../utils/dateUtils';
+import { addLocalDays, getDateDiffDaysFromToday, getLocalDateString, getLocalDateTimeString } from '../utils/dateUtils';
 import MaintenanceCalendar from './MaintenanceCalendar';
 import BudgetStackedChart from './BudgetStackedChart';
 
@@ -528,7 +528,7 @@ export default function EquipmentArchives({
   
   // Log Add State
   const [newLogType, setNewLogType] = useState<'维修' | '保养'>('保养');
-  const [newLogDate, setNewLogDate] = useState(new Date().toISOString().split('T')[0]);
+  const [newLogDate, setNewLogDate] = useState(getLocalDateString);
   const [newLogTechnician, setNewLogTechnician] = useState('');
   const [newLogDescription, setNewLogDescription] = useState('');
   const [newLogCost, setNewLogCost] = useState(0);
@@ -540,7 +540,7 @@ export default function EquipmentArchives({
   const [newLogPmChecklist, setNewLogPmChecklist] = useState<string[]>(['外观清洁检查', '电源与接地安全', '功能自检测试']);
 
   // Calibration Add State
-  const [newCalDate, setNewCalDate] = useState(new Date().toISOString().split('T')[0]);
+  const [newCalDate, setNewCalDate] = useState(getLocalDateString);
   const [newCalAgency, setNewCalAgency] = useState('');
   const [newCalCertificateNo, setNewCalCertificateNo] = useState('');
   const [newCalResult, setNewCalResult] = useState<'合格' | '准用' | '限用' | '不合格'>('合格');
@@ -864,7 +864,7 @@ export default function EquipmentArchives({
     setFormDept('放射科');
     setFormStatus('正常运行');
     setFormRiskLevel('中');
-    setFormPurchaseDate(new Date().toISOString().split('T')[0]);
+    setFormPurchaseDate(getLocalDateString());
     setFormPurchaseCost(0);
     setFormMaintenanceCycleDays(180);
     setFormCalibrationRequired(false);
@@ -926,7 +926,7 @@ export default function EquipmentArchives({
     setFormDept(eq.dept);
     setFormStatus('正常运行');
     setFormRiskLevel(eq.riskLevel);
-    setFormPurchaseDate(new Date().toISOString().split('T')[0]);
+    setFormPurchaseDate(getLocalDateString());
     setFormPurchaseCost(eq.purchaseCost);
     setFormMaintenanceCycleDays(eq.maintenanceCycleDays);
     setFormCalibrationRequired(eq.calibrationRequired);
@@ -952,13 +952,11 @@ export default function EquipmentArchives({
     }
 
     // Calc Next maintenance date automatically based on purchase date/last maintenance
-    const purchaseDateObj = new Date(formPurchaseDate);
-    const nextMaintenanceObj = new Date(purchaseDateObj.getTime() + formMaintenanceCycleDays * 24 * 60 * 60 * 1000);
-    const nextMaintenanceStr = nextMaintenanceObj.toISOString().split('T')[0];
+    const nextMaintenanceStr = addLocalDays(formPurchaseDate, formMaintenanceCycleDays);
 
     // Calc next calibration date
     const nextCalibrationStr = formCalibrationRequired 
-      ? new Date(purchaseDateObj.getTime() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+      ? addLocalDays(formPurchaseDate, 365)
       : undefined;
 
     if (formMode === 'create') {
@@ -1113,7 +1111,7 @@ export default function EquipmentArchives({
           status: updatedStatus,
           lastMaintenanceDate: log.type === '保养' ? log.date : eq.lastMaintenanceDate,
           nextMaintenanceDate: log.type === '保养' 
-            ? new Date(new Date(log.date).getTime() + eq.maintenanceCycleDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+            ? addLocalDays(log.date, eq.maintenanceCycleDays)
             : eq.nextMaintenanceDate,
           maintenanceLogs: updatedLogs
         };
@@ -1235,7 +1233,7 @@ export default function EquipmentArchives({
       name: newAttachName + (newAttachName.includes('.') ? '' : '.pdf'),
       type: newAttachType,
       size: newAttachSize || '2.0 MB',
-      uploadDate: new Date().toISOString().split('T')[0]
+      uploadDate: getLocalDateString()
     };
 
     setEquipments(equipments.map(eq => {
@@ -1300,7 +1298,7 @@ Clinical class: Life-saving respiratory device`;
           setFormCalibrationRequired(data.calibrationRequired || false);
           setFormRiskLevel(data.riskLevel || '中');
           setFormDept('放射科');
-          setFormPurchaseDate(new Date().toISOString().split('T')[0]);
+          setFormPurchaseDate(getLocalDateString());
           setFormPurchaseCost(45000); // Placeholder cost
           setFormStatus('正常运行');
           
@@ -1341,7 +1339,7 @@ Clinical class: Life-saving respiratory device`;
           setFormCalibrationRequired(data.calibrationRequired || false);
           setFormRiskLevel(data.riskLevel || '中');
           setFormDept('医学装备科');
-          setFormPurchaseDate(new Date().toISOString().split('T')[0]);
+          setFormPurchaseDate(getLocalDateString());
           setFormPurchaseCost(0);
           setFormStatus('正常运行');
 
@@ -1429,7 +1427,7 @@ Clinical class: Life-saving respiratory device`;
             setFormCalibrationRequired(parsed.calibrationRequired || false);
             setFormRiskLevel(parsed.riskLevel || '中');
             setFormDept('医学装备科');
-            setFormPurchaseDate(new Date().toISOString().split('T')[0]);
+            setFormPurchaseDate(getLocalDateString());
             setFormPurchaseCost(0);
             setFormStatus('正常运行');
 
@@ -1578,7 +1576,7 @@ Clinical class: Life-saving respiratory device`;
         pageNum: page.pageNum,
         title: page.title,
         imageUrl: page.diagramType, // Stores visual representation type
-        extractedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+        extractedAt: getLocalDateTimeString(),
         sourceFileName: previewFile.name,
         notes: `从《${previewFile.name}》第 ${page.pageNum} 页中智能提取。已完成高精度 OCR 元数据索引，核心规范包含:「${page.lines[0] || ''}」。已被临床工程师确认为该医学装备的核心技术参考与合规判据。`
       };
@@ -3538,7 +3536,7 @@ Clinical class: Life-saving respiratory device`;
                       const encodedUri = encodeURI(csvContent);
                       const link = document.createElement("a");
                       link.setAttribute("href", encodedUri);
-                      link.setAttribute("download", `医学装备资产台账明细_${assetScopeLabel}_${new Date().toISOString().slice(0,10)}.csv`);
+                      link.setAttribute("download", `医学装备资产台账明细_${assetScopeLabel}_${getLocalDateString()}.csv`);
                       document.body.appendChild(link);
                       link.click();
                       document.body.removeChild(link);

@@ -7,6 +7,15 @@ export const getLocalDateString = (date = new Date()) => {
   return `${year}-${month}-${day}`;
 };
 
+export const addLocalDays = (dateStr: string, days: number) => {
+  const parsedTime = getLocalDateOnlyTime(dateStr);
+  const date = parsedTime === null || Number.isNaN(parsedTime) ? new Date(dateStr) : new Date(parsedTime);
+  if (Number.isNaN(date.getTime())) return getLocalDateString();
+
+  date.setDate(date.getDate() + days);
+  return getLocalDateString(date);
+};
+
 export const getLocalDateTimeString = (date = new Date()) => {
   const hours = String(date.getHours()).padStart(2, '0');
   const minutes = String(date.getMinutes()).padStart(2, '0');
