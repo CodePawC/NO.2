@@ -668,6 +668,29 @@ const checks: Check[] = [
     }
   },
   {
+    name: 'clinical task detail hides engineer management actions',
+    run: () => {
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const clinicalStart = appSource.indexOf("{currentUserRole === 'medical_staff' ? (");
+      const engineerStart = appSource.indexOf(') : selectedTask ? (', clinicalStart);
+      assert(clinicalStart !== -1 && engineerStart > clinicalStart, '应能定位临床任务详情视图');
+      const clinicalDetailSource = appSource.slice(clinicalStart, engineerStart);
+
+      assert(
+        !clinicalDetailSource.includes('handleDeleteTask') &&
+          !clinicalDetailSource.includes('btn-delete-') &&
+          !clinicalDetailSource.includes('Trash2'),
+        '临床任务详情不能暴露工程师删除工单入口'
+      );
+      assert(
+        !clinicalDetailSource.includes('handleUpdateStatus') &&
+          !clinicalDetailSource.includes('status-set-') &&
+          !clinicalDetailSource.includes('流转状态快速调节器'),
+        '临床任务详情不能暴露工程师状态快控入口'
+      );
+    }
+  },
+  {
     name: 'clinical role switch preserves the focused same-department task',
     run: () => {
       const appSource = readFileSync('src/App.tsx', 'utf8');
