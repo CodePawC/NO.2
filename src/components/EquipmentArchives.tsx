@@ -774,7 +774,7 @@ export default function EquipmentArchives({
     }
   }, [currentUser, onlyMyDept, clinicalFilterMode, selectedDept, selectedCategory, selectedStatus, searchTerm, equipments]);
 
-  const selectedEquipment = visibleEquipments.find(eq => eq.id === selectedId) || visibleEquipments[0] || equipments[0];
+  const selectedEquipment = visibleEquipments.find(eq => eq.id === selectedId) || visibleEquipments[0] || null;
 
   // Refresh AI Chat context on device select change
   useEffect(() => {

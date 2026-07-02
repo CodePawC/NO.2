@@ -310,6 +310,21 @@ const checks: Check[] = [
         '当前状态按钮应给出明确提示'
       );
     }
+  },
+  {
+    name: 'clinical archive selection never falls back to hidden equipment',
+    run: () => {
+      const archiveSource = readFileSync('src/components/EquipmentArchives.tsx', 'utf8');
+
+      assert(
+        archiveSource.includes('const selectedEquipment = visibleEquipments.find(eq => eq.id === selectedId) || visibleEquipments[0] || null;'),
+        '临床无可见资产时应显示空态，不能回退到全院第一台设备'
+      );
+      assert(
+        !archiveSource.includes('|| visibleEquipments[0] || equipments[0]'),
+        '选中设备不能绕过 visibleEquipments 回退到隐藏资产'
+      );
+    }
   }
 ];
 
