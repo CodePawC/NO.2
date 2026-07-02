@@ -5149,7 +5149,7 @@ Clinical class: Life-saving respiratory device`;
                 <div className="grid grid-cols-2 gap-x-6 gap-y-3.5 text-xs py-4 border-b border-dashed border-slate-200">
                   <div>
                     <span className="text-slate-400">医学装备名称:</span>
-                    <strong className="text-slate-800 ml-1.5">{selectedEquipment?.name}</strong>
+                    <strong className="text-slate-800 ml-1.5">{selectedEquipment?.deviceName}</strong>
                   </div>
                   <div>
                     <span className="text-slate-400">工单备案号:</span>
@@ -5161,7 +5161,7 @@ Clinical class: Life-saving respiratory device`;
                   </div>
                   <div>
                     <span className="text-slate-400">医院资产编号:</span>
-                    <span className="text-slate-800 ml-1.5 font-mono">{selectedEquipment?.assetNo || 'HA-0081-392'}</span>
+                    <span className="text-slate-800 ml-1.5 font-mono">{selectedEquipment?.id}</span>
                   </div>
                   <div>
                     <span className="text-slate-400">生产厂商/品牌:</span>
@@ -5169,7 +5169,7 @@ Clinical class: Life-saving respiratory device`;
                   </div>
                   <div>
                     <span className="text-slate-400">使用临床科室:</span>
-                    <span className="text-slate-800 ml-1.5 bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-medium">{selectedEquipment?.department}</span>
+                    <span className="text-slate-800 ml-1.5 bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-medium">{selectedEquipment?.dept}</span>
                   </div>
                 </div>
 
@@ -5353,11 +5353,11 @@ Clinical class: Life-saving respiratory device`;
                       </div>
                       <div>
                         <span className="font-bold text-slate-400 mr-1 inline-block w-14">设备名称:</span>
-                        <strong className="text-slate-900">{selectedEquipment?.name}</strong>
+                        <strong className="text-slate-900">{selectedEquipment?.deviceName}</strong>
                       </div>
                       <div>
                         <span className="font-bold text-slate-400 mr-1 inline-block w-14">安装科室:</span>
-                        <span className="font-medium text-slate-800">{selectedEquipment?.department}</span>
+                        <span className="font-medium text-slate-800">{selectedEquipment?.dept}</span>
                       </div>
                       <div className="grid grid-cols-2 gap-1 pt-1 border-t border-slate-100">
                         <div>
@@ -5419,11 +5419,11 @@ Clinical class: Life-saving respiratory device`;
                       </div>
                       <div>
                         <span className="text-slate-400">计量器具名称:</span>
-                        <span className="text-slate-800 ml-1.5 font-semibold">{selectedEquipment?.name}</span>
+                        <span className="text-slate-800 ml-1.5 font-semibold">{selectedEquipment?.deviceName}</span>
                       </div>
                       <div>
                         <span className="text-slate-400">设备出厂编号:</span>
-                        <span className="text-slate-800 ml-1.5 font-mono">{selectedEquipment?.serialNo || 'SN-UNASSIGNED'}</span>
+                        <span className="text-slate-800 ml-1.5 font-mono">{selectedEquipment?.sn || 'SN-UNASSIGNED'}</span>
                       </div>
                     </div>
 
