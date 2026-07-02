@@ -18,6 +18,10 @@ const canCloseWithoutClinicalAcceptance = (task: StructuredTicket) => {
   return task.status !== '已完成' && !TERMINAL_STATUSES.includes(task.status) && canEngineerCloseTransferredTask(task);
 };
 
+export const needsClinicalAcceptance = (task: StructuredTicket) => {
+  return !canEngineerCloseTransferredTask(task);
+};
+
 export const getEngineerNextStatus = (task: StructuredTicket): TaskStatus | null => {
   if (task.status === '已完成') {
     return '已归档';
@@ -114,6 +118,11 @@ export const getClinicalAcceptanceBlockReason = (
 
   if (!isSameDepartment(task.department, user.department || user.dept)) {
     return '只能验收当前登录科室名下的工单。';
+  }
+
+  if (!needsClinicalAcceptance(task)) {
+    const targetDept = task.recommendedDept?.trim() || '责任科室';
+    return `此单已转派【${targetDept}】处理，不需要临床进行设备维修验收。`;
   }
 
   if (task.status !== '待科室验收') {

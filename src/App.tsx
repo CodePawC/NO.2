@@ -56,7 +56,7 @@ import { isSameDepartment, normalizeDepartmentName } from './utils/departmentUti
 import { syncTasksToEquipmentArchives } from './utils/equipmentSync';
 import { EQUIPMENT_STORAGE_KEY, parseStoredEquipmentList } from './utils/equipmentStorage';
 import { getDepartmentTasks, sortTasksByOperationalPriority } from './utils/taskOrdering';
-import { getClinicalAcceptanceBlockReason, getEngineerNextStatus, getEngineerStatusBlockReason, getEngineerWorkflowHint, getRecommendedRoutingForTask } from './utils/taskWorkflow';
+import { getClinicalAcceptanceBlockReason, getEngineerNextStatus, getEngineerStatusBlockReason, getEngineerWorkflowHint, getRecommendedRoutingForTask, needsClinicalAcceptance } from './utils/taskWorkflow';
 import TaskStats from './components/TaskStats';
 import EquipmentArchives from './components/EquipmentArchives';
 
@@ -2212,6 +2212,7 @@ export default function App() {
 
                         {/* Step 2: Dispatched */}
                         {(() => {
+                          const requiresClinicalAcceptance = needsClinicalAcceptance(selectedTask);
                           const isCompleted = ['已派工', '处理中', '待科室验收', '已完成', '已归档', '已关闭'].includes(selectedTask.status);
                           const isInProgress = ['待确认', '待派工'].includes(selectedTask.status);
                           return (
@@ -2230,9 +2231,13 @@ export default function App() {
                                 )}
                               </div>
                               <div>
-                                <h5 className={`text-xs font-bold ${isCompleted || isInProgress ? 'text-slate-800' : 'text-slate-400'}`}>2. 装备科审核并指派派工</h5>
+                                <h5 className={`text-xs font-bold ${isCompleted || isInProgress ? 'text-slate-800' : 'text-slate-400'}`}>
+                                  2. {requiresClinicalAcceptance ? '装备科审核并指派派工' : `装备科审核并转派${selectedTask.recommendedDept || '责任科室'}`}
+                                </h5>
                                 <p className="text-[11px] text-slate-500 mt-0.5">
-                                  {isCompleted ? '✅ 已审核并指派专业工程师进行响应' : (isInProgress ? '⚡ 装备科已受理，正在匹配指派合适工程师...' : '自动匹配流转：' + (selectedTask.recommendedDept || '医学装备科'))}
+                                  {requiresClinicalAcceptance
+                                    ? (isCompleted ? '✅ 已审核并指派专业工程师进行响应' : (isInProgress ? '⚡ 装备科已受理，正在匹配指派合适工程师...' : '自动匹配流转：' + (selectedTask.recommendedDept || '医学装备科')))
+                                    : (isCompleted ? `✅ 已完成转派并记录归口部门：${selectedTask.recommendedDept || '责任科室'}` : (isInProgress ? `⚡ 装备科已受理，正在转派${selectedTask.recommendedDept || '责任科室'}处理...` : '自动匹配流转：' + (selectedTask.recommendedDept || '责任科室')))}
                                 </p>
                               </div>
                             </div>
@@ -2241,6 +2246,7 @@ export default function App() {
 
                         {/* Step 3: Repairing */}
                         {(() => {
+                          const requiresClinicalAcceptance = needsClinicalAcceptance(selectedTask);
                           const isCompleted = ['待科室验收', '已完成', '已归档', '已关闭'].includes(selectedTask.status);
                           const isInProgress = ['已派工', '处理中'].includes(selectedTask.status);
                           return (
@@ -2259,11 +2265,17 @@ export default function App() {
                                 )}
                               </div>
                               <div>
-                                <h5 className={`text-xs font-bold ${isCompleted || isInProgress ? 'text-slate-800' : 'text-slate-400'}`}>3. 现场排障与维修</h5>
+                                <h5 className={`text-xs font-bold ${isCompleted || isInProgress ? 'text-slate-800' : 'text-slate-400'}`}>
+                                  3. {requiresClinicalAcceptance ? '现场排障与维修' : `${selectedTask.recommendedDept || '责任科室'}跟进处理`}
+                                </h5>
                                 <p className="text-[11px] text-slate-500 mt-0.5">
-                                  {selectedTask.status === '已派工' ? '⚙️ 工程师已接单，正携带工具前往现场...' :
-                                   selectedTask.status === '处理中' ? '⚡ 工程师已到场，正紧急排障中...' : 
-                                   isCompleted ? '🛠️ 诊断维修完毕，测试运行通过，发起验收。' : '等待工程师前往现场'}
+                                  {requiresClinicalAcceptance
+                                    ? (selectedTask.status === '已派工' ? '⚙️ 工程师已接单，正携带工具前往现场...' :
+                                      selectedTask.status === '处理中' ? '⚡ 工程师已到场，正紧急排障中...' :
+                                      isCompleted ? '🛠️ 诊断维修完毕，测试运行通过，发起验收。' : '等待工程师前往现场')
+                                    : (selectedTask.status === '已派工' ? `⚙️ 已转交${selectedTask.recommendedDept || '责任科室'}，等待对方接收...` :
+                                      selectedTask.status === '处理中' ? `⚡ ${selectedTask.recommendedDept || '责任科室'}正在处理，装备科保留协调记录。` :
+                                      isCompleted ? '已完成跨部门协调并关闭留痕。' : '等待责任科室接收处理')}
                                 </p>
                               </div>
                             </div>
@@ -2272,6 +2284,7 @@ export default function App() {
 
                         {/* Step 4: Accepting */}
                         {(() => {
+                          const requiresClinicalAcceptance = needsClinicalAcceptance(selectedTask);
                           const isCompleted = ['已完成', '已归档', '已关闭'].includes(selectedTask.status);
                           const isInProgress = selectedTask.status === '待科室验收';
                           return (
@@ -2282,9 +2295,13 @@ export default function App() {
                                 {isCompleted ? <Check className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
                               </div>
                               <div>
-                                <h5 className={`text-xs font-bold ${isCompleted || isInProgress ? 'text-slate-800' : 'text-slate-400'}`}>4. 临床科室现场功能验收确认</h5>
+                                <h5 className={`text-xs font-bold ${isCompleted || isInProgress ? 'text-slate-800' : 'text-slate-400'}`}>
+                                  4. {requiresClinicalAcceptance ? '临床科室现场功能验收确认' : '跨部门转派关闭留痕'}
+                                </h5>
                                 <p className="text-[11px] text-slate-500 mt-0.5">
-                                  {isInProgress ? '👉 等待您进行功能质量核对并打分签字验收' : (isCompleted ? '已现场试用正常，确认验收' : '待维修完工发起')}
+                                  {requiresClinicalAcceptance
+                                    ? (isInProgress ? '👉 等待您进行功能质量核对并打分签字验收' : (isCompleted ? '已现场试用正常，确认验收' : '待维修完工发起'))
+                                    : (isCompleted ? '装备科已完成转派记录并关闭此单。' : `无需临床设备验收，待${selectedTask.recommendedDept || '责任科室'}处理后关闭留痕。`)}
                                 </p>
                               </div>
                             </div>
@@ -2294,17 +2311,22 @@ export default function App() {
                         {/* Step 5: Finished */}
                         {(() => {
                           const isCompleted = ['已完成', '已归档'].includes(selectedTask.status);
+                          const isTransferredClosed = !needsClinicalAcceptance(selectedTask) && selectedTask.status === '已关闭';
                           return (
                             <div className="relative">
                               <div className={`absolute -left-[27px] top-0.5 rounded-full p-1 border-2 border-white shadow-xs ${
-                                isCompleted ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-400'
+                                isCompleted || isTransferredClosed ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-400'
                               }`}>
                                 <ShieldCheck className="w-3 h-3" />
                               </div>
                               <div>
-                                <h5 className={`text-xs font-bold ${isCompleted ? 'text-emerald-700 font-semibold' : 'text-slate-400'}`}>5. 工单安全闭环（满意度归档）</h5>
+                                <h5 className={`text-xs font-bold ${isCompleted || isTransferredClosed ? 'text-emerald-700 font-semibold' : 'text-slate-400'}`}>
+                                  5. {needsClinicalAcceptance(selectedTask) ? '工单安全闭环（满意度归档）' : '转派工单闭环'}
+                                </h5>
                                 <p className="text-[11px] text-slate-500 mt-0.5">
-                                  {isCompleted ? '全流程完整跟踪，已完成闭环档案归档。' : '等待临床验收完成后自动形成闭环归档。'}
+                                  {needsClinicalAcceptance(selectedTask)
+                                    ? (isCompleted ? '全流程完整跟踪，已完成闭环档案归档。' : '等待临床验收完成后自动形成闭环归档。')
+                                    : (isTransferredClosed ? '非设备问题已转派并关闭留痕，不写入医学设备维修档案。' : '等待装备科完成转派协调并关闭留痕。')}
                                 </p>
                               </div>
                             </div>
@@ -2314,7 +2336,7 @@ export default function App() {
                     </div>
 
                     {/* Operational Rating Form or Rated Badge */}
-                    {selectedTask.status === '待科室验收' && (
+                    {selectedTask.status === '待科室验收' && needsClinicalAcceptance(selectedTask) && (
                       <div className="bg-gradient-to-br from-emerald-50/60 to-teal-50/40 p-5 rounded-xl border border-emerald-200/70 shadow-sm space-y-4 animate-fade-in">
                         <div>
                           <h4 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">

@@ -10,6 +10,7 @@ import {
   getEngineerNextStatus,
   getEngineerStatusBlockReason,
   getEngineerWorkflowHint,
+  needsClinicalAcceptance,
   getRecommendedRoutingForTask
 } from '../src/utils/taskWorkflow.ts';
 import type { MedicalEquipment, StructuredTicket, UserProfile } from '../src/types.ts';
@@ -185,6 +186,12 @@ const checks: Check[] = [
       assertEqual(getEngineerStatusBlockReason(transferTask, '已关闭'), '', '非设备转派任务应允许关闭');
       assertEqual(getEngineerStatusBlockReason(transferTask, '待派工'), '', '非设备转派任务仍可继续常规流转');
       assertIncludes(getEngineerWorkflowHint(transferTask), '信息科', '转派提示应显示目标归口科室');
+      assertEqual(needsClinicalAcceptance(transferTask), false, '非设备转派任务不应要求临床设备验收');
+      assertIncludes(
+        getClinicalAcceptanceBlockReason({ ...transferTask, status: '待科室验收' }, createUser({ department: '呼吸内科' }), 'medical_staff'),
+        '不需要临床进行设备维修验收',
+        '临床端不能验收非设备转派任务'
+      );
     }
   },
   {
@@ -428,6 +435,31 @@ const checks: Check[] = [
         dept: '医学装备科'
       }));
       assertEqual(engineerPresets, PRESET_PROMPTS, '工程师端应继续保留全院演示快捷预设');
+    }
+  },
+  {
+    name: 'clinical transfer timeline uses handoff wording instead of repair acceptance',
+    run: () => {
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const clinicalStart = appSource.indexOf("{currentUserRole === 'medical_staff' ? (");
+      const engineerStart = appSource.indexOf(') : selectedTask ? (', clinicalStart);
+      assert(clinicalStart !== -1 && engineerStart > clinicalStart, '应能定位临床任务详情视图');
+      const clinicalDetailSource = appSource.slice(clinicalStart, engineerStart);
+
+      assert(
+        clinicalDetailSource.includes('needsClinicalAcceptance(selectedTask)'),
+        '临床详情应根据任务类型判断是否需要设备维修验收'
+      );
+      assert(
+        clinicalDetailSource.includes('跨部门转派关闭留痕') &&
+          clinicalDetailSource.includes('无需临床设备验收') &&
+          clinicalDetailSource.includes('非设备问题已转派并关闭留痕'),
+        '转派任务在临床时间线中应显示转派闭环文案'
+      );
+      assert(
+        clinicalDetailSource.includes("selectedTask.status === '待科室验收' && needsClinicalAcceptance(selectedTask)"),
+        '临床验收表单只能展示给需要设备维修验收的工单'
+      );
     }
   }
 ];
