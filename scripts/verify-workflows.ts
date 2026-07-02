@@ -623,6 +623,35 @@ const checks: Check[] = [
     }
   },
   {
+    name: 'clinical model status cannot open engineer-only ai settings',
+    run: () => {
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const openSettingsStart = appSource.indexOf('const openAiSettings = () => {');
+      const openSettingsEnd = appSource.indexOf('useEffect(() => {', openSettingsStart);
+      assert(openSettingsStart !== -1 && openSettingsEnd > openSettingsStart, '应能定位 AI 配置统一入口');
+      const openSettingsSource = appSource.slice(openSettingsStart, openSettingsEnd);
+
+      assert(
+        openSettingsSource.includes('if (isClinicalUser)') &&
+          openSettingsSource.includes('notifyAiSettingsManagedByEngineer();') &&
+          openSettingsSource.includes('return;'),
+        '临床点击模型状态时应收到医学装备科维护提示，而不是打开工程师配置中心'
+      );
+      assert(
+        appSource.includes('AI配置由医学装备科维护，临床端仅可查看当前模型运行状态'),
+        '临床端应明确提示 AI 配置由医学装备科维护'
+      );
+      assert(
+        appSource.includes('{!isClinicalUser && isSettingsOpen && ('),
+        'AI 设置弹窗本身也应禁止临床角色渲染'
+      );
+      assert(
+        !appSource.includes('onClick={() => setIsSettingsOpen(true)}'),
+        '大模型状态与侧边栏按钮应统一走 openAiSettings 权限入口'
+      );
+    }
+  },
+  {
     name: 'maintenance calendar keeps clinical readonly and engineer deploy paths',
     run: () => {
       const calendarSource = readFileSync('src/components/MaintenanceCalendar.tsx', 'utf8');

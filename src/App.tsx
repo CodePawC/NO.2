@@ -430,11 +430,25 @@ export default function App() {
     resetProviderConfigs
   } = useAiSettings();
 
+  const notifyAiSettingsManagedByEngineer = () => {
+    setShowRoleSwitchedToast('AI配置由医学装备科维护，临床端仅可查看当前模型运行状态');
+    setTimeout(() => setShowRoleSwitchedToast(null), 4500);
+  };
+
+  const openAiSettings = () => {
+    if (isClinicalUser) {
+      notifyAiSettingsManagedByEngineer();
+      return;
+    }
+
+    setIsSettingsOpen(true);
+  };
+
   useEffect(() => {
-    if (currentUserRole === 'medical_staff' && isSettingsOpen) {
+    if (isClinicalUser && isSettingsOpen) {
       setIsSettingsOpen(false);
     }
-  }, [currentUserRole, isSettingsOpen]);
+  }, [isClinicalUser, isSettingsOpen]);
 
   const {
     isListening,
@@ -1280,7 +1294,7 @@ export default function App() {
             <div className="flex gap-2">
               <button
                 onClick={() => {
-                  setIsSettingsOpen(true);
+                  openAiSettings();
                   setIsSidebarOpen(false);
                 }}
                 className="flex-1 flex items-center justify-center gap-1 px-2.5 py-2 text-[11px] font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 active:bg-slate-900 rounded-lg border border-slate-700/80 transition cursor-pointer"
@@ -1359,9 +1373,9 @@ export default function App() {
               const isOffline = activeConfig.id === 'offline-default';
               return (
                 <div 
-                  onClick={() => setIsSettingsOpen(true)}
-                  className="flex items-center gap-2 px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 rounded-lg text-xs text-slate-600 transition cursor-pointer shadow-xs"
-                  title={`当前运行模型：${activeConfig.name} (${activeConfig.model})，点击进行切换或配置`}
+                  onClick={openAiSettings}
+                  className={`flex items-center gap-2 px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 rounded-lg text-xs text-slate-600 transition shadow-xs ${isClinicalUser ? 'cursor-help' : 'cursor-pointer'}`}
+                  title={`当前运行模型：${activeConfig.name} (${activeConfig.model})，${isClinicalUser ? 'AI配置由医学装备科维护' : '点击进行切换或配置'}`}
                 >
                   <span className="flex h-1.5 w-1.5 relative">
                     <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isOffline ? 'bg-amber-400' : 'bg-emerald-400'}`}></span>
@@ -1468,8 +1482,9 @@ export default function App() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setIsSettingsOpen(true)}
-                  className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-semibold transition cursor-pointer hover:shadow-xs active:scale-95 shrink-0 ${textColor} ${borderStyle} bg-white`}
+                  onClick={openAiSettings}
+                  title={isClinicalUser ? 'AI配置由医学装备科维护，当前仅显示运行状态' : '点击切换或配置大模型'}
+                  className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-semibold transition hover:shadow-xs active:scale-95 shrink-0 ${isClinicalUser ? 'cursor-help' : 'cursor-pointer'} ${textColor} ${borderStyle} bg-white`}
                 >
                   <span className={`w-1.5 h-1.5 rounded-full ${statusColor}`} />
                   {statusText}
@@ -3507,7 +3522,7 @@ export default function App() {
       )}
 
       {/* AI Settings Modal */}
-      {isSettingsOpen && (
+      {!isClinicalUser && isSettingsOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 transition-all animate-fade-in">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
             {/* Header */}
