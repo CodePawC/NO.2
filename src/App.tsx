@@ -112,21 +112,33 @@ const getSeededPresetTaskIds = () => {
   }
 };
 
+const saveSeededPresetTaskIds = (seededIds: Set<string>) => {
+  localStorage.setItem(TASK_PRESET_MIGRATION_KEY, JSON.stringify([...seededIds]));
+};
+
+const markPresetTaskMigrationsSeeded = () => {
+  const seededPresetIds = getSeededPresetTaskIds();
+  const nextSeededPresetIds = new Set([...seededPresetIds, ...TASK_PRESET_MIGRATION_IDS]);
+  saveSeededPresetTaskIds(nextSeededPresetIds);
+};
+
 const mergeMissingPresetTasks = (storedTasks: StructuredTicket[]) => {
   const storedIds = new Set(storedTasks.map(task => task.id));
   const seededPresetIds = getSeededPresetTaskIds();
   const missingPresetTasks = INITIAL_TASKS.filter(
     task => TASK_PRESET_MIGRATION_IDS.includes(task.id) && !storedIds.has(task.id) && !seededPresetIds.has(task.id)
   );
-  const nextSeededPresetIds = new Set([...seededPresetIds, ...TASK_PRESET_MIGRATION_IDS]);
-  localStorage.setItem(TASK_PRESET_MIGRATION_KEY, JSON.stringify([...nextSeededPresetIds]));
+  markPresetTaskMigrationsSeeded();
 
   return missingPresetTasks.length > 0 ? [...missingPresetTasks, ...storedTasks] : storedTasks;
 };
 
 const getStoredTasks = () => {
   const saved = localStorage.getItem(TASK_STORAGE_KEY);
-  if (!saved) return INITIAL_TASKS;
+  if (!saved) {
+    markPresetTaskMigrationsSeeded();
+    return INITIAL_TASKS;
+  }
 
   try {
     const parsed = JSON.parse(saved);

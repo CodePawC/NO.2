@@ -391,8 +391,20 @@ const checks: Check[] = [
       assert(
         mergeSource.includes("const TASK_PRESET_MIGRATION_IDS = ['TKT-2026062805'];") &&
           mergeSource.includes('TASK_PRESET_MIGRATION_KEY') &&
-          mergeSource.includes('!seededPresetIds.has(task.id)'),
+          mergeSource.includes('!seededPresetIds.has(task.id)') &&
+          mergeSource.includes('markPresetTaskMigrationsSeeded();'),
         '新增演示单应通过一次性迁移补齐到已有本地数据，不能把所有默认任务反复补回'
+      );
+
+      const storedStart = appSource.indexOf('const getStoredTasks = () => {');
+      const storedEnd = appSource.indexOf('export default function App()', storedStart);
+      assert(storedStart !== -1 && storedEnd > storedStart, '应能定位本地任务读取逻辑');
+      const storedSource = appSource.slice(storedStart, storedEnd);
+      assert(
+        storedSource.includes('if (!saved) {') &&
+          storedSource.includes('markPresetTaskMigrationsSeeded();') &&
+          storedSource.includes('return INITIAL_TASKS;'),
+        '首次加载默认任务时也应记录迁移标记，避免用户删除演示单后刷新又被补回'
       );
     }
   },
