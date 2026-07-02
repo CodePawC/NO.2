@@ -46,8 +46,9 @@ import {
 } from 'lucide-react';
 import { StructuredTicket, ChatMessage, TaskType, UrgencyLevel, ClinicalImpact, TaskStatus, LLMConfig } from './types';
 import { INITIAL_TASKS } from './data/defaultTasks';
-import { DEFAULT_LLM_PRESETS, MOCK_VOICE_TEMPLATES, PRESET_PROMPTS, SIMULATED_USERS } from './data/appPresets';
-import { sendAssistantChat, testAssistantConfig } from './services/aiApi';
+import { MOCK_VOICE_TEMPLATES, PRESET_PROMPTS, SIMULATED_USERS } from './data/appPresets';
+import { useAiSettings } from './hooks/useAiSettings';
+import { sendAssistantChat } from './services/aiApi';
 import TaskStats from './components/TaskStats';
 import EquipmentArchives from './components/EquipmentArchives';
 
@@ -197,23 +198,19 @@ export default function App() {
 
   // Advanced AI custom settings states
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [providerConfigs, setProviderConfigs] = useState<LLMConfig[]>(() => {
-    const saved = localStorage.getItem('ai_provider_configs');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        return DEFAULT_LLM_PRESETS;
-      }
-    }
-    return DEFAULT_LLM_PRESETS;
-  });
-  const [activeProviderId, setActiveProviderId] = useState<string>(() => {
-    return localStorage.getItem('ai_active_provider_id') || 'gemini-default';
-  });
-  const [showRawPayload, setShowRawPayload] = useState(() => localStorage.getItem('ai_show_raw_payload') === 'true');
-  const [isTesting, setIsTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{success?: boolean; latency?: number; message?: string; error?: string} | null>(null);
+  const {
+    providerConfigs,
+    activeProviderId,
+    setActiveProviderId,
+    showRawPayload,
+    setShowRawPayload,
+    isTesting,
+    testResult,
+    clearTestResult,
+    handleFieldChange,
+    handleTestConfig,
+    resetProviderConfigs
+  } = useAiSettings();
 
   // Voice Repair Recognition States
   const [isListening, setIsListening] = useState(false);
@@ -345,29 +342,6 @@ export default function App() {
         setShowVoiceMockModal(true);
       }
     }
-  };
-
-  // Sync AI settings with LocalStorage
-  useEffect(() => {
-    localStorage.setItem('ai_provider_configs', JSON.stringify(providerConfigs));
-  }, [providerConfigs]);
-
-  useEffect(() => {
-    localStorage.setItem('ai_active_provider_id', activeProviderId);
-  }, [activeProviderId]);
-
-  useEffect(() => {
-    localStorage.setItem('ai_show_raw_payload', String(showRawPayload));
-  }, [showRawPayload]);
-
-  // Handle field updates for specific LLM configuration
-  const handleFieldChange = (providerId: string, field: keyof LLMConfig, value: any) => {
-    setProviderConfigs(prev => prev.map(cfg => {
-      if (cfg.id === providerId) {
-        return { ...cfg, [field]: value };
-      }
-      return cfg;
-    }));
   };
 
   // Status modify form inside task detail
@@ -871,23 +845,6 @@ export default function App() {
         }
       ]);
       setDraftTicket(null);
-    }
-  };
-
-  // Handle Testing LLM Config
-  const handleTestConfig = async (config: LLMConfig) => {
-    setIsTesting(true);
-    setTestResult(null);
-    try {
-      const data = await testAssistantConfig(config);
-      setTestResult(data);
-    } catch (err: any) {
-      setTestResult({
-        success: false,
-        error: err.message || '网络连接测试异常'
-      });
-    } finally {
-      setIsTesting(false);
     }
   };
 
@@ -3318,7 +3275,7 @@ export default function App() {
                   value={activeProviderId}
                   onChange={(e) => {
                     setActiveProviderId(e.target.value);
-                    setTestResult(null);
+                    clearTestResult();
                   }}
                   className="w-full bg-slate-50 border border-slate-200 focus:border-emerald-500 rounded-lg px-3 py-2 text-xs focus:outline-none font-medium text-slate-800 cursor-pointer"
                 >
@@ -3520,9 +3477,7 @@ export default function App() {
                     type="button"
                     onClick={() => {
                       if (confirm('是否要将所有大模型配置恢复为系统出厂默认值？')) {
-                        setProviderConfigs(DEFAULT_LLM_PRESETS);
-                        setActiveProviderId('gemini-default');
-                        setTestResult(null);
+                        resetProviderConfigs();
                       }
                     }}
                     className="w-full text-slate-500 border border-slate-200 bg-white hover:bg-slate-50 hover:text-slate-700 py-1.5 rounded-lg text-[10px] transition font-medium cursor-pointer"
