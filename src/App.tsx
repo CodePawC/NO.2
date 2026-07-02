@@ -946,6 +946,7 @@ export default function App() {
     setTasks(prev => prev.map(t => t.id === taskId ? updatedTask : t));
     setSelectedTask(updatedTask);
     setRatingComment('');
+    setRatingValue(5);
     
     // Auto add chat alert message for delightful clinical feel
     setChatMessages(prev => [...prev, {

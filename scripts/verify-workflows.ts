@@ -223,6 +223,23 @@ const checks: Check[] = [
     }
   },
   {
+    name: 'clinical acceptance form resets rating state after submit',
+    run: () => {
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const acceptStart = appSource.indexOf('const handleClinicalAcceptTask = (taskId: string) => {');
+      const acceptEnd = appSource.indexOf('// Manually update fields in active draft', acceptStart);
+      assert(acceptStart !== -1 && acceptEnd > acceptStart, '应能定位临床验收提交逻辑');
+      const acceptSource = appSource.slice(acceptStart, acceptEnd);
+
+      assert(
+        acceptSource.includes("setRatingComment('');") &&
+          acceptSource.includes('setRatingValue(5);') &&
+          acceptSource.indexOf("setRatingComment('');") < acceptSource.indexOf('setRatingValue(5);'),
+        '临床验收提交后应同时清空评价文本并把评分恢复为默认 5 星，避免下一张工单继承上次评分'
+      );
+    }
+  },
+  {
     name: 'transferred non-equipment tasks can be closed without polluting medical repair flow',
     run: () => {
       const transferTask = createTask({
