@@ -296,6 +296,13 @@ export default function App() {
   const handleSwitchUser = (userId: string) => {
     const targetUser = SIMULATED_USERS.find(u => u.id === userId);
     if (!targetUser) return;
+    roleSessionVersionRef.current += 1;
+    setDraftTicket(null);
+    setAiSuggestions([]);
+    setForwardDept(null);
+    setIsClarification(false);
+    setIsFullDraftOpen(false);
+    setIsLoading(false);
     setCurrentSimulatedUserId(userId);
     setCurrentUserRole(targetUser.role);
     setShowSimulatedAuthModal(false);
@@ -356,6 +363,7 @@ export default function App() {
   const [isClarification, setIsClarification] = useState(false);
   const [forwardDept, setForwardDept] = useState<string | null>(null);
   const [isFullDraftOpen, setIsFullDraftOpen] = useState(false);
+  const roleSessionVersionRef = useRef(0);
 
   useEffect(() => {
     const handleDeepLinkTicket = (e: any) => {
@@ -645,6 +653,7 @@ export default function App() {
 
   const handleSendMessage = async (textToSend: string) => {
     if (!textToSend.trim()) return;
+    const activeRoleSessionVersion = roleSessionVersionRef.current;
 
     const userMsg: ChatMessage = {
       id: `msg-${Date.now()}`,
@@ -686,6 +695,8 @@ export default function App() {
       ];
 
       setTimeout(() => {
+        if (activeRoleSessionVersion !== roleSessionVersionRef.current) return;
+
         setDraftTicket(mockTestDraft);
         setAiSuggestions(testSuggestions);
         setIsClarification(false);
@@ -714,6 +725,8 @@ export default function App() {
         activeConfig: activeConfig,
         currentUser: currentSimulatedUser
       });
+
+      if (activeRoleSessionVersion !== roleSessionVersionRef.current) return;
       
       // Update draft ticket state
       if (data.extractedInfo) {
@@ -758,6 +771,7 @@ export default function App() {
 
       setChatMessages(prev => [...prev, assistantMsg]);
     } catch (err: any) {
+      if (activeRoleSessionVersion !== roleSessionVersionRef.current) return;
       console.error('Gemini API error, falling back to local heuristic parser:', err);
       
       const fallbackDraft = normalizeDraftForCurrentRole(fallbackParse(textToSend));
@@ -783,7 +797,9 @@ export default function App() {
         isClarification: false
       }]);
     } finally {
-      setIsLoading(false);
+      if (activeRoleSessionVersion === roleSessionVersionRef.current) {
+        setIsLoading(false);
+      }
     }
   };
 

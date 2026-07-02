@@ -754,6 +754,33 @@ const checks: Check[] = [
     }
   },
   {
+    name: 'role switch clears stale draft intake state',
+    run: () => {
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const switchStart = appSource.indexOf('const handleSwitchUser = (userId: string) => {');
+      const switchEnd = appSource.indexOf('// Set a toast to show role switch', switchStart);
+      assert(switchStart !== -1 && switchEnd > switchStart, '应能定位角色切换开场清理逻辑');
+      const switchSource = appSource.slice(switchStart, switchEnd);
+
+      assert(
+        switchSource.includes('roleSessionVersionRef.current += 1;') &&
+          switchSource.includes('setDraftTicket(null);') &&
+          switchSource.includes('setAiSuggestions([]);') &&
+          switchSource.includes('setForwardDept(null);') &&
+          switchSource.includes('setIsClarification(false);') &&
+          switchSource.includes('setIsFullDraftOpen(false);') &&
+          switchSource.includes('setIsLoading(false);'),
+        '切换身份时应清空未提交草稿、展开确认窗口、AI 建议与加载状态，避免上一身份草稿串入新身份'
+      );
+      assert(
+        appSource.includes('const activeRoleSessionVersion = roleSessionVersionRef.current;') &&
+          appSource.includes('if (activeRoleSessionVersion !== roleSessionVersionRef.current) return;') &&
+          appSource.includes('if (activeRoleSessionVersion === roleSessionVersionRef.current)'),
+        'AI 异步返回应校验角色会话版本，丢弃切换身份前的旧响应'
+      );
+    }
+  },
+  {
     name: 'assistant fallback keeps clinical user context on the server',
     run: () => {
       const appSource = readFileSync('src/App.tsx', 'utf8');
