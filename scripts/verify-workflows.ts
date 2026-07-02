@@ -325,6 +325,30 @@ const checks: Check[] = [
         '选中设备不能绕过 visibleEquipments 回退到隐藏资产'
       );
     }
+  },
+  {
+    name: 'quick archive repair callback has app-level clinical department guard',
+    run: () => {
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const callbackStart = appSource.indexOf('const handleQuickRepairCreated = ({');
+      const callbackEnd = appSource.indexOf('// Role and Auth Simulation States');
+      assert(callbackStart !== -1 && callbackEnd > callbackStart, '应能定位快捷报修回调实现');
+      const callbackSource = appSource.slice(callbackStart, callbackEnd);
+
+      assert(
+        callbackSource.includes("currentUserRole === 'medical_staff'") &&
+          callbackSource.includes("currentSimulatedUser.role === 'medical_staff'"),
+        '快捷报修回调应识别临床账号'
+      );
+      assert(
+        callbackSource.includes('!isSameDepartment(equipment.dept, currentSimulatedUser.department || currentSimulatedUser.dept)'),
+        '快捷报修回调应校验设备归属科室'
+      );
+      assert(
+        callbackSource.includes('msg-quick-repair-blocked') && callbackSource.includes('return;'),
+        '快捷报修回调应阻断跨科室设备同步主工单'
+      );
+    }
   }
 ];
 

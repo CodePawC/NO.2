@@ -174,6 +174,15 @@ export default function App() {
     urgency: 'low' | 'medium' | 'high';
     workOrderNo: string;
   }) => {
+    if (
+      currentUserRole === 'medical_staff' &&
+      currentSimulatedUser.role === 'medical_staff' &&
+      !isSameDepartment(equipment.dept, currentSimulatedUser.department || currentSimulatedUser.dept)
+    ) {
+      appendWorkflowNotice(`⚠️ **快捷报修权限提醒**\n当前临床账号只能为本科室设备同步主工单。设备【${equipment.deviceName}】归属【${equipment.dept}】，当前账号归属【${currentSimulatedUser.department || currentSimulatedUser.dept}】。`, 'msg-quick-repair-blocked');
+      return;
+    }
+
     const urgencyLevel: UrgencyLevel = urgency === 'high'
       ? (equipment.category === '急救生命支持' || equipment.riskLevel === '高' ? '生命支持' : '紧急')
       : urgency === 'medium'
