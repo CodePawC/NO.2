@@ -44,7 +44,7 @@ import {
   Menu,
   X
 } from 'lucide-react';
-import { StructuredTicket, ChatMessage, TaskType, UrgencyLevel, ClinicalImpact, TaskStatus, LLMConfig } from './types';
+import { StructuredTicket, ChatMessage, TaskType, UrgencyLevel, ClinicalImpact, TaskStatus, LLMConfig, MedicalEquipment } from './types';
 import { INITIAL_TASKS } from './data/defaultTasks';
 import { MOCK_VOICE_TEMPLATES, PRESET_PROMPTS, SIMULATED_USERS } from './data/appPresets';
 import { useAiSettings } from './hooks/useAiSettings';
@@ -126,6 +126,73 @@ export default function App() {
     
     // Auto shift view on mobile
     setMobileTab('chat');
+  };
+
+  const handleQuickRepairCreated = ({
+    equipment,
+    description,
+    urgency,
+    workOrderNo
+  }: {
+    equipment: MedicalEquipment;
+    description: string;
+    urgency: 'low' | 'medium' | 'high';
+    workOrderNo: string;
+  }) => {
+    const urgencyLevel: UrgencyLevel = urgency === 'high'
+      ? (equipment.category === '急救生命支持' || equipment.riskLevel === '高' ? '生命支持' : '紧急')
+      : urgency === 'medium'
+        ? '较急'
+        : '普通';
+    const normalizedDept = normalizeDepartmentName(equipment.dept);
+    const newTicketId = `TKT-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}${(tasks.length + 1).toString().padStart(2, '0')}`;
+    const now = new Date();
+    const newTicket: StructuredTicket = {
+      id: newTicketId,
+      taskType: urgencyLevel === '生命支持' ? '生命支持设备应急' : '设备报修',
+      source: '科室扫码报修',
+      department: normalizedDept || equipment.dept || '未录入科室',
+      location: `${normalizedDept || equipment.dept || '未录入科室'}设备点位`,
+      deviceName: equipment.deviceName,
+      deviceId: equipment.id,
+      faultPhenomenon: description,
+      contactPerson: currentSimulatedUser.name,
+      contactPhone: currentSimulatedUser.phone || '未录入电话',
+      urgency: urgencyLevel,
+      affectClinical: urgency === 'high' || equipment.category === '急救生命支持' ? '是' : '否',
+      status: '待确认',
+      aiStatus: '已分析',
+      needBackupDevice: urgencyLevel === '生命支持' ? '是' : '否',
+      needVendorCoop: '否',
+      recommendedDept: '医学装备科',
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      aiSuggestions: [
+        '已由资产档案快捷报修同步生成主任务工单。',
+        urgencyLevel === '生命支持' ? '请优先协调备用设备并通知值班工程师立即响应。' : '请装备科尽快完成分派并记录现场维修轨迹。',
+        `关联档案维修单号：${workOrderNo}`
+      ],
+      logs: [
+        {
+          time: now.toLocaleString('zh-CN', { hour12: false }).slice(0, 16),
+          action: `资产档案快捷报修同步建单。关联档案维修单号：${workOrderNo}，紧急度：${urgencyLevel}。`,
+          operator: `${currentSimulatedUser.name} (${currentSimulatedUser.title})`
+        }
+      ],
+      rawText: description,
+      notes: `由资产档案快捷报修生成；档案维修单号：${workOrderNo}。`
+    };
+
+    setTasks(prev => [newTicket, ...prev]);
+    setSelectedTask(newTicket);
+    setCurrentWorkspace('tasks');
+    setMobileTab('detail');
+    setChatMessages(prev => [...prev, {
+      id: `msg-quick-repair-${Date.now()}`,
+      sender: 'assistant',
+      text: `🚑 **资产档案快捷报修已同步主工单**\n设备：**${equipment.deviceName}**\n主工单：**${newTicketId}**\n档案维修单：**${workOrderNo}**\n\n工程师现在可以在任务流转助手中接单处理，后续仍需临床科室验收闭环。`,
+      timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+    }]);
   };
 
   // Role and Auth Simulation States
@@ -1159,6 +1226,7 @@ export default function App() {
           <EquipmentArchives 
             onBackToTasks={() => setCurrentWorkspace('tasks')}
             onReportRepairFromEquip={handleReportRepairFromEquip}
+            onQuickRepairCreated={handleQuickRepairCreated}
             tasks={tasks}
             currentUser={currentSimulatedUser}
             onUserChange={(user) => handleSwitchUser(user.id)}

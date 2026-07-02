@@ -68,6 +68,13 @@ export interface PreviewData {
   pages: PreviewPage[];
 }
 
+interface QuickRepairRequest {
+  equipment: MedicalEquipment;
+  description: string;
+  urgency: 'low' | 'medium' | 'high';
+  workOrderNo: string;
+}
+
 export const generatePreviewData = (equipment: MedicalEquipment, file: Attachment): PreviewData => {
   const fileTypeStr = 
     file.type === 'manual' ? '操作手册' :
@@ -529,12 +536,14 @@ const DEFAULT_EQUIPMENT: MedicalEquipment[] = [
 export default function EquipmentArchives({
   onBackToTasks,
   onReportRepairFromEquip,
+  onQuickRepairCreated,
   tasks = [],
   currentUser: propCurrentUser,
   onUserChange
 }: {
   onBackToTasks?: () => void;
   onReportRepairFromEquip?: (equip: MedicalEquipment) => void;
+  onQuickRepairCreated?: (request: QuickRepairRequest) => void;
   tasks?: any[];
   currentUser?: UserProfile;
   onUserChange?: (user: UserProfile) => void;
@@ -559,6 +568,7 @@ export default function EquipmentArchives({
   const [quickRepairEquipId, setQuickRepairEquipId] = useState<string>('');
   const [quickRepairDesc, setQuickRepairDesc] = useState<string>('');
   const [quickRepairUrgency, setQuickRepairUrgency] = useState<'low' | 'medium' | 'high'>('medium');
+  const [quickRepairToast, setQuickRepairToast] = useState<string | null>(null);
 
   useEffect(() => {
     if (propCurrentUser) {
@@ -1111,38 +1121,12 @@ export default function EquipmentArchives({
     const targetEq = equipments.find(eq => eq.id === quickRepairEquipId);
     if (!targetEq) return;
 
-    // Create a new maintenance log
-    const newLog: MaintenanceLog = {
-      id: 'm-log-' + Date.now(),
-      type: '维修',
-      date: new Date('2026-07-02').toISOString().split('T')[0], // matching local mock date 2026-07-02
-      technician: '未分派 (待响应)',
-      cost: 0,
-      description: `【一键快捷报修】紧急度: ${quickRepairUrgency === 'high' ? '高' : quickRepairUrgency === 'medium' ? '中' : '低'}。描述: ${quickRepairDesc}`,
-      status: '进行中',
-      workOrderNo: `WO-20260702-${Math.floor(1000 + Math.random() * 9000)}`,
-      faultPhenomenon: quickRepairDesc,
-      partsReplaced: '待查',
-      verifyPerson: currentUser.name
-    };
-
-    // Update equipment list
-    const updatedEquipments = equipments.map(eq => {
-      if (eq.id === quickRepairEquipId) {
-        return {
-          ...eq,
-          status: '故障维修' as const,
-          maintenanceLogs: [newLog, ...(eq.maintenanceLogs || [])]
-        };
-      }
-      return eq;
-    });
-
-    setEquipments(updatedEquipments);
+    const workOrderNo = createQuickRepairRecord(targetEq, quickRepairDesc.trim(), quickRepairUrgency);
     setIsQuickRepairModalOpen(false);
     setQuickRepairDesc('');
     setQuickRepairUrgency('medium');
-    alert(`🎉 报修成功！已将设备【${targetEq.deviceName}】(SN: ${targetEq.sn}) 状态更新为“故障维修”，并已实时通知值班工程师，生成进行中维修工单。`);
+    setQuickRepairToast(`报修成功：${targetEq.deviceName} 已同步生成主工单与档案维修记录 ${workOrderNo}`);
+    setTimeout(() => setQuickRepairToast(null), 5000);
   };
 
   // Add Log Entry (Maintenance)
@@ -1538,28 +1522,57 @@ Clinical class: Life-saving respiratory device`;
     alert(`[指令发送成功] 已向科室标签打印机(Zebra ZD888) 发送打印指令。\n设备名：${selectedEquipment.deviceName}\n编号：${selectedEquipment.id}\n规格：${selectedEquipment.model}`);
   };
 
+  const createQuickRepairRecord = (
+    targetEq: MedicalEquipment,
+    description: string,
+    urgency: 'low' | 'medium' | 'high'
+  ) => {
+    const workOrderNo = `WO-20260702-${Math.floor(1000 + Math.random() * 9000)}`;
+    const repairLog: MaintenanceLog = {
+      id: 'm-log-' + Date.now(),
+      type: '维修',
+      date: new Date('2026-07-02').toISOString().split('T')[0],
+      technician: '未分派 (待响应)',
+      cost: 0,
+      description: `【一键快捷报修】紧急度: ${urgency === 'high' ? '高' : urgency === 'medium' ? '中' : '低'}。描述: ${description}`,
+      status: '进行中',
+      workOrderNo,
+      faultPhenomenon: description,
+      partsReplaced: '待查',
+      verifyPerson: currentUser.name
+    };
+
+    const updatedEquipments = equipments.map(eq => {
+      if (eq.id === targetEq.id) {
+        return {
+          ...eq,
+          status: '故障维修',
+          maintenanceLogs: [repairLog, ...(eq.maintenanceLogs || [])]
+        };
+      }
+      return eq;
+    });
+
+    setEquipments(updatedEquipments);
+    localStorage.setItem('medical_equipment_data', JSON.stringify(updatedEquipments));
+
+    onQuickRepairCreated?.({
+      equipment: targetEq,
+      description,
+      urgency,
+      workOrderNo
+    });
+
+    return workOrderNo;
+  };
+
   const handleQuickRepair = () => {
     if (window.confirm(`确认要将设备 【${selectedEquipment.deviceName}】 的状态更改为“故障维修”并紧急派单至医学装备科吗？`)) {
-      setEquipments(equipments.map(eq => {
-        if (eq.id === selectedEquipment.id) {
-          const repairLog: MaintenanceLog = {
-            id: `log-${Math.floor(1000 + Math.random() * 9000)}`,
-            type: '维修',
-            date: new Date().toISOString().split('T')[0],
-            technician: '待派单',
-            description: '科室通过快速报修渠道紧急申报，描述：设备发生突发性故障，无法正常开机或运行中断。',
-            cost: 0,
-            status: '进行中'
-          };
-          return {
-            ...eq,
-            status: '故障维修',
-            maintenanceLogs: [repairLog, ...eq.maintenanceLogs]
-          };
-        }
-        return eq;
-      }));
-      alert('已成功生成紧急维修工单，维保进度已同步！');
+      const description = '科室通过快速报修渠道紧急申报，描述：设备发生突发性故障，无法正常开机或运行中断。';
+      const urgency: 'medium' | 'high' = selectedEquipment.category === '急救生命支持' || selectedEquipment.riskLevel === '高' ? 'high' : 'medium';
+      const workOrderNo = createQuickRepairRecord(selectedEquipment, description, urgency);
+      setQuickRepairToast(`报修成功：${selectedEquipment.deviceName} 已同步生成主工单与档案维修记录 ${workOrderNo}`);
+      setTimeout(() => setQuickRepairToast(null), 5000);
     }
   };
 
@@ -1611,6 +1624,15 @@ Clinical class: Life-saving respiratory device`;
 
   return (
     <div id="app_root" className="flex flex-col h-screen h-[100dvh] w-full bg-[#F0F2F5] p-2 sm:p-3 md:p-6 pb-16 md:pb-6 overflow-hidden font-sans">
+      {quickRepairToast && (
+        <div className="fixed top-4 right-4 z-40 max-w-sm rounded-xl border border-emerald-200 bg-white px-4 py-3 shadow-xl shadow-emerald-900/10 flex items-start gap-2.5">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-xs font-black text-emerald-800">快捷报修已同步</p>
+            <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">{quickRepairToast}</p>
+          </div>
+        </div>
+      )}
       
       {/* Top Header Section */}
       <header id="header_section" className="flex flex-col lg:flex-row lg:items-center lg:justify-between bg-white px-3 md:px-6 py-2.5 md:py-4 rounded-xl shadow-sm mb-3 md:mb-6 border border-slate-200 gap-2.5">
