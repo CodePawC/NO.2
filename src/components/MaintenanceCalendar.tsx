@@ -101,6 +101,17 @@ export default function MaintenanceCalendar({
   // Custom temporary success notifications
   const [notification, setNotification] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (canManageSchedule) return;
+
+    setIsDeployMode(false);
+    setActiveDatePopup(null);
+    setSelectedEvent(prev => {
+      if (!prev) return prev;
+      return isSameDepartment(prev.equipment.dept, currentUser.department || currentUser.dept) ? prev : null;
+    });
+  }, [canManageSchedule, currentUser.department, currentUser.dept]);
+
   // Predefined engineers list & dynamic extraction
   const availableEngineers = useMemo(() => {
     const set = new Set<string>();
@@ -574,6 +585,12 @@ export default function MaintenanceCalendar({
   // Push instant alert notification to technicians
   const handlePushAlert = () => {
     if (!selectedEvent) return;
+    const blockReason = getScheduleManageBlockReason('通知推送');
+    if (blockReason) {
+      triggerNotification(`⚠️ ${blockReason}`);
+      return;
+    }
+
     triggerNotification(`🔔 催办通知已通过【企业微信/医院内部OA】推送至归口科室：${selectedEvent.equipment.dept}，并提醒值班工程师。`);
   };
 
@@ -1525,13 +1542,19 @@ export default function MaintenanceCalendar({
 
             {/* Modal Footer */}
             <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400 font-medium flex-shrink-0">
-              <button
-                onClick={() => openDeployForDate(activeDatePopup)}
-                className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-[10px] font-black transition-all flex items-center gap-1 cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5 text-blue-600" />
-                <span>在此日期部署新任务</span>
-              </button>
+              {canManageSchedule ? (
+                <button
+                  onClick={() => openDeployForDate(activeDatePopup)}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-[10px] font-black transition-all flex items-center gap-1 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5 text-blue-600" />
+                  <span>在此日期部署新任务</span>
+                </button>
+              ) : (
+                <span className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-slate-500 font-bold">
+                  临床只读：仅查看当天本科室排程
+                </span>
+              )}
               <button 
                 onClick={() => setActiveDatePopup(null)}
                 className="text-slate-500 hover:text-slate-800 font-black cursor-pointer"

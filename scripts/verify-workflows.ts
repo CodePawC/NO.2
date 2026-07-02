@@ -811,8 +811,22 @@ const checks: Check[] = [
       assert(
         calendarSource.includes("getScheduleManageBlockReason('新工单部署')") &&
           calendarSource.includes("getScheduleManageBlockReason('日程调期')") &&
-          calendarSource.includes("getScheduleManageBlockReason('技术员改派')"),
+          calendarSource.includes("getScheduleManageBlockReason('技术员改派')") &&
+          calendarSource.includes("getScheduleManageBlockReason('现场执行登记')") &&
+          calendarSource.includes("getScheduleManageBlockReason('通知推送')"),
         '日历所有管理型操作应统一走角色阻断逻辑'
+      );
+      assert(
+        calendarSource.includes('{canManageSchedule ? (') &&
+          calendarSource.includes('在此日期部署新任务') &&
+          calendarSource.includes('临床只读：仅查看当天本科室排程'),
+        '日期弹窗应仅向工程师显示部署入口，临床端显示只读提示'
+      );
+      assert(
+        calendarSource.includes('setIsDeployMode(false);') &&
+          calendarSource.includes('setActiveDatePopup(null);') &&
+          calendarSource.includes('isSameDepartment(prev.equipment.dept, currentUser.department || currentUser.dept)'),
+        '角色切换到临床日历时应清理工程师部署态和跨科室选中事件'
       );
     }
   }
