@@ -1234,6 +1234,26 @@ const checks: Check[] = [
           calendarSource.includes('isSameDepartment(prev.equipment.dept, currentUser.department || currentUser.dept)'),
         '角色切换到临床日历时应清理工程师部署态和跨科室选中事件'
       );
+      assert(
+        calendarSource.includes('currentUser.role, currentUser.department, currentUser.dept') &&
+          calendarSource.includes('setCurrentEngineer') &&
+          calendarSource.includes('setSelectedEvent(prev =>'),
+        '日历事件列表与已选事件应随当前登录角色和科室变化重新计算，避免临床切换后残留旧科室日程'
+      );
+      assert(
+        calendarSource.includes('const selectedEquipment = filteredEquipmentsForDeploy.find(eq => eq.id === deployEquipmentId);') &&
+          calendarSource.includes('当前筛选条件下无法部署到该设备') &&
+          calendarSource.includes('const filteredDeployEquipmentIds = filteredEquipmentsForDeploy.map(eq => eq.id).join') &&
+          calendarSource.includes("if (!isDeployMode) return;") &&
+          calendarSource.includes('!filteredEquipmentsForDeploy.some(eq => eq.id === deployEquipmentId)') &&
+          calendarSource.includes("setDeployEquipmentId(filteredEquipmentsForDeploy[0]?.id || '');"),
+        '工程师部署表单应随设备搜索筛选校正选中设备，并阻止向隐藏设备下发工单'
+      );
+      assert(
+        calendarSource.includes('<option value="" disabled className="text-slate-400 italic">未找到相匹配的受试设备</option>') &&
+          calendarSource.includes('disabled={!deployEquipmentId || filteredEquipmentsForDeploy.length === 0}'),
+        '工程师部署表单无可见设备时应显示空值提示并禁用提交按钮'
+      );
     }
   }
 ];

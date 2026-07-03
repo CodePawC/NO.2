@@ -257,7 +257,7 @@ export default function MaintenanceCalendar({
       });
     });
     return events;
-  }, [equipments, showMaintenance, showCalibration, showHistMaintenance, showHistRepair, showHistCalibration, currentEngineer]);
+  }, [equipments, showMaintenance, showCalibration, showHistMaintenance, showHistRepair, showHistCalibration, currentEngineer, currentUser.role, currentUser.department, currentUser.dept]);
 
   // Group events by day string (YYYY-MM-DD)
   const eventsByDay = useMemo(() => {
@@ -489,8 +489,11 @@ export default function MaintenanceCalendar({
       return;
     }
 
-    const selectedEquipment = equipments.find(eq => eq.id === deployEquipmentId);
-    if (!selectedEquipment) return;
+    const selectedEquipment = filteredEquipmentsForDeploy.find(eq => eq.id === deployEquipmentId);
+    if (!selectedEquipment) {
+      triggerNotification('❌ 当前筛选条件下无法部署到该设备，请重新选择可见设备。');
+      return;
+    }
 
     setEquipments(prev => prev.map(eq => {
       if (eq.id === deployEquipmentId) {
@@ -551,10 +554,7 @@ export default function MaintenanceCalendar({
     setIsDeployMode(true);
     setSelectedEvent(null);
     setActiveDatePopup(null);
-    // Auto-select first equipment if none selected
-    if (equipments.length > 0 && !deployEquipmentId) {
-      setDeployEquipmentId(equipments[0].id);
-    }
+    setDeployEquipmentId(filteredEquipmentsForDeploy[0]?.id || '');
   };
 
   // Direct dispatch handler (links to existing recording flow)
@@ -620,6 +620,19 @@ export default function MaintenanceCalendar({
              eq.sn.toLowerCase().includes(q);
     });
   }, [equipments, deploySearchQuery]);
+  const filteredDeployEquipmentIds = filteredEquipmentsForDeploy.map(eq => eq.id).join('|');
+
+  useEffect(() => {
+    if (!isDeployMode) return;
+    if (!deployEquipmentId) {
+      setDeployEquipmentId(filteredEquipmentsForDeploy[0]?.id || '');
+      return;
+    }
+
+    if (!filteredEquipmentsForDeploy.some(eq => eq.id === deployEquipmentId)) {
+      setDeployEquipmentId(filteredEquipmentsForDeploy[0]?.id || '');
+    }
+  }, [isDeployMode, deployEquipmentId, filteredDeployEquipmentIds]);
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-slate-50/50">
@@ -1247,7 +1260,7 @@ export default function MaintenanceCalendar({
                       </option>
                     ))}
                     {filteredEquipmentsForDeploy.length === 0 && (
-                      <option disabled className="text-slate-400 italic">未找到相匹配的受试设备</option>
+                      <option value="" disabled className="text-slate-400 italic">未找到相匹配的受试设备</option>
                     )}
                   </select>
                 </div>
@@ -1295,7 +1308,8 @@ export default function MaintenanceCalendar({
               <div className="space-y-2 pt-3 border-t border-slate-200">
                 <button
                   type="submit"
-                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-black shadow-sm transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                  disabled={!deployEquipmentId || filteredEquipmentsForDeploy.length === 0}
+                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-lg text-xs font-black shadow-sm transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
                 >
                   <Send className="w-3.5 h-3.5" />
                   <span>立即向{scheduleScopeLabel}下发工单</span>
@@ -1367,10 +1381,7 @@ export default function MaintenanceCalendar({
                 <button
                   onClick={() => {
                     setIsDeployMode(true);
-                    // Preselect first equipment and today
-                    if (equipments.length > 0) {
-                      setDeployEquipmentId(equipments[0].id);
-                    }
+                    setDeployEquipmentId(filteredEquipmentsForDeploy[0]?.id || '');
                     setDeployDate(getLocalDateString());
                   }}
                   className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-black shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
