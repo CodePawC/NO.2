@@ -803,6 +803,22 @@ const checks: Check[] = [
         '档案 AI 智脑应在当前过滤无设备时同步切换为空态提示'
       );
       assert(
+        archiveSource.includes('if (filteredEquipments.length === 0)') &&
+          archiveSource.includes("setSelectedId('');") &&
+          archiveSource.includes("if (mobileView === 'detail')") &&
+          archiveSource.includes("setMobileView('list');"),
+        '档案筛选为空时应清空旧选中设备，并让移动端退出详情页'
+      );
+      assert(
+        archiveSource.includes("setSearchTerm('');") &&
+          archiveSource.includes("setSelectedCategory('全部分类');") &&
+          archiveSource.includes("setSelectedStatus('全部状态');") &&
+          archiveSource.includes('setFilterMenuOpen(null);') &&
+          archiveSource.includes("setMatrixSearchQuery('');") &&
+          archiveSource.includes('setMatrixSelectedDept(userDepartment);'),
+        '角色切换时应重置档案与台账筛选，避免工程师筛选条件残留到临床账号'
+      );
+      assert(
         archiveSource.includes('2xl:flex-row') &&
           archiveSource.includes('2xl:w-auto 2xl:flex-shrink-0') &&
           archiveSource.includes('overflow-x-auto max-w-full'),

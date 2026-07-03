@@ -445,15 +445,28 @@ export default function EquipmentArchives({
   useEffect(() => {
     if (currentUser) {
       const userDepartment = currentUser.dept || currentUser.department;
+      setSearchTerm('');
+      setSelectedCategory('全部分类');
+      setSelectedStatus('全部状态');
+      setFilterMenuOpen(null);
+      setClinicalFilterMode('all_dept');
+      setMatrixSelectedCategory('全部分类');
+      setMatrixSelectedStatus('全部状态');
+      setMatrixSearchQuery('');
+      setMatrixSortField('deviceName');
+      setMatrixSortOrder('asc');
+      setMobileView('list');
       if (currentUser.role === 'medical_staff' && userDepartment) {
         setSelectedDept(userDepartment);
+        setMatrixSelectedDept(userDepartment);
         setOnlyMyDept(true);
       } else {
         setSelectedDept('全部科室');
+        setMatrixSelectedDept('全部科室');
         setOnlyMyDept(false);
       }
     }
-  }, [currentUser.id]);
+  }, [currentUser.id, currentUser.role, currentUser.dept, currentUser.department]);
 
   // 1. Data States
   const [equipments, setEquipments] = useState<MedicalEquipment[]>(() => (
@@ -801,13 +814,21 @@ export default function EquipmentArchives({
 
   // Keep selectedId valid in the filtered list when filters or roles change
   useEffect(() => {
-    if (filteredEquipments.length > 0) {
-      const isStillVisible = filteredEquipments.some(eq => eq.id === selectedId);
-      if (!isStillVisible) {
-        setSelectedId(filteredEquipments[0].id);
+    if (filteredEquipments.length === 0) {
+      if (selectedId) {
+        setSelectedId('');
       }
+      if (mobileView === 'detail') {
+        setMobileView('list');
+      }
+      return;
     }
-  }, [currentUser, onlyMyDept, clinicalFilterMode, selectedDept, selectedCategory, selectedStatus, searchTerm, equipments]);
+
+    const isStillVisible = filteredEquipments.some(eq => eq.id === selectedId);
+    if (!isStillVisible) {
+      setSelectedId(filteredEquipments[0].id);
+    }
+  }, [currentUser, onlyMyDept, clinicalFilterMode, selectedDept, selectedCategory, selectedStatus, searchTerm, equipments, selectedId, mobileView]);
 
   const selectedEquipment = filteredEquipments.find(eq => eq.id === selectedId) || filteredEquipments[0] || null;
 
