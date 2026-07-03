@@ -499,6 +499,31 @@ const checks: Check[] = [
     }
   },
   {
+    name: 'mobile sidebar navigation is accessible and testable',
+    run: () => {
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const headerStart = appSource.indexOf('{/* Mobile Top Header */}');
+      const sidebarStart = appSource.indexOf('{/* Left Sidebar Navigation Menu */}', headerStart);
+      const sidebarEnd = appSource.indexOf('{/* Mobile Sidebar Overlay Backdrop */}', sidebarStart);
+      assert(headerStart !== -1 && sidebarStart > headerStart && sidebarEnd > sidebarStart, '应能定位移动端头部与侧边导航');
+      const mobileHeaderSource = appSource.slice(headerStart, sidebarStart);
+      const sidebarSource = appSource.slice(sidebarStart, sidebarEnd);
+
+      assert(
+        mobileHeaderSource.includes("aria-label={isSidebarOpen ? '关闭侧边导航' : '打开侧边导航'}") &&
+          mobileHeaderSource.includes('aria-expanded={isSidebarOpen}') &&
+          mobileHeaderSource.includes('aria-controls="sidebar-navigation"'),
+        '移动端侧边栏图标按钮应有可读名称、展开状态和受控区域，方便真实用户与自动化测试定位'
+      );
+      assert(
+        sidebarSource.includes('id="sidebar-navigation"') &&
+          sidebarSource.includes("setCurrentWorkspace('archives')") &&
+          sidebarSource.includes('setIsSidebarOpen(false);'),
+        '移动端侧边栏应提供稳定受控区域，并在进入资产档案后自动收起'
+      );
+    }
+  },
+  {
     name: 'default data includes a clinical acceptance demo task',
     run: () => {
       const respiratoryDoctor = createUser({

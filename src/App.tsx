@@ -1238,6 +1238,9 @@ export default function App() {
         <div className="flex items-center gap-2">
           <button 
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            aria-label={isSidebarOpen ? '关闭侧边导航' : '打开侧边导航'}
+            aria-expanded={isSidebarOpen}
+            aria-controls="sidebar-navigation"
             className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-300 cursor-pointer"
           >
             <Menu className="w-5 h-5" />
@@ -1265,7 +1268,7 @@ export default function App() {
         fixed inset-y-0 left-0 z-40 w-64 bg-slate-900 border-r border-slate-800 flex flex-col h-full shrink-0 transition-transform duration-300 transform 
         ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} 
         md:relative md:translate-x-0 md:flex
-      `}>
+      `} id="sidebar-navigation">
         {/* Sidebar Brand Header */}
         <div className="p-4 border-b border-slate-800 flex flex-col gap-1 shrink-0 bg-slate-950/20">
           <div className="flex items-center gap-2.5">
