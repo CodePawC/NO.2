@@ -1777,10 +1777,8 @@ Clinical class: Life-saving respiratory device`;
     
     // Simulate high-tech AI extraction with a realistic timeout
     setTimeout(() => {
-      const latestTargetEquipment = equipments.find(eq => eq.id === targetEquipmentId);
-      const targetFileStillExists = latestTargetEquipment?.attachments.some(file => file.id === targetFileId);
       if (requestVersion !== snapshotExtractRequestVersionRef.current) return;
-      if (!canManageEquipmentArchiveRef.current || !latestTargetEquipment || !targetFileStillExists) {
+      if (!canManageEquipmentArchiveRef.current) {
         setIsExtractingSnapshot(false);
         return;
       }
@@ -1796,8 +1794,18 @@ Clinical class: Life-saving respiratory device`;
       };
 
       // Update equipment list state
-      setEquipments(equipments.map(eq => {
-        if (eq.id === targetEquipmentId) {
+      let snapshotWasApplied = false;
+      setEquipments(prevEquipments => {
+        const latestTargetEquipment = prevEquipments.find(eq => eq.id === targetEquipmentId);
+        const targetFileStillExists = latestTargetEquipment?.attachments.some(file => file.id === targetFileId);
+        if (!latestTargetEquipment || !targetFileStillExists) {
+          return prevEquipments;
+        }
+        snapshotWasApplied = true;
+
+        const nextEquipments = prevEquipments.map(eq => {
+          if (eq.id !== targetEquipmentId) return eq;
+
           const existingSnapshots = eq.extractedSnapshots || [];
           // Avoid duplicating same page snapshot
           if (existingSnapshots.some(s => s.sourceFileName === targetFileName && s.pageNum === targetPageNum)) {
@@ -1811,12 +1819,16 @@ Clinical class: Life-saving respiratory device`;
             ...eq,
             extractedSnapshots: [newSnapshot, ...existingSnapshots]
           };
-        }
-        return eq;
-      }));
+        });
+
+        localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));
+        return nextEquipments;
+      });
 
       setIsExtractingSnapshot(false);
-      alert(`🎉 成功从《${targetFileName}》中提取第 ${targetPageNum} 页作为设备关联快照！此快照已与主技术档案完成高阶可信映射。`);
+      if (snapshotWasApplied) {
+        alert(`🎉 成功从《${targetFileName}》中提取第 ${targetPageNum} 页作为设备关联快照！此快照已与主技术档案完成高阶可信映射。`);
+      }
     }, 800);
   };
 

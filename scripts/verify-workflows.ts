@@ -1140,13 +1140,20 @@ const checks: Check[] = [
           snapshotExtractSource.includes('const targetEquipmentId = selectedEquipment.id;') &&
           snapshotExtractSource.includes('const targetFileId = previewFile.id;') &&
           snapshotExtractSource.includes('const targetFileName = previewFile.name;') &&
-          snapshotExtractSource.includes('const latestTargetEquipment = equipments.find(eq => eq.id === targetEquipmentId);') &&
+          snapshotExtractSource.includes('let snapshotWasApplied = false;') &&
+          snapshotExtractSource.includes('setEquipments(prevEquipments => {') &&
+          snapshotExtractSource.includes('const latestTargetEquipment = prevEquipments.find(eq => eq.id === targetEquipmentId);') &&
           snapshotExtractSource.includes('const targetFileStillExists = latestTargetEquipment?.attachments.some(file => file.id === targetFileId);') &&
           snapshotExtractSource.includes('if (requestVersion !== snapshotExtractRequestVersionRef.current) return;') &&
-          snapshotExtractSource.includes('if (!canManageEquipmentArchiveRef.current || !latestTargetEquipment || !targetFileStillExists)') &&
-          snapshotExtractSource.includes('if (eq.id === targetEquipmentId)') &&
-          snapshotExtractSource.includes('sourceFileName: targetFileName'),
-        '技术手册快照提取会延迟修改设备档案，应统一走工程师权限拦截并丢弃切换设备/角色后的旧请求'
+          snapshotExtractSource.includes('if (!canManageEquipmentArchiveRef.current)') &&
+          snapshotExtractSource.includes('if (!latestTargetEquipment || !targetFileStillExists)') &&
+          snapshotExtractSource.includes('snapshotWasApplied = true;') &&
+          snapshotExtractSource.includes('const nextEquipments = prevEquipments.map(eq => {') &&
+          snapshotExtractSource.includes('if (eq.id !== targetEquipmentId) return eq;') &&
+          snapshotExtractSource.includes('sourceFileName: targetFileName') &&
+          snapshotExtractSource.includes('localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));') &&
+          snapshotExtractSource.includes('if (snapshotWasApplied)'),
+        '技术手册快照提取会延迟修改设备档案，应统一走工程师权限拦截、丢弃旧请求，并基于最新设备列表写入'
       );
       const mobileActionsStart = archiveSource.indexOf('Quick action buttons on mobile next to title');
       const mobileActionsEnd = archiveSource.indexOf('{/* Dynamic Filters & Search Panel */}', mobileActionsStart);
