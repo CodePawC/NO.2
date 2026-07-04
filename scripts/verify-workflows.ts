@@ -2100,8 +2100,9 @@ const checks: Check[] = [
         deleteSource.includes('const filtered = tasksRef.current.filter(t => t.id !== id);') &&
           deleteSource.includes('tasksRef.current = filtered;') &&
           deleteSource.includes('setTasks(filtered);') &&
+          deleteSource.includes('localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(filtered));') &&
           deleteSource.includes('setSelectedTask(filtered.find(canCurrentUserSeeTask) || null);'),
-        '工程师删除工单应基于最新任务列表过滤，并把详情切到仍可见任务'
+        '工程师删除工单应基于最新任务列表过滤、立即持久化，并把详情切到仍可见任务'
       );
     }
   },

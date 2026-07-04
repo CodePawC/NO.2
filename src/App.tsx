@@ -1296,6 +1296,7 @@ export default function App() {
       const filtered = tasksRef.current.filter(t => t.id !== id);
       tasksRef.current = filtered;
       setTasks(filtered);
+      localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(filtered));
       if (selectedTask?.id === id) {
         setSelectedTask(filtered.find(canCurrentUserSeeTask) || null);
       }
