@@ -80,6 +80,19 @@ const createNextTaskId = (existingTasks: StructuredTicket[]) => {
   return `TKT-${datePart}${String(maxSequence + 1).padStart(2, '0')}`;
 };
 
+const hasActiveEquipmentRepairTask = (tasks: StructuredTicket[], equipment: MedicalEquipment) => {
+  return tasks
+    .filter(needsClinicalAcceptance)
+    .some(task => (
+      !['已完成', '已归档', '已关闭'].includes(task.status) &&
+      (
+        task.deviceId === equipment.id ||
+        task.deviceId === equipment.sn ||
+        (task.deviceName === equipment.deviceName && isSameDepartment(task.department, equipment.dept))
+      )
+    ));
+};
+
 const getTaskAcceptanceDisplay = (task: StructuredTicket) => {
   if (task.clinicalAcceptance) {
     return task.clinicalAcceptance;
@@ -229,6 +242,10 @@ export default function App() {
       !isSameDepartment(equipment.dept, currentSimulatedUser.department || currentSimulatedUser.dept)
     ) {
       appendWorkflowNotice(`⚠️ **快捷报修权限提醒**\n当前临床账号只能为本科室设备同步主工单。设备【${equipment.deviceName}】归属【${equipment.dept}】，当前账号归属【${currentSimulatedUser.department || currentSimulatedUser.dept}】。`, 'msg-quick-repair-blocked');
+      return false;
+    }
+    if (hasActiveEquipmentRepairTask(tasks, equipment)) {
+      appendWorkflowNotice(`⚠️ **重复报修提醒**\n设备【${equipment.deviceName}】已有未闭环维修工单，请在现有工单中补充故障信息，避免重复派单。`, 'msg-quick-repair-duplicate-blocked');
       return false;
     }
 

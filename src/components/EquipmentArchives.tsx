@@ -613,6 +613,22 @@ export default function EquipmentArchives({
   const canCurrentUserReportEquipment = (equipment: MedicalEquipment) => {
     return currentUser.role !== 'medical_staff' || !currentUserDepartment || isSameDepartment(equipment.dept, currentUserDepartment);
   };
+  const hasActiveRepairWorkOrder = (equipment: MedicalEquipment) => {
+    return equipment.status === '故障维修' || equipment.maintenanceLogs.some(log => log.type === '维修' && log.status === '进行中');
+  };
+  const canStartQuickRepairForEquipment = (equipment: MedicalEquipment | null) => {
+    return !!equipment && canCurrentUserReportEquipment(equipment) && !hasActiveRepairWorkOrder(equipment);
+  };
+  const getQuickRepairBlockMessage = (equipment: MedicalEquipment | null) => {
+    if (!equipment) return '请先选择需要报修的设备。';
+    if (!canCurrentUserReportEquipment(equipment)) {
+      return `当前临床账号只能为本科室设备发起报修：${currentUserDepartment}`;
+    }
+    if (hasActiveRepairWorkOrder(equipment)) {
+      return `设备【${equipment.deviceName}】已有进行中的维修工单，请在现有工单中补充故障信息，避免重复派单。`;
+    }
+    return '';
+  };
   const canCurrentUserViewEquipment = (equipment: MedicalEquipment) => {
     return currentUser.role !== 'medical_staff' || !currentUserDepartment || isSameDepartment(equipment.dept, currentUserDepartment);
   };
@@ -763,8 +779,13 @@ export default function EquipmentArchives({
     );
 
     if (matched) {
-      if (!canCurrentUserReportEquipment(matched)) {
-        setScannerMatchError(`已识别设备【${matched.deviceName}】，但其归属科室为【${matched.dept}】。当前临床账号只能为【${currentUserDepartment}】设备发起扫码报修。`);
+      const quickRepairBlockMessage = getQuickRepairBlockMessage(matched);
+      if (quickRepairBlockMessage) {
+        setScannerMatchError(
+          !canCurrentUserReportEquipment(matched)
+            ? `已识别设备【${matched.deviceName}】，但其归属科室为【${matched.dept}】。当前临床账号只能为【${currentUserDepartment}】设备发起扫码报修。`
+            : quickRepairBlockMessage
+        );
         return;
       }
 
@@ -871,9 +892,9 @@ export default function EquipmentArchives({
   useEffect(() => {
     if (!quickRepairEquipId) return;
     const quickRepairEquipment = equipments.find(eq => eq.id === quickRepairEquipId);
-    if (quickRepairEquipment && canCurrentUserReportEquipment(quickRepairEquipment)) return;
+    if (quickRepairEquipment && canStartQuickRepairForEquipment(quickRepairEquipment)) return;
 
-    const fallbackEquipment = visibleEquipments.find(canCurrentUserReportEquipment);
+    const fallbackEquipment = visibleEquipments.find(canStartQuickRepairForEquipment);
     setQuickRepairEquipId(fallbackEquipment?.id || '');
   }, [quickRepairEquipId, currentUser.id, currentUserDepartment, equipments, visibleEquipments]);
 
@@ -1132,10 +1153,11 @@ export default function EquipmentArchives({
 
     const targetEq = equipments.find(eq => eq.id === quickRepairEquipId);
     if (!targetEq) return;
-    if (!canCurrentUserReportEquipment(targetEq)) {
+    const quickRepairBlockMessage = getQuickRepairBlockMessage(targetEq);
+    if (quickRepairBlockMessage) {
       setQuickRepairToast({
         type: 'warning',
-        message: `当前临床账号只能为本科室设备发起报修：${currentUserDepartment}`
+        message: quickRepairBlockMessage
       });
       setTimeout(() => setQuickRepairToast(null), 5000);
       return;
@@ -1576,10 +1598,11 @@ Clinical class: Life-saving respiratory device`;
     description: string,
     urgency: 'low' | 'medium' | 'high'
   ) => {
-    if (!canCurrentUserReportEquipment(targetEq)) {
+    const quickRepairBlockMessage = getQuickRepairBlockMessage(targetEq);
+    if (quickRepairBlockMessage) {
       setQuickRepairToast({
         type: 'warning',
-        message: `当前临床账号只能为本科室设备发起报修：${currentUserDepartment}`
+        message: quickRepairBlockMessage
       });
       setTimeout(() => setQuickRepairToast(null), 5000);
       return '';
@@ -1635,10 +1658,11 @@ Clinical class: Life-saving respiratory device`;
   };
 
   const handleQuickRepair = () => {
-    if (!canCurrentUserReportEquipment(selectedEquipment)) {
+    const quickRepairBlockMessage = getQuickRepairBlockMessage(selectedEquipment);
+    if (quickRepairBlockMessage) {
       setQuickRepairToast({
         type: 'warning',
-        message: `当前临床账号只能为本科室设备发起报修：${currentUserDepartment}`
+        message: quickRepairBlockMessage
       });
       setTimeout(() => setQuickRepairToast(null), 5000);
       return;
@@ -3431,26 +3455,26 @@ Clinical class: Life-saving respiratory device`;
                   )}
                   <button 
                     onClick={() => setIsScannerModalOpen(true)}
-                    disabled={!canCurrentUserReportEquipment(selectedEquipment)}
+                    disabled={!canStartQuickRepairForEquipment(selectedEquipment)}
                     className={`px-2.5 py-2 sm:px-4 sm:py-2 rounded-lg text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 transition-all flex-1 sm:flex-initial text-center whitespace-nowrap ${
-                      canCurrentUserReportEquipment(selectedEquipment)
+                      canStartQuickRepairForEquipment(selectedEquipment)
                         ? 'bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white shadow-indigo-100'
                         : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                     }`}
-                    title={canCurrentUserReportEquipment(selectedEquipment) ? '调用相机扫描SN码快速填充报修' : '当前临床账号只能为本科室设备发起扫码报修'}
+                    title={canStartQuickRepairForEquipment(selectedEquipment) ? '调用相机扫描SN码快速填充报修' : getQuickRepairBlockMessage(selectedEquipment)}
                   >
                     <QrCode className="w-4 h-4 flex-shrink-0 animate-pulse" />
                     <span>扫码报修</span>
                   </button>
                   <button 
                     onClick={handleQuickRepair}
-                    disabled={!canCurrentUserReportEquipment(selectedEquipment)}
+                    disabled={!canStartQuickRepairForEquipment(selectedEquipment)}
                     className={`px-2.5 py-2 sm:px-4 sm:py-2 rounded-lg text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 transition-all flex-1 sm:flex-initial text-center whitespace-nowrap ${
-                      canCurrentUserReportEquipment(selectedEquipment)
+                      canStartQuickRepairForEquipment(selectedEquipment)
                         ? 'bg-blue-600 text-white shadow-blue-200 hover:bg-blue-700'
                         : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                     }`}
-                    title={canCurrentUserReportEquipment(selectedEquipment) ? '立即一键报修' : '当前临床账号只能为本科室设备发起一键报修'}
+                    title={canStartQuickRepairForEquipment(selectedEquipment) ? '立即一键报修' : getQuickRepairBlockMessage(selectedEquipment)}
                   >
                     <Wrench className="w-4 h-4 flex-shrink-0" />
                     <span>一键报修</span>
@@ -3973,10 +3997,11 @@ Clinical class: Life-saving respiratory device`;
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      if (!canCurrentUserReportEquipment(eq)) {
+                                      const quickRepairBlockMessage = getQuickRepairBlockMessage(eq);
+                                      if (quickRepairBlockMessage) {
                                         setQuickRepairToast({
                                           type: 'warning',
-                                          message: `当前临床账号只能为本科室设备发起报修：${currentUserDepartment}`
+                                          message: quickRepairBlockMessage
                                         });
                                         setTimeout(() => setQuickRepairToast(null), 5000);
                                         return;
@@ -3987,13 +4012,13 @@ Clinical class: Life-saving respiratory device`;
                                       setQuickRepairUrgency('high');
                                       setIsQuickRepairModalOpen(true);
                                     }}
-                                    disabled={!canCurrentUserReportEquipment(eq)}
+                                    disabled={!canStartQuickRepairForEquipment(eq)}
                                     className={`px-2.5 py-1 border rounded-md text-[10.5px] font-bold transition-all ${
-                                      canCurrentUserReportEquipment(eq)
+                                      canStartQuickRepairForEquipment(eq)
                                         ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-600 hover:text-white cursor-pointer'
                                         : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
                                     }`}
-                                    title={canCurrentUserReportEquipment(eq) ? '一键报修' : '当前临床账号只能为本科室设备发起报修'}
+                                    title={canStartQuickRepairForEquipment(eq) ? '一键报修' : getQuickRepairBlockMessage(eq)}
                                   >
                                     报修
                                   </button>
@@ -5785,8 +5810,8 @@ Clinical class: Life-saving respiratory device`;
                 >
                   <option value="">-- 请选择本科室发生故障的设备 --</option>
                   {visibleEquipments.map(eq => (
-                    <option key={eq.id} value={eq.id}>
-                      [{eq.status}] {eq.deviceName} ({eq.model}) (SN: {eq.sn})
+                    <option key={eq.id} value={eq.id} disabled={!canStartQuickRepairForEquipment(eq)}>
+                      [{eq.status}] {eq.deviceName} ({eq.model}) (SN: {eq.sn}){hasActiveRepairWorkOrder(eq) ? ' - 已有维修中工单' : ''}
                     </option>
                   ))}
                 </select>
@@ -5949,10 +5974,20 @@ Clinical class: Life-saving respiratory device`;
                       key={eq.id}
                       type="button"
                       onClick={() => {
+                        if (!canStartQuickRepairForEquipment(eq)) {
+                          setScannerMatchError(getQuickRepairBlockMessage(eq));
+                          return;
+                        }
                         setScannedSnResult(eq.sn);
                         handleScannedSn(eq.sn);
                       }}
-                      className="text-left bg-slate-950 hover:bg-slate-800/80 p-2 border border-slate-800 rounded-lg hover:border-indigo-500/50 transition-all flex flex-col justify-between group cursor-pointer"
+                      disabled={!canStartQuickRepairForEquipment(eq)}
+                      title={canStartQuickRepairForEquipment(eq) ? '模拟扫码定位并填充报修' : getQuickRepairBlockMessage(eq)}
+                      className={`text-left p-2 border rounded-lg transition-all flex flex-col justify-between group ${
+                        canStartQuickRepairForEquipment(eq)
+                          ? 'bg-slate-950 hover:bg-slate-800/80 border-slate-800 hover:border-indigo-500/50 cursor-pointer'
+                          : 'bg-slate-950/50 border-slate-900 opacity-60 cursor-not-allowed'
+                      }`}
                     >
                       <div className="flex justify-between items-center w-full">
                         <span className="font-bold text-slate-200 truncate max-w-[120px]">{eq.deviceName}</span>

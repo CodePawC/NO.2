@@ -934,9 +934,17 @@ const checks: Check[] = [
       );
       assert(
         archiveSource.includes('const quickRepairEquipment = equipments.find(eq => eq.id === quickRepairEquipId);') &&
-          archiveSource.includes('canCurrentUserReportEquipment(quickRepairEquipment)') &&
+          archiveSource.includes('canStartQuickRepairForEquipment(quickRepairEquipment)') &&
           archiveSource.includes("setQuickRepairEquipId(fallbackEquipment?.id || '');"),
         '快捷报修弹窗中的设备选择应随角色和科室切换重新校验可报修范围'
+      );
+      assert(
+        archiveSource.includes('const hasActiveRepairWorkOrder = (equipment: MedicalEquipment) => {') &&
+          archiveSource.includes("equipment.status === '故障维修'") &&
+          archiveSource.includes("log.type === '维修' && log.status === '进行中'") &&
+          archiveSource.includes('const canStartQuickRepairForEquipment = (equipment: MedicalEquipment | null) => {') &&
+          archiveSource.includes('!hasActiveRepairWorkOrder(equipment)'),
+        '档案快捷报修应识别已有进行中维修，避免重复生成维修记录'
       );
       assert(
         archiveSource.includes("const formatDepartmentScopeLabel = (dept: string) => {") &&
@@ -1007,7 +1015,7 @@ const checks: Check[] = [
         '临床档案详情中的二维码应可查看但明确标识为只读，不能暗示可发起打印'
       );
       const footerStart = archiveSource.indexOf('<div id="equipment_details_actions"');
-      const footerEnd = archiveSource.indexOf('title={canCurrentUserReportEquipment(selectedEquipment) ? \'调用相机扫描SN码快速填充报修\'', footerStart);
+      const footerEnd = archiveSource.indexOf('<span>扫码报修</span>', footerStart);
       assert(footerStart !== -1 && footerEnd > footerStart, '应能定位设备详情底部操作栏');
       const footerSource = archiveSource.slice(footerStart, footerEnd);
       assert(
@@ -1098,6 +1106,15 @@ const checks: Check[] = [
       assert(
         callbackSource.includes('return true;'),
         '快捷报修回调成功同步主工单后应返回确认结果'
+      );
+      assert(
+        appSource.includes('const hasActiveEquipmentRepairTask = (tasks: StructuredTicket[], equipment: MedicalEquipment) => {') &&
+          appSource.includes("!['已完成', '已归档', '已关闭'].includes(task.status)") &&
+          callbackSource.includes('if (hasActiveEquipmentRepairTask(tasks, equipment))') &&
+          callbackSource.includes('msg-quick-repair-duplicate-blocked') &&
+          callbackSource.includes('避免重复派单') &&
+          callbackSource.includes('return false;'),
+        '快捷报修同步主工单时应阻断同设备未闭环维修单，避免重复派单'
       );
     }
   },
