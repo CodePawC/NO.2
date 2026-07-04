@@ -1350,44 +1350,52 @@ export default function EquipmentArchives({
   const handleDeleteMaintenanceLog = (logId: string) => {
     if (!ensureCanManageEquipmentArchive('删除维保履历记录')) return;
     if (!window.confirm('您确定要永久删除此条维保履历记录吗？')) return;
-    setEquipments(equipments.map(eq => {
-      if (eq.id === selectedId) {
+    setEquipments(prevEquipments => {
+      const nextEquipments = prevEquipments.map(eq => {
+        if (eq.id !== selectedId) return eq;
         return {
           ...eq,
           maintenanceLogs: eq.maintenanceLogs.filter(log => log.id !== logId)
         };
-      }
-      return eq;
-    }));
+      });
+      localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));
+      return nextEquipments;
+    });
   };
 
   // Delete Calibration Log
   const handleDeleteCalibrationLog = (calId: string) => {
     if (!ensureCanManageEquipmentArchive('注销计量证书')) return;
     if (!window.confirm('您确定要永久删除此条法定计量强检记录及证书档案吗？')) return;
-    setEquipments(equipments.map(eq => {
-      if (eq.id === selectedId) {
+    setEquipments(prevEquipments => {
+      const nextEquipments = prevEquipments.map(eq => {
+        if (eq.id !== selectedId) return eq;
         return {
           ...eq,
           calibrationLogs: eq.calibrationLogs.filter(cal => cal.id !== calId)
         };
-      }
-      return eq;
-    }));
+      });
+      localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));
+      return nextEquipments;
+    });
   };
 
   const handleDeleteExtractedSnapshot = (snapshotId: string) => {
     if (!ensureCanManageEquipmentArchive('解除技术手册快照关联')) return;
+    if (!selectedEquipment) return;
+    const targetEquipmentId = selectedEquipment.id;
 
-    setEquipments(equipments.map(eq => {
-      if (eq.id === selectedEquipment.id) {
+    setEquipments(prevEquipments => {
+      const nextEquipments = prevEquipments.map(eq => {
+        if (eq.id !== targetEquipmentId) return eq;
         return {
           ...eq,
           extractedSnapshots: (eq.extractedSnapshots || []).filter(s => s.id !== snapshotId)
         };
-      }
-      return eq;
-    }));
+      });
+      localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));
+      return nextEquipments;
+    });
   };
 
   // Add Attachment Item

@@ -1152,6 +1152,47 @@ const checks: Check[] = [
           addCalibrationSource.includes('localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));'),
         '新增计量证书应基于最新设备列表写入，避免连续登记覆盖其他档案更新'
       );
+      const deleteMaintenanceStart = archiveSource.indexOf('const handleDeleteMaintenanceLog = (logId: string) => {');
+      const deleteMaintenanceEnd = archiveSource.indexOf('// Delete Calibration Log', deleteMaintenanceStart);
+      assert(deleteMaintenanceStart !== -1 && deleteMaintenanceEnd > deleteMaintenanceStart, '应能定位删除维保履历逻辑');
+      const deleteMaintenanceSource = archiveSource.slice(deleteMaintenanceStart, deleteMaintenanceEnd);
+      assert(
+        deleteMaintenanceSource.includes("if (!ensureCanManageEquipmentArchive('删除维保履历记录')) return;") &&
+          deleteMaintenanceSource.includes('setEquipments(prevEquipments => {') &&
+          deleteMaintenanceSource.includes('const nextEquipments = prevEquipments.map(eq => {') &&
+          deleteMaintenanceSource.includes('if (eq.id !== selectedId) return eq;') &&
+          deleteMaintenanceSource.includes('maintenanceLogs: eq.maintenanceLogs.filter(log => log.id !== logId)') &&
+          deleteMaintenanceSource.includes('localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));'),
+        '删除维保/维修履历应基于最新设备列表写入，避免覆盖并发档案更新'
+      );
+      const deleteCalibrationStart = archiveSource.indexOf('const handleDeleteCalibrationLog = (calId: string) => {');
+      const deleteCalibrationEnd = archiveSource.indexOf('const handleDeleteExtractedSnapshot = (snapshotId: string) => {', deleteCalibrationStart);
+      assert(deleteCalibrationStart !== -1 && deleteCalibrationEnd > deleteCalibrationStart, '应能定位删除计量证书逻辑');
+      const deleteCalibrationSource = archiveSource.slice(deleteCalibrationStart, deleteCalibrationEnd);
+      assert(
+        deleteCalibrationSource.includes("if (!ensureCanManageEquipmentArchive('注销计量证书')) return;") &&
+          deleteCalibrationSource.includes('setEquipments(prevEquipments => {') &&
+          deleteCalibrationSource.includes('const nextEquipments = prevEquipments.map(eq => {') &&
+          deleteCalibrationSource.includes('if (eq.id !== selectedId) return eq;') &&
+          deleteCalibrationSource.includes('calibrationLogs: eq.calibrationLogs.filter(cal => cal.id !== calId)') &&
+          deleteCalibrationSource.includes('localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));'),
+        '删除计量证书应基于最新设备列表写入，避免覆盖并发档案更新'
+      );
+      const deleteSnapshotStart = archiveSource.indexOf('const handleDeleteExtractedSnapshot = (snapshotId: string) => {');
+      const deleteSnapshotEnd = archiveSource.indexOf('// Add Attachment Item', deleteSnapshotStart);
+      assert(deleteSnapshotStart !== -1 && deleteSnapshotEnd > deleteSnapshotStart, '应能定位解除技术手册快照关联逻辑');
+      const deleteSnapshotSource = archiveSource.slice(deleteSnapshotStart, deleteSnapshotEnd);
+      assert(
+        deleteSnapshotSource.includes("if (!ensureCanManageEquipmentArchive('解除技术手册快照关联')) return;") &&
+          deleteSnapshotSource.includes('if (!selectedEquipment) return;') &&
+          deleteSnapshotSource.includes('const targetEquipmentId = selectedEquipment.id;') &&
+          deleteSnapshotSource.includes('setEquipments(prevEquipments => {') &&
+          deleteSnapshotSource.includes('const nextEquipments = prevEquipments.map(eq => {') &&
+          deleteSnapshotSource.includes('if (eq.id !== targetEquipmentId) return eq;') &&
+          deleteSnapshotSource.includes('extractedSnapshots: (eq.extractedSnapshots || []).filter(s => s.id !== snapshotId)') &&
+          deleteSnapshotSource.includes('localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));'),
+        '解除技术手册快照关联应基于最新设备列表写入并校验当前选中设备'
+      );
       const printStart = archiveSource.indexOf('const handlePrintQR = () => {');
       const printEnd = archiveSource.indexOf('const createQuickRepairRecord = (', printStart);
       assert(printStart !== -1 && printEnd > printStart, '应能定位物联二维码打印逻辑');
