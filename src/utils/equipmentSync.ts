@@ -94,6 +94,14 @@ const isOpenRepairLog = (log: MaintenanceLog) => {
   return log.type === '维修' && log.status === '进行中';
 };
 
+const hasArchiveWorkOrderNo = (log: MaintenanceLog) => {
+  return /^WO-\d{8}-\d{4}$/.test(log.workOrderNo || '');
+};
+
+const isQuickRepairArchiveLog = (log: MaintenanceLog) => {
+  return hasArchiveWorkOrderNo(log) && log.description.includes('【一键快捷报修】');
+};
+
 export const getLinkedArchiveWorkOrderNo = (task: StructuredTicket) => {
   const searchableText = [
     task.notes,
@@ -122,6 +130,42 @@ const buildCompletedMaintenanceLog = (
   verifyPerson: verifyingPerson
 });
 
+const closeOrphanedArchiveRepairLogs = (
+  equipment: MedicalEquipment,
+  orphanedWorkOrderNos: Set<string>
+) => {
+  let closed = false;
+  const maintenanceLogs = equipment.maintenanceLogs.map(log => {
+    const workOrderNo = log.workOrderNo || '';
+    if (!isOpenRepairLog(log) || !orphanedWorkOrderNos.has(workOrderNo)) {
+      return log;
+    }
+
+    closed = true;
+    return {
+      ...log,
+      status: '已完成' as const,
+      description: log.description.includes('主工单已删除或重置')
+        ? log.description
+        : `${log.description}；主工单已删除或重置，系统自动解除在修占用。`
+    };
+  });
+
+  if (!closed) {
+    return { equipment, closed };
+  }
+
+  const hasRemainingOpenRepair = maintenanceLogs.some(log => isOpenRepairLog(log));
+  return {
+    equipment: {
+      ...equipment,
+      status: equipment.status === '故障维修' && !hasRemainingOpenRepair ? '正常运行' as const : equipment.status,
+      maintenanceLogs
+    },
+    closed
+  };
+};
+
 export const syncTasksToEquipmentArchives = (
   tasks: StructuredTicket[],
   equipmentArchives: MedicalEquipment[],
@@ -131,7 +175,6 @@ export const syncTasksToEquipmentArchives = (
 
   const equipments = equipmentArchives.map(equipment => {
     const relatedTasks = tasks.filter(task => shouldSyncTaskToEquipmentArchive(task, equipment));
-    if (relatedTasks.length === 0) return equipment;
 
     let equipmentChanged = false;
     const maintenanceLogs = Array.isArray(equipment.maintenanceLogs)
@@ -148,12 +191,49 @@ export const syncTasksToEquipmentArchives = (
 
     const hasActiveTask = relatedTasks.some(task => ACTIVE_TASK_STATUSES.includes(task.status));
     const hasCompletedTask = relatedTasks.some(task => COMPLETED_TASK_STATUSES.includes(task.status));
+    const activeArchiveWorkOrders = new Set(
+      relatedTasks
+        .filter(task => ACTIVE_TASK_STATUSES.includes(task.status))
+        .map(getLinkedArchiveWorkOrderNo)
+        .filter(Boolean)
+    );
     const completingArchiveWorkOrders = new Set(
       relatedTasks
         .filter(task => COMPLETED_TASK_STATUSES.includes(task.status))
         .map(getLinkedArchiveWorkOrderNo)
         .filter(Boolean)
     );
+    const orphanedArchiveWorkOrders = new Set(
+      syncedEquipment.maintenanceLogs
+        .filter(log => {
+          const workOrderNo = log.workOrderNo || '';
+          return (
+            isOpenRepairLog(log) &&
+            isQuickRepairArchiveLog(log) &&
+            !hasActiveTask &&
+            !activeArchiveWorkOrders.has(workOrderNo) &&
+            !completingArchiveWorkOrders.has(workOrderNo)
+          );
+        })
+        .map(log => log.workOrderNo || '')
+    );
+
+    if (orphanedArchiveWorkOrders.size > 0) {
+      const result = closeOrphanedArchiveRepairLogs(syncedEquipment, orphanedArchiveWorkOrders);
+      syncedEquipment.status = result.equipment.status;
+      syncedEquipment.maintenanceLogs = result.equipment.maintenanceLogs;
+      equipmentChanged = equipmentChanged || result.closed;
+    }
+
+    if (relatedTasks.length === 0) {
+      if (equipmentChanged) {
+        changed = true;
+        return syncedEquipment;
+      }
+
+      return equipment;
+    }
+
     const hasOpenArchiveRepair = syncedEquipment.maintenanceLogs.some(log => (
       isOpenRepairLog(log) && !completingArchiveWorkOrders.has(log.workOrderNo || '')
     ));

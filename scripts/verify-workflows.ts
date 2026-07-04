@@ -849,6 +849,101 @@ const checks: Check[] = [
         '快捷报修关联档案维修单应写入主工单闭环说明'
       );
 
+      const orphanedQuickRepairSync = syncTasksToEquipmentArchives(
+        [],
+        [
+          createEquipment({
+            status: '故障维修',
+            maintenanceLogs: [
+              {
+                id: 'm-log-orphaned-quick',
+                type: '维修',
+                date: '2026-07-04',
+                technician: '未分派 (待响应)',
+                cost: 0,
+                description: '【一键快捷报修】紧急度: 中。描述: 呼吸机屏幕黑屏',
+                status: '进行中',
+                workOrderNo: 'WO-20260704-0002',
+                faultPhenomenon: '呼吸机屏幕黑屏',
+                verifyPerson: '赵晓东'
+              }
+            ]
+          })
+        ],
+        new Date('2026-07-04T00:00:00+08:00')
+      );
+      const orphanedQuickRepairLog = orphanedQuickRepairSync.equipments[0].maintenanceLogs.find(log => log.workOrderNo === 'WO-20260704-0002');
+      assertEqual(orphanedQuickRepairSync.changed, true, '主工单被删除或重置后应触发档案快捷报修锁清理');
+      assertEqual(orphanedQuickRepairSync.equipments[0].status, '正常运行', '孤儿快捷报修在修锁清理后设备应恢复正常运行');
+      assertEqual(orphanedQuickRepairLog?.status, '已完成', '孤儿快捷报修档案维修单应自动解除进行中状态');
+      assertIncludes(
+        orphanedQuickRepairLog?.description || '',
+        '主工单已删除或重置',
+        '孤儿快捷报修档案维修单应写入解除原因'
+      );
+
+      const manualOpenRepairSync = syncTasksToEquipmentArchives(
+        [],
+        [
+          createEquipment({
+            status: '故障维修',
+            maintenanceLogs: [
+              {
+                id: 'm-log-manual-open',
+                type: '维修',
+                date: '2026-07-04',
+                technician: '张明华',
+                cost: 0,
+                description: '工程师手工创建的现场维修工单，等待备件。',
+                status: '进行中',
+                workOrderNo: 'WO-20260704-0999',
+                faultPhenomenon: '待备件',
+                verifyPerson: '赵晓东'
+              }
+            ]
+          })
+        ],
+        new Date('2026-07-04T00:00:00+08:00')
+      );
+      assertEqual(manualOpenRepairSync.changed, false, '无主工单引用的手工在修履历不能被快捷报修孤儿清理误闭合');
+      assertEqual(manualOpenRepairSync.equipments[0].maintenanceLogs[0].status, '进行中', '手工在修履历应保持进行中');
+
+      const quickRepairActiveTask = createTask({
+        id: 'TKT-QUICK-ACTIVE',
+        status: '处理中',
+        deviceId: 'eq-verify-001',
+        aiSuggestions: ['关联档案维修单号：WO-20260704-0003，请闭环后回写设备档案。'],
+        logs: [
+          { time: '2026-07-04 14:00', action: '资产档案快捷报修同步建单。关联档案维修单号：WO-20260704-0003。', operator: '赵晓东' }
+        ]
+      });
+      const activeQuickRepairSync = syncTasksToEquipmentArchives(
+        [quickRepairActiveTask],
+        [
+          createEquipment({
+            status: '故障维修',
+            maintenanceLogs: [
+              {
+                id: 'm-log-active-quick',
+                type: '维修',
+                date: '2026-07-04',
+                technician: '未分派 (待响应)',
+                cost: 0,
+                description: '【一键快捷报修】紧急度: 中。描述: 呼吸机报警',
+                status: '进行中',
+                workOrderNo: 'WO-20260704-0003',
+                faultPhenomenon: '呼吸机报警',
+                verifyPerson: '赵晓东'
+              }
+            ]
+          })
+        ],
+        new Date('2026-07-04T00:00:00+08:00')
+      );
+      const activeQuickRepairLog = activeQuickRepairSync.equipments[0].maintenanceLogs.find(log => log.workOrderNo === 'WO-20260704-0003');
+      assertEqual(activeQuickRepairSync.equipments[0].status, '故障维修', '快捷报修主工单仍活跃时档案应保持故障维修');
+      assertEqual(activeQuickRepairLog?.status, '进行中', '快捷报修主工单仍活跃时档案维修单不能被孤儿清理关闭');
+
       const transferTask = createTask({
         id: 'TKT-TRANSFER-SAME-ID',
         taskType: '非设备类转派任务',
