@@ -938,6 +938,36 @@ const checks: Check[] = [
         printSource.includes("if (!ensureCanManageEquipmentArchive('打印物联二维码标签')) return;"),
         '二维码标签打印属于档案管理外设指令，应统一走工程师权限拦截'
       );
+      const downloadStart = archiveSource.indexOf('const triggerDownloadFile = (file: Attachment) => {');
+      const downloadEnd = archiveSource.indexOf('const handleExtractSnapshot = (page: PreviewPage) => {', downloadStart);
+      assert(downloadStart !== -1 && downloadEnd > downloadStart, '应能定位技术资料原档下载逻辑');
+      const downloadSource = archiveSource.slice(downloadStart, downloadEnd);
+      assert(
+        downloadSource.includes("if (!ensureCanManageEquipmentArchive('下载技术资料原档')) return;"),
+        '技术资料原档下载属于档案管理导出动作，应统一走工程师权限拦截'
+      );
+      const mobileActionsStart = archiveSource.indexOf('Quick action buttons on mobile next to title');
+      const mobileActionsEnd = archiveSource.indexOf('{/* Dynamic Filters & Search Panel */}', mobileActionsStart);
+      assert(mobileActionsStart !== -1 && mobileActionsEnd > mobileActionsStart, '应能定位移动端资产档案页头部导出入口');
+      const mobileActionsSource = archiveSource.slice(mobileActionsStart, mobileActionsEnd);
+      assert(
+        mobileActionsSource.includes('{canManageEquipmentArchive ? (') &&
+          mobileActionsSource.includes('setIsDossierModalOpen(true)') &&
+          mobileActionsSource.includes('title="导出PDF档案"') &&
+          mobileActionsSource.includes('只读'),
+        '移动端资产档案 PDF 导出按钮应只在工程师权限下渲染，临床端保留只读说明'
+      );
+      const desktopPdfIndex = archiveSource.indexOf('title="导出当前选中设备技术档案为 PDF / 打印"');
+      const desktopGuardIndex = archiveSource.lastIndexOf('{canManageEquipmentArchive ? (', desktopPdfIndex);
+      const desktopReadonlyIndex = archiveSource.indexOf('临床只读档案', desktopPdfIndex);
+      assert(
+        desktopPdfIndex !== -1 &&
+          desktopGuardIndex !== -1 &&
+          desktopGuardIndex < desktopPdfIndex &&
+          desktopReadonlyIndex !== -1 &&
+          desktopReadonlyIndex > desktopPdfIndex,
+        '桌面端资产档案 PDF 导出按钮应只在工程师权限下渲染，临床端保留只读说明'
+      );
       assert(
         archiveSource.includes("title={canManageEquipmentArchive ? '点击打印二维码物联标签' : '临床只读：二维码打印由医学装备科工程师执行'}") &&
           archiveSource.includes("title={canManageEquipmentArchive ? '点击向打印机发送标签打印指令' : '临床只读：二维码打印由医学装备科工程师执行'}") &&
@@ -975,6 +1005,28 @@ const checks: Check[] = [
           calibrationPrintSource.includes('<span>打印合格证 & 证书</span>') &&
           calibrationPrintSource.includes('临床只读阅览'),
         '计量证书可供临床只读查看，但打印证书按钮只能给工程师'
+      );
+      const matrixExportStart = archiveSource.indexOf('医学装备资产台账明细表');
+      const matrixExportEnd = archiveSource.indexOf('{/* Reset All Filters */}', matrixExportStart);
+      assert(matrixExportStart !== -1 && matrixExportEnd > matrixExportStart, '应能定位资产台账明细表导出区');
+      const matrixExportSource = archiveSource.slice(matrixExportStart, matrixExportEnd);
+      assert(
+        matrixExportSource.includes('{canManageEquipmentArchive ? (') &&
+          matrixExportSource.includes('link.setAttribute("download", `医学装备资产台账明细_${assetScopeLabel}_${getLocalDateString()}.csv`);') &&
+          matrixExportSource.includes('导出当前表 (CSV)') &&
+          matrixExportSource.includes('临床只读台账'),
+        '资产台账 CSV 导出应只允许工程师执行，临床端保留本科室台账只读查看'
+      );
+      const attachmentPreviewStart = archiveSource.indexOf('SMART ATTACHMENT PREVIEW & AI SNAPSHOT EXTRACTOR');
+      const attachmentPreviewEnd = archiveSource.indexOf('{/* Document Split Grid Container */}', attachmentPreviewStart);
+      assert(attachmentPreviewStart !== -1 && attachmentPreviewEnd > attachmentPreviewStart, '应能定位附件预览弹窗头部');
+      const attachmentPreviewSource = archiveSource.slice(attachmentPreviewStart, attachmentPreviewEnd);
+      assert(
+        attachmentPreviewSource.includes('{canManageEquipmentArchive ? (') &&
+          attachmentPreviewSource.includes('onClick={() => triggerDownloadFile(previewFile)}') &&
+          attachmentPreviewSource.includes('下载原档') &&
+          attachmentPreviewSource.includes('临床只读预览'),
+        '附件预览可供临床查看，但原档下载按钮只能给工程师'
       );
     }
   },

@@ -1656,6 +1656,7 @@ Clinical class: Life-saving respiratory device`;
 
   // Simulated download or direct file link clicks
   const triggerDownloadFile = (file: Attachment) => {
+    if (!ensureCanManageEquipmentArchive('下载技术资料原档')) return;
     alert(`[安全原档下载] 正在安全信道解密调阅医疗器械原始技术文档：${file.name} (大小: ${file.size})`);
   };
 
@@ -1805,13 +1806,19 @@ Clinical class: Life-saving respiratory device`;
                 <Sparkles className="w-4 h-4" />
               </button>
             )}
-            <button 
-              onClick={() => setIsDossierModalOpen(true)}
-              className="flex items-center justify-center bg-slate-800 text-white p-2 rounded-lg text-xs font-medium hover:bg-slate-900 transition-colors shadow-sm"
-              title="导出PDF档案"
-            >
-              <Printer className="w-4 h-4" />
-            </button>
+            {canManageEquipmentArchive ? (
+              <button
+                onClick={() => setIsDossierModalOpen(true)}
+                className="flex items-center justify-center bg-slate-800 text-white p-2 rounded-lg text-xs font-medium hover:bg-slate-900 transition-colors shadow-sm"
+                title="导出PDF档案"
+              >
+                <Printer className="w-4 h-4" />
+              </button>
+            ) : (
+              <span className="flex items-center justify-center bg-slate-100 text-slate-500 p-2 rounded-lg text-[10px] font-bold border border-slate-200">
+                只读
+              </span>
+            )}
             {canManageEquipmentArchive && (
               <button
                 onClick={openCreateModal}
@@ -1849,14 +1856,20 @@ Clinical class: Life-saving respiratory device`;
               </button>
             )}
 
-            <button 
-              onClick={() => setIsDossierModalOpen(true)}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-slate-800 text-white px-3.5 py-2 rounded-lg text-xs md:text-sm font-bold hover:bg-slate-900 transition-colors shadow-sm whitespace-nowrap"
-              title="导出当前选中设备技术档案为 PDF / 打印"
-            >
-              <Printer className="w-4 h-4" />
-              <span>导出PDF档案</span>
-            </button>
+            {canManageEquipmentArchive ? (
+              <button
+                onClick={() => setIsDossierModalOpen(true)}
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-slate-800 text-white px-3.5 py-2 rounded-lg text-xs md:text-sm font-bold hover:bg-slate-900 transition-colors shadow-sm whitespace-nowrap"
+                title="导出当前选中设备技术档案为 PDF / 打印"
+              >
+                <Printer className="w-4 h-4" />
+                <span>导出PDF档案</span>
+              </button>
+            ) : (
+              <span className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-slate-100 text-slate-500 px-3.5 py-2 rounded-lg text-xs md:text-sm font-bold border border-slate-200 whitespace-nowrap">
+                临床只读档案
+              </span>
+            )}
 
             {canManageEquipmentArchive && (
               <button
@@ -3630,26 +3643,32 @@ Clinical class: Life-saving respiratory device`;
 
                 <div className="flex flex-wrap items-center gap-2">
                   {/* Export Button */}
-                  <button
-                    onClick={() => {
-                      const csvContent = "data:text/csv;charset=utf-8,\uFEFF" // Include BOM for Chinese encoding support in Excel
-                        + ["设备编号,设备名称,科室,品类,品牌/厂商,型号,出厂SN,购置金额,运行状态,下期维保时间,是否强检"]
-                          .concat(matrixFilteredEquipments.map(e => `"${e.id}","${e.deviceName}","${e.dept}","${e.category}","${e.manufacturer}","${e.model}","${e.sn}",${e.purchaseCost},"${e.status}","${e.nextMaintenanceDate || ''}","${e.calibrationRequired ? '是' : '否'}"`))
-                          .join("\n");
-                      const encodedUri = encodeURI(csvContent);
-                      const link = document.createElement("a");
-                      link.setAttribute("href", encodedUri);
-                      link.setAttribute("download", `医学装备资产台账明细_${assetScopeLabel}_${getLocalDateString()}.csv`);
-                      document.body.appendChild(link);
-                      link.click();
-                      document.body.removeChild(link);
-                    }}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-xs transition-all cursor-pointer"
-                    title={`导出当前${assetScopeLabel}可见设备资产报表为 CSV 格式`}
-                  >
-                    <Printer className="w-3.5 h-3.5 text-slate-500" />
-                    <span>导出当前表 (CSV)</span>
-                  </button>
+                  {canManageEquipmentArchive ? (
+                    <button
+                      onClick={() => {
+                        const csvContent = "data:text/csv;charset=utf-8,\uFEFF" // Include BOM for Chinese encoding support in Excel
+                          + ["设备编号,设备名称,科室,品类,品牌/厂商,型号,出厂SN,购置金额,运行状态,下期维保时间,是否强检"]
+                            .concat(matrixFilteredEquipments.map(e => `"${e.id}","${e.deviceName}","${e.dept}","${e.category}","${e.manufacturer}","${e.model}","${e.sn}",${e.purchaseCost},"${e.status}","${e.nextMaintenanceDate || ''}","${e.calibrationRequired ? '是' : '否'}"`))
+                            .join("\n");
+                        const encodedUri = encodeURI(csvContent);
+                        const link = document.createElement("a");
+                        link.setAttribute("href", encodedUri);
+                        link.setAttribute("download", `医学装备资产台账明细_${assetScopeLabel}_${getLocalDateString()}.csv`);
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-xs transition-all cursor-pointer"
+                      title={`导出当前${assetScopeLabel}可见设备资产报表为 CSV 格式`}
+                    >
+                      <Printer className="w-3.5 h-3.5 text-slate-500" />
+                      <span>导出当前表 (CSV)</span>
+                    </button>
+                  ) : (
+                    <span className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 text-slate-500 font-bold rounded-lg text-xs border border-slate-200">
+                      临床只读台账
+                    </span>
+                  )}
 
                   {/* Reset All Filters */}
                   {(matrixSelectedDept !== '全部科室' || matrixSelectedCategory !== '全部分类' || matrixSelectedStatus !== '全部状态' || matrixSearchQuery) && (
@@ -6401,13 +6420,19 @@ Clinical class: Life-saving respiratory device`;
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <button
-                    onClick={() => triggerDownloadFile(previewFile)}
-                    className="flex items-center gap-1 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 transition-all cursor-pointer"
-                    title="下载源技术文档文件"
-                  >
-                    <span>下载原档</span>
-                  </button>
+                  {canManageEquipmentArchive ? (
+                    <button
+                      onClick={() => triggerDownloadFile(previewFile)}
+                      className="flex items-center gap-1 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 transition-all cursor-pointer"
+                      title="下载源技术文档文件"
+                    >
+                      <span>下载原档</span>
+                    </button>
+                  ) : (
+                    <span className="flex items-center gap-1 bg-slate-800 text-slate-400 px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-700">
+                      临床只读预览
+                    </span>
+                  )}
                   <button
                     onClick={() => setIsPreviewOpen(false)}
                     className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors cursor-pointer"
