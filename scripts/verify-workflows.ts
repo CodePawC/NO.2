@@ -1800,7 +1800,10 @@ const checks: Check[] = [
           archiveSource.includes('id="quick-repair-description"') &&
           archiveSource.includes('aria-label="故障现象具体描述"') &&
           archiveSource.includes('id="btn-submit-quick-repair"') &&
-          archiveSource.includes('aria-label="提交快捷报修并分派"'),
+          archiveSource.includes('aria-label="提交快捷报修并分派"') &&
+          archiveSource.includes('const canSubmitQuickRepair = Boolean(quickRepairEquipId && quickRepairDesc.trim());') &&
+          archiveSource.includes('disabled={!canSubmitQuickRepair}') &&
+          archiveSource.includes('disabled:cursor-not-allowed'),
         '资产档案快捷报修控件应提供稳定标识和可访问名称，便于临床人测与自动化回归'
       );
       assert(
