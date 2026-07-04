@@ -344,6 +344,9 @@ export default function App() {
 
     return `当前登录身份为【${currentSimulatedUser.name} ${currentSimulatedUser.title}】，不能执行${actionName}。请切换到医学装备科工程师账号后再操作。`;
   };
+  const isTaskTerminal = (task: StructuredTicket | null) => {
+    return task ? ['已归档', '已关闭'].includes(task.status) : false;
+  };
 
   const appendWorkflowNotice = (message: string, idPrefix = 'msg-workflow-notice') => {
     setChatMessages(prev => [...prev, {
@@ -1075,6 +1078,10 @@ export default function App() {
     const blockReason = getEngineerActionBlockReason('工单处置日志追加');
     if (blockReason) {
       appendWorkflowNotice(`⚠️ **操作权限提醒**\n${blockReason}`, 'msg-log-blocked');
+      return;
+    }
+    if (isTaskTerminal(selectedTask)) {
+      appendWorkflowNotice('⚠️ **归档锁定提醒**\n该工单已归档或关闭，不能再追加处置日志。', 'msg-log-terminal-blocked');
       return;
     }
 
@@ -3184,7 +3191,7 @@ export default function App() {
                 <form onSubmit={handleAddLog} className="space-y-2">
                   <p className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
                     <Plus className="w-3 h-3" />
-                    录入维修进度 / 跟踪事件：
+                    {isTaskTerminal(selectedTask) ? '工单已归档锁定：' : '录入维修进度 / 跟踪事件：'}
                   </p>
                   
                   <div className="flex gap-2">
@@ -3193,20 +3200,23 @@ export default function App() {
                       placeholder="操作人" 
                       value={activeLogOperator}
                       onChange={(e) => setActiveLogOperator(e.target.value)}
+                      disabled={isTaskTerminal(selectedTask)}
                       className="w-1/3 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-slate-400"
                       id="log-operator-input"
                     />
                     <input 
                       type="text" 
-                      placeholder="录入进度日志..." 
+                      placeholder={isTaskTerminal(selectedTask) ? '已归档或已关闭，不能再追加日志' : '录入进度日志...'} 
                       value={activeLogAction}
                       onChange={(e) => setActiveLogAction(e.target.value)}
+                      disabled={isTaskTerminal(selectedTask)}
                       className="flex-1 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-slate-400"
                       id="log-action-input"
                     />
                     <button 
                       type="submit"
-                      disabled={!activeLogAction.trim()}
+                      disabled={!activeLogAction.trim() || isTaskTerminal(selectedTask)}
+                      title={isTaskTerminal(selectedTask) ? '已归档或已关闭工单不能再追加日志' : '记录工单处置日志'}
                       className="bg-slate-900 hover:bg-slate-800 text-white disabled:bg-slate-200 disabled:text-slate-400 text-xs font-semibold px-3 py-1.5 rounded-lg transition shrink-0 cursor-pointer"
                       id="btn-add-log-submit"
                     >

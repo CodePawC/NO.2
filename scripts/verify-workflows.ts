@@ -806,6 +806,35 @@ const checks: Check[] = [
     }
   },
   {
+    name: 'terminal task logs are locked after archive or close',
+    run: () => {
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const addLogStart = appSource.indexOf('const handleAddLog = (e: React.FormEvent) => {');
+      const addLogEnd = appSource.indexOf('// Update status of selected task', addLogStart);
+      assert(addLogStart !== -1 && addLogEnd > addLogStart, '应能定位工程师日志追加逻辑');
+      const addLogSource = appSource.slice(addLogStart, addLogEnd);
+
+      assert(
+        appSource.includes('const isTaskTerminal = (task: StructuredTicket | null) => {') &&
+          appSource.includes("['已归档', '已关闭'].includes(task.status)"),
+        '应用应有统一终态判断，已归档/已关闭工单必须锁定'
+      );
+      assert(
+        addLogSource.includes('if (isTaskTerminal(selectedTask))') &&
+          addLogSource.includes('该工单已归档或关闭，不能再追加处置日志。'),
+        '工程师不能在已归档或已关闭工单上继续追加处置日志'
+      );
+      assert(
+        appSource.includes("disabled={!activeLogAction.trim() || isTaskTerminal(selectedTask)}") &&
+          appSource.includes('disabled={isTaskTerminal(selectedTask)}') &&
+          appSource.includes("placeholder={isTaskTerminal(selectedTask) ? '已归档或已关闭，不能再追加日志' : '录入进度日志...'}") &&
+          appSource.includes("title={isTaskTerminal(selectedTask) ? '已归档或已关闭工单不能再追加日志' : '记录工单处置日志'}") &&
+          appSource.includes("{isTaskTerminal(selectedTask) ? '工单已归档锁定：' : '录入维修进度 / 跟踪事件：'}"),
+        '工程师日志输入区应在终态工单上显示锁定提示，并禁用输入框与记录按钮'
+      );
+    }
+  },
+  {
     name: 'clinical archive selection never falls back to hidden equipment',
     run: () => {
       const archiveSource = readFileSync('src/components/EquipmentArchives.tsx', 'utf8');
