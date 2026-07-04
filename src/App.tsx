@@ -45,7 +45,7 @@ import {
   X,
   Info
 } from 'lucide-react';
-import { StructuredTicket, ChatMessage, TaskType, UrgencyLevel, ClinicalImpact, TaskStatus, LLMConfig, MedicalEquipment } from './types';
+import { StructuredTicket, ChatMessage, TaskType, UrgencyLevel, ClinicalImpact, TaskStatus, LLMConfig, MedicalEquipment, UserProfile } from './types';
 import { INITIAL_TASKS } from './data/defaultTasks';
 import { getPresetPromptsForUser, MOCK_VOICE_TEMPLATES, SIMULATED_USERS } from './data/appPresets';
 import { useAiSettings } from './hooks/useAiSettings';
@@ -290,6 +290,9 @@ export default function App() {
   const canCurrentUserSeeTask = (task: StructuredTicket) => {
     return !isClinicalUser || isSameDepartment(task.department, currentUserDepartment);
   };
+  const canUserSeeTask = (task: StructuredTicket, user: UserProfile, userRole = user.role) => {
+    return userRole !== 'medical_staff' || isSameDepartment(task.department, user.department || user.dept);
+  };
   const canCurrentUserUseEquipment = (equipment: MedicalEquipment) => {
     return !isClinicalUser || isSameDepartment(equipment.dept, currentUserDepartment);
   };
@@ -369,10 +372,12 @@ export default function App() {
       setChatMessages([greetingMsg]);
       
       // Keep the current task in focus when switching back to its owning clinical department.
-      const deptTasks = getDepartmentTasks(tasks, targetUser.department || targetUser.dept);
-      const currentTaskBelongsToTargetDept = selectedTask && isSameDepartment(selectedTask.department, targetUser.department || targetUser.dept);
+      const latestTasks = tasksRef.current;
+      const latestSelectedTask = selectedTask ? latestTasks.find(task => task.id === selectedTask.id) || null : null;
+      const deptTasks = getDepartmentTasks(latestTasks, targetUser.department || targetUser.dept);
+      const currentTaskBelongsToTargetDept = latestSelectedTask && canUserSeeTask(latestSelectedTask, targetUser, targetUser.role);
       if (currentTaskBelongsToTargetDept) {
-        setSelectedTask(selectedTask);
+        setSelectedTask(latestSelectedTask);
       } else if (deptTasks.length > 0) {
         setSelectedTask(deptTasks[0]);
       } else {
@@ -387,7 +392,7 @@ export default function App() {
         timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
       };
       setChatMessages([greetingMsg]);
-      setSelectedTask(tasks[0] || null);
+      setSelectedTask(tasksRef.current[0] || null);
     }
   };
 
@@ -424,11 +429,12 @@ export default function App() {
       const ticketId = e.detail?.ticketId;
       if (!ticketId) return;
 
-      const found = tasks.find(t => t.id === ticketId);
+      const latestTasks = tasksRef.current;
+      const found = latestTasks.find(t => t.id === ticketId);
       if (!found) return;
 
       if (!canCurrentUserSeeTask(found)) {
-        const fallbackTask = tasks.find(canCurrentUserSeeTask) || null;
+        const fallbackTask = latestTasks.find(canCurrentUserSeeTask) || null;
         const scopeLabel = currentUserDepartment || '本科室';
         setSelectedTask(fallbackTask);
         setCurrentWorkspace('tasks');
@@ -458,7 +464,7 @@ export default function App() {
   useEffect(() => {
     if (!selectedTask) return;
 
-    const latestSelectedTask = tasks.find(task => task.id === selectedTask.id);
+    const latestSelectedTask = tasksRef.current.find(task => task.id === selectedTask.id);
     if (latestSelectedTask && latestSelectedTask !== selectedTask) {
       setSelectedTask(latestSelectedTask);
     }
@@ -469,7 +475,7 @@ export default function App() {
       return;
     }
 
-    const fallbackTask = visibleTasks[0] || null;
+    const fallbackTask = tasksRef.current.find(canCurrentUserSeeTask) || null;
     setSelectedTask(fallbackTask);
     setMobileTab(fallbackTask ? 'list' : 'chat');
     setShowRoleSwitchedToast(`已阻止跨科室工单访问，仅显示【${currentUserDepartment || '本科室'}】任务`);

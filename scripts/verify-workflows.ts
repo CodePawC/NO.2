@@ -1725,9 +1725,54 @@ const checks: Check[] = [
 
       assert(
         switchSource.includes('currentTaskBelongsToTargetDept') &&
-          switchSource.includes('isSameDepartment(selectedTask.department, targetUser.department || targetUser.dept)') &&
-          switchSource.includes('setSelectedTask(selectedTask);'),
-        '切回临床同科室时应保留当前聚焦工单，避免关闭转派单被列表排序切走'
+          switchSource.includes('const latestTasks = tasksRef.current;') &&
+          switchSource.includes('const latestSelectedTask = selectedTask ? latestTasks.find(task => task.id === selectedTask.id) || null : null;') &&
+          switchSource.includes('canUserSeeTask(latestSelectedTask, targetUser, targetUser.role)') &&
+          switchSource.includes('setSelectedTask(latestSelectedTask);'),
+        '切回临床同科室时应基于最新任务列表保留当前聚焦工单，避免关闭转派单被列表排序切走'
+      );
+      assert(
+        appSource.includes('const canUserSeeTask = (task: StructuredTicket, user: UserProfile, userRole = user.role) => {') &&
+          switchSource.includes('const deptTasks = getDepartmentTasks(latestTasks, targetUser.department || targetUser.dept);') &&
+          switchSource.includes('setSelectedTask(tasksRef.current[0] || null);'),
+        '角色切换默认选中任务应使用目标用户权限和最新任务列表，而不是旧渲染快照'
+      );
+    }
+  },
+  {
+    name: 'task deeplinks and clinical fallback use latest task state',
+    run: () => {
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const deepLinkStart = appSource.indexOf('const handleDeepLinkTicket = (e: any) => {');
+      const deepLinkEnd = appSource.indexOf("window.addEventListener('deep-link-ticket'", deepLinkStart);
+      assert(deepLinkStart !== -1 && deepLinkEnd > deepLinkStart, '应能定位工单深链逻辑');
+      const deepLinkSource = appSource.slice(deepLinkStart, deepLinkEnd);
+
+      assert(
+        deepLinkSource.includes('const latestTasks = tasksRef.current;') &&
+          deepLinkSource.includes('const found = latestTasks.find(t => t.id === ticketId);') &&
+          deepLinkSource.includes('const fallbackTask = latestTasks.find(canCurrentUserSeeTask) || null;'),
+        '工单深链打开和跨科室拦截回退应使用最新任务列表，避免打开已被更新或删除的旧工单'
+      );
+
+      const selectedSyncStart = appSource.indexOf('useEffect(() => {\n    if (!selectedTask) return;');
+      const selectedSyncEnd = appSource.indexOf('useEffect(() => {\n    if (!isClinicalUser', selectedSyncStart);
+      assert(selectedSyncStart !== -1 && selectedSyncEnd > selectedSyncStart, '应能定位选中工单同步逻辑');
+      const selectedSyncSource = appSource.slice(selectedSyncStart, selectedSyncEnd);
+      assert(
+        selectedSyncSource.includes('const latestSelectedTask = tasksRef.current.find(task => task.id === selectedTask.id);') &&
+          selectedSyncSource.includes('setSelectedTask(latestSelectedTask);'),
+        '选中工单详情应从最新任务列表刷新，避免右侧详情停留在旧对象'
+      );
+
+      const clinicalFallbackStart = selectedSyncEnd;
+      const clinicalFallbackEnd = appSource.indexOf('// Advanced AI custom settings states', clinicalFallbackStart);
+      assert(clinicalFallbackEnd > clinicalFallbackStart, '应能定位临床跨科室回退逻辑');
+      const clinicalFallbackSource = appSource.slice(clinicalFallbackStart, clinicalFallbackEnd);
+      assert(
+        clinicalFallbackSource.includes('const fallbackTask = tasksRef.current.find(canCurrentUserSeeTask) || null;') &&
+          clinicalFallbackSource.includes('setSelectedTask(fallbackTask);'),
+        '临床身份发现当前详情跨科室时，应从最新任务列表选择可见回退任务'
       );
     }
   },
