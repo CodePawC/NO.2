@@ -628,6 +628,7 @@ export default function EquipmentArchives({
   const [isScannerCameraActive, setIsScannerCameraActive] = useState(false);
   const scannerVideoRef = useRef<HTMLVideoElement | null>(null);
   const scannerStreamRef = useRef<MediaStream | null>(null);
+  const scannerCameraRequestVersionRef = useRef(0);
   const currentUserDepartment = currentUser.dept || currentUser.department;
 
   const canCurrentUserReportEquipment = (equipment: MedicalEquipment) => {
@@ -696,6 +697,7 @@ export default function EquipmentArchives({
     setIsLogModalOpen(false);
     setIsAttachmentModalOpen(false);
     setIsDossierModalOpen(false);
+    setIsScannerModalOpen(false);
     setFormMode('create');
     setCurrentEditId(null);
   }, [canManageEquipmentArchive]);
@@ -752,6 +754,8 @@ export default function EquipmentArchives({
 
   // 启动系统相机扫描仪
   const startScannerCamera = async () => {
+    const requestVersion = scannerCameraRequestVersionRef.current + 1;
+    scannerCameraRequestVersionRef.current = requestVersion;
     setScannerCameraError(null);
     setIsScannerCameraActive(true);
     try {
@@ -759,6 +763,10 @@ export default function EquipmentArchives({
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'environment' }
         });
+        if (requestVersion !== scannerCameraRequestVersionRef.current || !isScannerModalOpen) {
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
         scannerStreamRef.current = stream;
         if (scannerVideoRef.current) {
           scannerVideoRef.current.srcObject = stream;
@@ -770,6 +778,7 @@ export default function EquipmentArchives({
         throw new Error('浏览器不支持媒体设备接口，或者处于 Iframe 沙箱中被限制了摄像头权限。');
       }
     } catch (err: any) {
+      if (requestVersion !== scannerCameraRequestVersionRef.current || !isScannerModalOpen) return;
       console.warn("Camera access failed, falling back to simulator: ", err);
       setScannerCameraError(err.message || '获取摄像头失败，已启用模拟扫描。');
     }
@@ -777,6 +786,7 @@ export default function EquipmentArchives({
 
   // 关闭系统相机
   const stopScannerCamera = () => {
+    scannerCameraRequestVersionRef.current += 1;
     if (scannerStreamRef.current) {
       scannerStreamRef.current.getTracks().forEach(track => track.stop());
       scannerStreamRef.current = null;
@@ -796,9 +806,7 @@ export default function EquipmentArchives({
       stopScannerCamera();
     }
     return () => {
-      if (scannerStreamRef.current) {
-        scannerStreamRef.current.getTracks().forEach(track => track.stop());
-      }
+      stopScannerCamera();
     };
   }, [isScannerModalOpen]);
 

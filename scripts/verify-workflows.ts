@@ -988,12 +988,28 @@ const checks: Check[] = [
           archiveSource.includes('setIsLogModalOpen(false);') &&
           archiveSource.includes('setIsAttachmentModalOpen(false);') &&
           archiveSource.includes('setIsDossierModalOpen(false);') &&
+          archiveSource.includes('setIsScannerModalOpen(false);') &&
           archiveSource.includes('archiveManageRequestVersionRef.current += 1;') &&
           archiveSource.includes('setIsAnalyzing(false);') &&
           archiveSource.includes('setAnalyzerError(null);') &&
           archiveSource.includes("setFormMode('create');") &&
           archiveSource.includes('setCurrentEditId(null);'),
         '切换到临床档案视图时应清理工程师档案管理弹窗、AI 解析请求、PDF 导出预览和编辑态'
+      );
+      const scannerStart = archiveSource.indexOf('const startScannerCamera = async () => {');
+      const scannerStop = archiveSource.indexOf('const stopScannerCamera = () => {', scannerStart);
+      const scannerEffectEnd = archiveSource.indexOf('// 处理匹配出的设备SN条码定位并触发报修工单自动填充', scannerStop);
+      assert(scannerStart !== -1 && scannerStop > scannerStart && scannerEffectEnd > scannerStop, '应能定位扫码相机生命周期逻辑');
+      const scannerSource = archiveSource.slice(scannerStart, scannerEffectEnd);
+      assert(
+        archiveSource.includes('const scannerCameraRequestVersionRef = useRef(0);') &&
+          scannerSource.includes('const requestVersion = scannerCameraRequestVersionRef.current + 1;') &&
+          scannerSource.includes('scannerCameraRequestVersionRef.current = requestVersion;') &&
+          scannerSource.includes('if (requestVersion !== scannerCameraRequestVersionRef.current || !isScannerModalOpen)') &&
+          scannerSource.includes('stream.getTracks().forEach(track => track.stop());') &&
+          scannerSource.includes('scannerCameraRequestVersionRef.current += 1;') &&
+          scannerSource.includes('stopScannerCamera();'),
+        '扫码相机 getUserMedia 返回时应校验弹窗仍打开，关闭或切换角色后必须作废旧相机请求并停止媒体流'
       );
       assert(
         archiveSource.includes('const archiveManageRequestVersionRef = useRef(0);') &&
