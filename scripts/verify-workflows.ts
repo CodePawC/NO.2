@@ -835,6 +835,29 @@ const checks: Check[] = [
     }
   },
   {
+    name: 'terminal task status changes do not mutate task logs',
+    run: () => {
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const statusStart = appSource.indexOf('const handleUpdateStatus = (newStatus: TaskStatus) => {');
+      const statusEnd = appSource.indexOf('// Delete task with confirmation', statusStart);
+      assert(statusStart !== -1 && statusEnd > statusStart, '应能定位工程师状态流转逻辑');
+      const statusSource = appSource.slice(statusStart, statusEnd);
+      const terminalGuardIndex = statusSource.indexOf('if (isTaskTerminal(selectedTask))');
+      const blockedLogIndex = statusSource.indexOf('状态变更被系统拦截');
+
+      assert(
+        terminalGuardIndex !== -1 &&
+          statusSource.includes('该工单已归档或关闭，状态已锁定，不能再变更流转状态。') &&
+          statusSource.includes("appendWorkflowNotice('⚠️ **归档锁定提醒**"),
+        '终态工单尝试改状态时应只显示锁定提醒'
+      );
+      assert(
+        blockedLogIndex !== -1 && terminalGuardIndex < blockedLogIndex,
+        '终态工单状态变更必须在写入拦截日志前直接返回，避免已归档/已关闭工单继续被更新时间线'
+      );
+    }
+  },
+  {
     name: 'clinical archive selection never falls back to hidden equipment',
     run: () => {
       const archiveSource = readFileSync('src/components/EquipmentArchives.tsx', 'utf8');

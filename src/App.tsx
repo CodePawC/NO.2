@@ -1113,6 +1113,11 @@ export default function App() {
       return;
     }
 
+    if (isTaskTerminal(selectedTask)) {
+      appendWorkflowNotice('⚠️ **归档锁定提醒**\n该工单已归档或关闭，状态已锁定，不能再变更流转状态。', 'msg-status-terminal-blocked');
+      return;
+    }
+
     const blockReason = getEngineerStatusBlockReason(selectedTask, newStatus);
     if (blockReason) {
       const newLog = {
