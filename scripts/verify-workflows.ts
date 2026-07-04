@@ -1839,6 +1839,20 @@ const checks: Check[] = [
           appSource.includes('if (activeRoleSessionVersion === roleSessionVersionRef.current)'),
         'AI 异步返回应校验角色会话版本，丢弃切换身份前的旧响应'
       );
+      const openArchiveStart = appSource.indexOf('const openLinkedEquipmentArchive = (equipmentId: string) => {');
+      const openArchiveEnd = appSource.indexOf('useEffect(() => {\n    const handleDeepLinkTicket', openArchiveStart);
+      assert(openArchiveStart !== -1 && openArchiveEnd > openArchiveStart, '应能定位任务详情跳转资产档案逻辑');
+      const openArchiveSource = appSource.slice(openArchiveStart, openArchiveEnd);
+      assert(
+        openArchiveSource.includes('const activeRoleSessionVersion = roleSessionVersionRef.current;') &&
+          openArchiveSource.includes("setCurrentWorkspace('archives');") &&
+          openArchiveSource.includes('setTimeout(() => {') &&
+          openArchiveSource.includes('if (activeRoleSessionVersion !== roleSessionVersionRef.current) return;') &&
+          openArchiveSource.includes("window.dispatchEvent(new CustomEvent('deep-link-equipment'") &&
+          appSource.includes('onClick={() => openLinkedEquipmentArchive(matchedEquip.id)}') &&
+          !appSource.includes("setTimeout(() => {\n                                  window.dispatchEvent(new CustomEvent('deep-link-equipment'"),
+        '任务详情延迟跳转资产档案时应绑定当前角色会话，避免切换身份后旧深链打开旧设备档案'
+      );
     }
   },
   {

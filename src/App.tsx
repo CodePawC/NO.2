@@ -424,6 +424,17 @@ export default function App() {
     }
   }, [draftTicket]);
 
+  const openLinkedEquipmentArchive = (equipmentId: string) => {
+    const activeRoleSessionVersion = roleSessionVersionRef.current;
+    setCurrentWorkspace('archives');
+    setTimeout(() => {
+      if (activeRoleSessionVersion !== roleSessionVersionRef.current) return;
+      window.dispatchEvent(new CustomEvent('deep-link-equipment', {
+        detail: { equipmentId, activeTab: 'basic' }
+      }));
+    }, 100);
+  };
+
   useEffect(() => {
     const handleDeepLinkTicket = (e: any) => {
       const ticketId = e.detail?.ticketId;
@@ -2400,14 +2411,7 @@ export default function App() {
                               <p className="text-[9px] text-slate-400 font-mono">资产ID: {matchedEquip.id.toUpperCase()} • 风险评级: {matchedEquip.riskLevel}级</p>
                             </div>
                             <button
-                              onClick={() => {
-                                setCurrentWorkspace('archives');
-                                setTimeout(() => {
-                                  window.dispatchEvent(new CustomEvent('deep-link-equipment', {
-                                    detail: { equipmentId: matchedEquip.id, activeTab: 'basic' }
-                                  }));
-                                }, 100);
-                              }}
+                              onClick={() => openLinkedEquipmentArchive(matchedEquip.id)}
                               className="flex items-center gap-1 text-[11px] font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 rounded-lg transition cursor-pointer shrink-0 shadow-sm"
                             >
                               <FileText className="w-3.5 h-3.5" />
@@ -3080,14 +3084,7 @@ export default function App() {
                           <p className="text-[9px] text-slate-400 font-mono">资产ID: {matchedEquip.id.toUpperCase()} • 风险评级: {matchedEquip.riskLevel}级</p>
                         </div>
                         <button
-                          onClick={() => {
-                            setCurrentWorkspace('archives');
-                            setTimeout(() => {
-                              window.dispatchEvent(new CustomEvent('deep-link-equipment', {
-                                detail: { equipmentId: matchedEquip.id, activeTab: 'basic' }
-                              }));
-                            }, 100);
-                          }}
+                          onClick={() => openLinkedEquipmentArchive(matchedEquip.id)}
                           className="flex items-center gap-1 text-[11px] font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 rounded-lg transition cursor-pointer shrink-0 shadow-sm"
                         >
                           <FileText className="w-3.5 h-3.5" />
