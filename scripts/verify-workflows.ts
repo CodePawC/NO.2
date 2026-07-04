@@ -1526,11 +1526,23 @@ const checks: Check[] = [
     name: 'quick archive repair callback has app-level clinical department guard',
     run: () => {
       const appSource = readFileSync('src/App.tsx', 'utf8');
+      const assetReportStart = appSource.indexOf('const handleReportRepairFromEquip = (equip: any) => {');
+      const assetReportEnd = appSource.indexOf('const handleQuickRepairCreated = ({', assetReportStart);
+      assert(assetReportStart !== -1 && assetReportEnd > assetReportStart, '应能定位档案智能报修入口');
+      const assetReportSource = appSource.slice(assetReportStart, assetReportEnd);
       const callbackStart = appSource.indexOf('const handleQuickRepairCreated = ({');
       const callbackEnd = appSource.indexOf('// Role and Auth Simulation States');
       assert(callbackStart !== -1 && callbackEnd > callbackStart, '应能定位快捷报修回调实现');
       const callbackSource = appSource.slice(callbackStart, callbackEnd);
 
+      assert(
+        assetReportSource.includes('findActiveEquipmentRepairTask(tasksRef.current, equip)') &&
+          assetReportSource.includes('setSelectedTask(duplicateRepairTask);') &&
+          assetReportSource.includes('setMobileTab(\'detail\');') &&
+          assetReportSource.includes('msg-asset-report-duplicate-blocked') &&
+          assetReportSource.includes('避免重复生成报修草稿'),
+        '档案智能报修草稿入口应先阻断同设备未闭环维修，避免临床生成注定重复的报修草稿'
+      );
       assert(
         callbackSource.includes("currentUserRole === 'medical_staff'") &&
           callbackSource.includes("currentSimulatedUser.role === 'medical_staff'"),

@@ -143,6 +143,15 @@ export default function App() {
       return;
     }
 
+    const duplicateRepairTask = findActiveEquipmentRepairTask(tasksRef.current, equip);
+    if (duplicateRepairTask) {
+      setCurrentWorkspace('tasks');
+      setSelectedTask(duplicateRepairTask);
+      setMobileTab('detail');
+      appendWorkflowNotice(`⚠️ **重复报修提醒**\n设备【${equip.deviceName}】已有未闭环维修工单 **${duplicateRepairTask.id}**（当前状态：【${duplicateRepairTask.status}】）。请在现有工单中补充故障信息，避免重复生成报修草稿。`, 'msg-asset-report-duplicate-blocked');
+      return;
+    }
+
     setCurrentWorkspace('tasks');
     const presetText = `【系统一键扫码报修】
 设备名称: ${equip.deviceName}
