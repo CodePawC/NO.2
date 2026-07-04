@@ -1124,6 +1124,12 @@ const checks: Check[] = [
         '档案筛选为空时应清空旧选中设备，并让移动端退出详情页'
       );
       assert(
+        archiveSource.includes("['已完成', '已归档', '已关闭'].includes(ticket.status)") &&
+          archiveSource.includes('全流程任务关联工单履历') &&
+          archiveSource.includes('bg-emerald-100 text-emerald-800'),
+        '资产档案相关工单履历应将已关闭留痕视为闭环终态，避免误显示为仍在处理中'
+      );
+      assert(
         archiveSource.includes("setSearchTerm('');") &&
           archiveSource.includes("setSelectedCategory('全部分类');") &&
           archiveSource.includes("setSelectedStatus('全部状态');") &&

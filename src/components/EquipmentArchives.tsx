@@ -3516,7 +3516,7 @@ Clinical class: Life-saving respiratory device`;
                           {relatedTasks.map(ticket => {
                             let statusColor = 'bg-slate-100 text-slate-800';
                             if (ticket.status === '待确认') statusColor = 'bg-amber-100 text-amber-800 border border-amber-200';
-                            else if (ticket.status === '已完成' || ticket.status === '已归档') statusColor = 'bg-emerald-100 text-emerald-800 border border-emerald-200';
+                            else if (['已完成', '已归档', '已关闭'].includes(ticket.status)) statusColor = 'bg-emerald-100 text-emerald-800 border border-emerald-200';
                             else statusColor = 'bg-blue-100 text-blue-800 border border-blue-200';
 
                             return (
