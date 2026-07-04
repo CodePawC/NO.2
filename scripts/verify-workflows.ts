@@ -946,6 +946,14 @@ const checks: Check[] = [
         downloadSource.includes("if (!ensureCanManageEquipmentArchive('下载技术资料原档')) return;"),
         '技术资料原档下载属于档案管理导出动作，应统一走工程师权限拦截'
       );
+      const snapshotExtractStart = archiveSource.indexOf('const handleExtractSnapshot = (page: PreviewPage) => {');
+      const snapshotExtractEnd = archiveSource.indexOf('return (', snapshotExtractStart);
+      assert(snapshotExtractStart !== -1 && snapshotExtractEnd > snapshotExtractStart, '应能定位技术手册快照提取逻辑');
+      const snapshotExtractSource = archiveSource.slice(snapshotExtractStart, snapshotExtractEnd);
+      assert(
+        snapshotExtractSource.includes("if (!ensureCanManageEquipmentArchive('提取技术手册快照')) return;"),
+        '技术手册快照提取会修改设备档案，应统一走工程师权限拦截'
+      );
       const mobileActionsStart = archiveSource.indexOf('Quick action buttons on mobile next to title');
       const mobileActionsEnd = archiveSource.indexOf('{/* Dynamic Filters & Search Panel */}', mobileActionsStart);
       assert(mobileActionsStart !== -1 && mobileActionsEnd > mobileActionsStart, '应能定位移动端资产档案页头部导出入口');
@@ -1027,6 +1035,17 @@ const checks: Check[] = [
           attachmentPreviewSource.includes('下载原档') &&
           attachmentPreviewSource.includes('临床只读预览'),
         '附件预览可供临床查看，但原档下载按钮只能给工程师'
+      );
+      const previewToolsStart = archiveSource.indexOf('Extract snapshot & page navigation tools');
+      const previewToolsEnd = archiveSource.indexOf('Small visual page bento thumbnail selector', previewToolsStart);
+      assert(previewToolsStart !== -1 && previewToolsEnd > previewToolsStart, '应能定位附件预览快照提取工具栏');
+      const previewToolsSource = archiveSource.slice(previewToolsStart, previewToolsEnd);
+      assert(
+        previewToolsSource.includes('{canManageEquipmentArchive ? (') &&
+          previewToolsSource.includes('onClick={() => handleExtractSnapshot(activePageData)}') &&
+          previewToolsSource.includes('提取当前页为设备关联快照') &&
+          previewToolsSource.includes('临床只读预览'),
+        '附件预览中的快照提取按钮应只允许工程师执行，临床端保留翻页预览能力'
       );
     }
   },
