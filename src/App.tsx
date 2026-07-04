@@ -80,10 +80,10 @@ const createNextTaskId = (existingTasks: StructuredTicket[]) => {
   return `TKT-${datePart}${String(maxSequence + 1).padStart(2, '0')}`;
 };
 
-const hasActiveEquipmentRepairTask = (tasks: StructuredTicket[], equipment: MedicalEquipment) => {
+const findActiveEquipmentRepairTask = (tasks: StructuredTicket[], equipment: MedicalEquipment) => {
   return tasks
     .filter(needsClinicalAcceptance)
-    .some(task => (
+    .find(task => (
       !['已完成', '已归档', '已关闭'].includes(task.status) &&
       (
         task.deviceId === equipment.id ||
@@ -91,6 +91,10 @@ const hasActiveEquipmentRepairTask = (tasks: StructuredTicket[], equipment: Medi
         (task.deviceName === equipment.deviceName && isSameDepartment(task.department, equipment.dept))
       )
     ));
+};
+
+const hasActiveEquipmentRepairTask = (tasks: StructuredTicket[], equipment: MedicalEquipment) => {
+  return Boolean(findActiveEquipmentRepairTask(tasks, equipment));
 };
 
 const getTaskAcceptanceDisplay = (task: StructuredTicket) => {
@@ -959,6 +963,18 @@ export default function App() {
     const shouldUseAutoMatchedEquipment = !selectedEquipment && !!autoMatchedEquipment && canUseLinkedEquipment;
     const isNonEquipmentTransferTask = normalizedTaskType === '非设备类转派任务';
     const shouldLinkEquipmentToTicket = !isNonEquipmentTransferTask && canUseLinkedEquipment;
+    const duplicateRepairTask = shouldLinkEquipmentToTicket && linkedEquipment
+      ? findActiveEquipmentRepairTask(tasksRef.current, linkedEquipment)
+      : null;
+
+    if (duplicateRepairTask && linkedEquipment) {
+      isCreatingDraftTicketRef.current = false;
+      setSelectedTask(duplicateRepairTask);
+      setMobileTab('detail');
+      appendWorkflowNotice(`⚠️ **重复报修提醒**\n设备【${linkedEquipment.deviceName}】已有未闭环维修工单 **${duplicateRepairTask.id}**（当前状态：【${duplicateRepairTask.status}】）。请在现有工单中补充故障信息，避免重复派单。`, 'msg-draft-repair-duplicate-blocked');
+      return;
+    }
+
     const effectiveDeviceId = isNonEquipmentTransferTask
       ? `NON-EQUIPMENT-${newTicketId}`
       : canUseLinkedEquipment

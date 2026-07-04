@@ -1550,6 +1550,7 @@ const checks: Check[] = [
       );
       assert(
         appSource.includes('const hasActiveEquipmentRepairTask = (tasks: StructuredTicket[], equipment: MedicalEquipment) => {') &&
+          appSource.includes('const findActiveEquipmentRepairTask = (tasks: StructuredTicket[], equipment: MedicalEquipment) => {') &&
           appSource.includes("!['已完成', '已归档', '已关闭'].includes(task.status)") &&
           appSource.includes('const tasksRef = useRef(tasks);') &&
           appSource.includes('const pendingQuickRepairEquipmentIdsRef = useRef<Set<string>>(new Set());') &&
@@ -1756,6 +1757,17 @@ const checks: Check[] = [
           createSource.includes('tasksRef.current = nextTasks;') &&
           createSource.includes('setTasks(nextTasks);'),
         '草稿建单应基于最新任务列表生成单号并阻断连续点击，避免重复单号或重复工单'
+      );
+      assert(
+        createSource.includes('const duplicateRepairTask = shouldLinkEquipmentToTicket && linkedEquipment') &&
+          createSource.includes('findActiveEquipmentRepairTask(tasksRef.current, linkedEquipment)') &&
+          createSource.includes('if (duplicateRepairTask && linkedEquipment)') &&
+          createSource.includes('isCreatingDraftTicketRef.current = false;') &&
+          createSource.includes('setSelectedTask(duplicateRepairTask);') &&
+          createSource.includes("appendWorkflowNotice(`⚠️ **重复报修提醒**") &&
+          createSource.includes('msg-draft-repair-duplicate-blocked') &&
+          createSource.includes('避免重复派单'),
+        'AI 草稿建单应阻断同设备未闭环维修重复报修，并引导临床查看已有工单'
       );
       assert(
         createSource.includes('当前状态：【${newTicket.status}】') &&
