@@ -467,8 +467,17 @@ export default function App() {
     const latestSelectedTask = tasksRef.current.find(task => task.id === selectedTask.id);
     if (latestSelectedTask && latestSelectedTask !== selectedTask) {
       setSelectedTask(latestSelectedTask);
+      return;
     }
-  }, [tasks, selectedTask?.id]);
+
+    if (!latestSelectedTask) {
+      const fallbackTask = tasksRef.current.find(canCurrentUserSeeTask) || null;
+      setSelectedTask(fallbackTask);
+      if (!fallbackTask && mobileTab === 'detail') {
+        setMobileTab(isClinicalUser ? 'chat' : 'list');
+      }
+    }
+  }, [tasks, selectedTask?.id, currentUserRole, currentUserDepartment, mobileTab]);
 
   useEffect(() => {
     if (!isClinicalUser || !selectedTask || canCurrentUserSeeTask(selectedTask)) {

@@ -1761,8 +1761,11 @@ const checks: Check[] = [
       const selectedSyncSource = appSource.slice(selectedSyncStart, selectedSyncEnd);
       assert(
         selectedSyncSource.includes('const latestSelectedTask = tasksRef.current.find(task => task.id === selectedTask.id);') &&
-          selectedSyncSource.includes('setSelectedTask(latestSelectedTask);'),
-        '选中工单详情应从最新任务列表刷新，避免右侧详情停留在旧对象'
+          selectedSyncSource.includes('setSelectedTask(latestSelectedTask);') &&
+          selectedSyncSource.includes('if (!latestSelectedTask)') &&
+          selectedSyncSource.includes('const fallbackTask = tasksRef.current.find(canCurrentUserSeeTask) || null;') &&
+          selectedSyncSource.includes("setMobileTab(isClinicalUser ? 'chat' : 'list');"),
+        '选中工单详情应从最新任务列表刷新；若工单已删除或重置消失，应回退到当前角色可见任务，避免右侧详情停留在旧对象'
       );
 
       const clinicalFallbackStart = selectedSyncEnd;
