@@ -1112,6 +1112,30 @@ const checks: Check[] = [
           archiveSource.includes('title={`点击穿透查看${assetScopeLabel}“${cat}”装备明细`}'),
         '资产矩阵看板应按当前角色范围展示全院/本科室文案，不能在临床端硬编码全院'
       );
+      const deleteEquipmentStart = archiveSource.indexOf('const handleDelete = (id: string) => {');
+      const deleteEquipmentEnd = archiveSource.indexOf('// Open modal for Create', deleteEquipmentStart);
+      assert(deleteEquipmentStart !== -1 && deleteEquipmentEnd > deleteEquipmentStart, '应能定位设备档案删除逻辑');
+      const deleteEquipmentSource = archiveSource.slice(deleteEquipmentStart, deleteEquipmentEnd);
+      assert(
+        deleteEquipmentSource.includes("showArchiveManageBlockedToast('档案作废删除');") &&
+          deleteEquipmentSource.includes('setEquipments(prevEquipments => {') &&
+          deleteEquipmentSource.includes('const nextEquipments = prevEquipments.filter(eq => eq.id !== id);') &&
+          deleteEquipmentSource.includes('localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));'),
+        '删除设备档案应基于最新设备列表写入，避免覆盖连续新增的附件或履历'
+      );
+      const saveFormStart = archiveSource.indexOf('const saveEquipmentForm = (e: React.FormEvent) => {');
+      const saveFormEnd = archiveSource.indexOf('// 临床医护人员一键快捷报修提交', saveFormStart);
+      assert(saveFormStart !== -1 && saveFormEnd > saveFormStart, '应能定位新增/编辑设备档案表单保存逻辑');
+      const saveFormSource = archiveSource.slice(saveFormStart, saveFormEnd);
+      assert(
+        saveFormSource.includes("if (!canManageEquipmentArchive)") &&
+          saveFormSource.includes('const nextEquipments = [...newEqs, ...prevEquipments];') &&
+          saveFormSource.includes('if (!currentEditId) return;') &&
+          saveFormSource.includes('const nextEquipments = prevEquipments.map(eq => {') &&
+          saveFormSource.includes('if (eq.id !== currentEditId) return eq;') &&
+          saveFormSource.includes('localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));'),
+        '新增和编辑设备档案应基于最新设备列表写入，避免表单保存覆盖刚追加的档案数据'
+      );
       const addAttachmentStart = archiveSource.indexOf('const handleAddAttachment = (e: React.FormEvent) => {');
       const addAttachmentEnd = archiveSource.indexOf('// AI OCR Parser simulation with presets', addAttachmentStart);
       assert(addAttachmentStart !== -1 && addAttachmentEnd > addAttachmentStart, '应能定位资料附件上传逻辑');
@@ -1421,7 +1445,16 @@ const checks: Check[] = [
         '父组件拒绝同步主工单时，档案快捷报修应停止写入'
       );
       assert(
-        createSource.indexOf('const parentAccepted = onQuickRepairCreated?.({') < createSource.indexOf('setEquipments(updatedEquipments)'),
+        createSource.includes('const latestEquipments = parseStoredEquipmentList(localStorage.getItem(EQUIPMENT_STORAGE_KEY)).equipments;') &&
+          createSource.includes('const workOrderNo = createQuickRepairWorkOrderNo(latestEquipments, today);'),
+        '档案快捷报修单号应基于本地最新档案生成，避免连续报修时单号重复'
+      );
+      assert(
+        createSource.indexOf('const parentAccepted = onQuickRepairCreated?.({') < createSource.indexOf('setEquipments(prevEquipments => {') &&
+          createSource.includes('const nextEquipments = prevEquipments.map(eq => {') &&
+          createSource.includes('if (eq.id !== targetEq.id) return eq;') &&
+          createSource.includes('maintenanceLogs: [repairLog, ...(eq.maintenanceLogs || [])]') &&
+          createSource.includes('localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));'),
         '档案快捷报修必须在父组件接受后再更新资产档案'
       );
     }

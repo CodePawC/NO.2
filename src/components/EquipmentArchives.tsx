@@ -1002,11 +1002,11 @@ export default function EquipmentArchives({
     }
 
     if (window.confirm('您确定要永久删除该设备的全部档案、维保记录和附件吗？此操作不可撤销。')) {
-      const nextList = equipments.filter(eq => eq.id !== id);
-      setEquipments(nextList);
-      if (selectedId === id && nextList.length > 0) {
-        setSelectedId(nextList[0].id);
-      }
+      setEquipments(prevEquipments => {
+        const nextEquipments = prevEquipments.filter(eq => eq.id !== id);
+        localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));
+        return nextEquipments;
+      });
     }
   };
 
@@ -1167,15 +1167,22 @@ export default function EquipmentArchives({
         };
       });
 
-      setEquipments([...newEqs, ...equipments]);
+      setEquipments(prevEquipments => {
+        const nextEquipments = [...newEqs, ...prevEquipments];
+        localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));
+        return nextEquipments;
+      });
       setSelectedId(newEqs[0].id);
       
       if (newEqs.length > 1) {
         alert(`🎉 批量导入成功！已成功一键新增 ${newEqs.length} 台具有相同名称规格（型号：${formModel}）的设备档案。`);
       }
     } else {
-      setEquipments(equipments.map(eq => {
-        if (eq.id === currentEditId) {
+      if (!currentEditId) return;
+      setEquipments(prevEquipments => {
+        const nextEquipments = prevEquipments.map(eq => {
+          if (eq.id !== currentEditId) return eq;
+
           return {
             ...eq,
             deviceName: formDeviceName,
@@ -1200,9 +1207,10 @@ export default function EquipmentArchives({
             productionLicenseNo: formProductionLicenseNo || undefined,
             photoUrl: formPhotoUrl || undefined
           };
-        }
-        return eq;
-      }));
+        });
+        localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));
+        return nextEquipments;
+      });
     }
     setIsFormModalOpen(false);
   };
@@ -1699,7 +1707,8 @@ Clinical class: Life-saving respiratory device`;
     }
 
     const today = getLocalDateString();
-    const workOrderNo = createQuickRepairWorkOrderNo(equipments, today);
+    const latestEquipments = parseStoredEquipmentList(localStorage.getItem(EQUIPMENT_STORAGE_KEY)).equipments;
+    const workOrderNo = createQuickRepairWorkOrderNo(latestEquipments, today);
     const parentAccepted = onQuickRepairCreated?.({
       equipment: targetEq,
       description,
@@ -1730,19 +1739,19 @@ Clinical class: Life-saving respiratory device`;
       verifyPerson: currentUser.name
     };
 
-    const updatedEquipments = equipments.map(eq => {
-      if (eq.id === targetEq.id) {
+    setEquipments(prevEquipments => {
+      const nextEquipments = prevEquipments.map(eq => {
+        if (eq.id !== targetEq.id) return eq;
+
         return {
           ...eq,
           status: '故障维修',
           maintenanceLogs: [repairLog, ...(eq.maintenanceLogs || [])]
         };
-      }
-      return eq;
+      });
+      localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));
+      return nextEquipments;
     });
-
-    setEquipments(updatedEquipments);
-    localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(updatedEquipments));
 
     return workOrderNo;
   };
