@@ -671,6 +671,8 @@ export default function App() {
     const textLower = text.toLowerCase();
     const explicitlyNoVendorCoop = /暂不需要厂家|不需要厂家|无需厂家|不用厂家|不联系厂家|无需供应商|不需要供应商|院内自主|设备科看一下/i.test(textLower);
     const isEndoscopeVendorIssue = /胃镜|内镜|奥林巴斯|插入管/i.test(textLower) && /漏水|气密|破损|模糊/i.test(textLower);
+    const isMedicalEquipmentContext = /呼吸机|除颤仪|麻醉机|监护仪|氧气|负压吸引|胃镜|内镜|dr机|dr房|\bdr\b|ct机|ct室|\bct\b|\bmri\b|磁共振|x射线|x光|数字化x线|数字化x射线|注射泵|输液泵|超声|彩超|胎心|血气|生化|医学装备|医疗设备|扫描床|扫描序列|梯度|球管|探测器|高压发生器|重建工作站/i.test(textLower);
+    const isInformationOrLogisticsIssue = /电脑|网络|网线|系统|his|pacs|lis|后勤|打印机|卡纸|跳闸|照明|插座/i.test(textLower) && !isMedicalEquipmentContext;
     
     // 1. Task Type
     let taskType: TaskType = '设备报修';
@@ -686,7 +688,7 @@ export default function App() {
       taskType = '计量/质控提醒';
     } else if (/配件|耗材|更换|电池/.test(textLower)) {
       taskType = '配件耗材申请';
-    } else if (/电脑|网络|网线|系统|his|后勤|打印机|卡纸|跳闸|照明|插座/.test(textLower)) {
+    } else if (isInformationOrLogisticsIssue) {
       taskType = '非设备类转派任务';
     } else if (/巡检|保养|培训|鉴定|盘点/.test(textLower)) {
       taskType = '普通杂项任务';
@@ -708,7 +710,7 @@ export default function App() {
 
     // 4. Device Name
     let deviceName = '';
-    const devMatch = text.match(/(呼吸机|除颤仪|麻醉机|监护仪|氧气|负压吸引|胃镜|dr|电脑|打印机|注射泵|输液泵)/i);
+    const devMatch = text.match(/(呼吸机|除颤仪|麻醉机|监护仪|氧气|负压吸引|胃镜|内镜|mri|磁共振|ct|dr|超声|彩超|电脑|打印机|注射泵|输液泵)/i);
     if (devMatch) {
       deviceName = devMatch[0];
     }

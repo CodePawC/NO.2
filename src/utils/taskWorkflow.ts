@@ -4,6 +4,7 @@ import { isSameDepartment } from './departmentUtils';
 const TERMINAL_STATUSES: TaskStatus[] = ['已归档', '已关闭'];
 const STATUS_SEQUENCE: TaskStatus[] = ['待确认', '待派工', '已派工', '处理中', '待科室验收'];
 const EQUIPMENT_DEPARTMENT = '医学装备科';
+const MEDICAL_EQUIPMENT_CONTEXT_PATTERN = /呼吸机|除颤仪|麻醉机|监护仪|氧气|负压吸引|胃镜|内镜|dr机|dr房|\bdr\b|ct机|ct室|\bct\b|\bmri\b|磁共振|x射线|x光|数字化x线|数字化x射线|注射泵|输液泵|超声|彩超|胎心|血气|生化|医学装备|医疗设备|扫描床|扫描序列|梯度|球管|探测器|高压发生器|重建工作站/i;
 
 export const canEngineerCloseTransferredTask = (task: StructuredTicket) => {
   return task.taskType === '非设备类转派任务';
@@ -129,8 +130,8 @@ export const getClinicalAcceptanceBlockReason = (
 
 export const getRecommendedRoutingForTask = (taskType?: TaskType, text = '') => {
   const normalizedText = text.toLowerCase();
-  const isInformationIssue = /电脑|网络|网线|his系统|his|pacs|lis|打印机|扫码枪|处方|开立|登录|信息系统|办公系统/i.test(normalizedText);
-  const isMedicalEquipmentIssue = /呼吸机|除颤仪|麻醉机|监护仪|氧气|负压吸引|胃镜|内镜|dr机|dr房|注射泵|输液泵|超声|胎心|血气|生化|医学装备|医疗设备/i.test(normalizedText);
+  const isMedicalEquipmentIssue = MEDICAL_EQUIPMENT_CONTEXT_PATTERN.test(normalizedText);
+  const isInformationIssue = /电脑|网络|网线|his系统|his|pacs|lis|打印机|扫码枪|处方|开立|登录|信息系统|办公系统/i.test(normalizedText) && !isMedicalEquipmentIssue;
   const isEquipmentLeakIssue = /漏水/i.test(normalizedText) && /胃镜|内镜|奥林巴斯|插入管|探头|管路|设备|泵|机/i.test(normalizedText);
   const isLogisticsIssue = /后勤|跳闸|照明|插座|强电|水管|空调|门锁|电源插座|漏电|配电/i.test(normalizedText) || (/漏水/i.test(normalizedText) && !isEquipmentLeakIssue);
   const explicitlyNoVendorCoop = /暂不需要厂家|不需要厂家|无需厂家|不用厂家|不联系厂家|无需供应商|不需要供应商|院内自主|设备科看一下/i.test(normalizedText);

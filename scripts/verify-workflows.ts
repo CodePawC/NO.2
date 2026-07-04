@@ -344,6 +344,9 @@ const checks: Check[] = [
       const equipmentSystemRouting = getRecommendedRoutingForTask('设备报修', '监护仪系统报警，病人正在使用中');
       assertEqual(equipmentSystemRouting.recommendedDept, '医学装备科', '医疗设备系统报警仍应归医学装备科');
 
+      const mriSystemRouting = getRecommendedRoutingForTask('非设备类转派任务', '放射科 MRI 控制台启动后提示梯度系统错误，扫描序列无法开始');
+      assertEqual(mriSystemRouting.recommendedDept, '医学装备科', 'MRI/影像设备控制台或梯度系统错误不能因“系统”误判为信息科');
+
       const infoRouting = getRecommendedRoutingForTask('非设备类转派任务', '诊室电脑 HIS 系统无法登录，网络红叉');
       assertEqual(infoRouting.recommendedDept, '信息科', '电脑网络类问题应建议信息科');
       assertEqual(infoRouting.needVendorCoop, '否', '信息科转派不应标记厂家协同');
@@ -1770,6 +1773,22 @@ const checks: Check[] = [
           appSource.includes("isUrgent ? '生命支持' : (hasExplicitUrgency ? '特急' : '普通')") &&
           !appSource.includes("textLower.includes('急') ? '特急'"),
         '前端本地兜底紧急度不应因“急诊科”的“急”误判为特急，必须匹配明确急迫语义'
+      );
+      assert(
+        appSource.includes('const isMedicalEquipmentContext = /呼吸机|除颤仪|麻醉机|监护仪') &&
+          appSource.includes('mri') &&
+          appSource.includes('扫描序列') &&
+          appSource.includes('const isInformationOrLogisticsIssue = /电脑|网络|网线|系统|his|pacs|lis|后勤|打印机|卡纸|跳闸|照明|插座/i.test(textLower) && !isMedicalEquipmentContext;'),
+        '前端本地兜底解析应先识别 MRI/DR/CT/超声等医学装备上下文，避免把设备系统错误误转信息科'
+      );
+
+      const serverSource = readFileSync('server.ts', 'utf8');
+      assert(
+        serverSource.includes('const isMedicalEquipmentContext = /呼吸机|除颤仪|麻醉机|监护仪') &&
+          serverSource.includes('mri') &&
+          serverSource.includes('扫描序列') &&
+          serverSource.includes('const isInformationIssue = /电脑|网络|网线|系统|his|pacs|lis|打印机|卡纸|扫码枪|处方|开立|登录|信息系统|办公系统/i.test(textLower) && !isMedicalEquipmentContext;'),
+        '服务端备用解析也应避免把医学装备系统错误误判为信息科问题'
       );
 
       const inlineTaskTypeStart = appSource.indexOf('<label className="text-[10px] font-bold text-slate-500 block mb-1">任务分类</label>');
