@@ -63,6 +63,12 @@ Open:
 http://127.0.0.1:3000
 ```
 
+To run a second local instance for isolated role testing, set `PORT` before starting the dev server:
+
+```powershell
+$env:PORT="3001"; npm run dev
+```
+
 ## Available Scripts
 
 ```bash

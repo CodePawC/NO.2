@@ -1941,6 +1941,29 @@ const checks: Check[] = [
     }
   },
   {
+    name: 'local server port can be overridden for parallel role testing',
+    run: () => {
+      const serverSource = readFileSync('server.ts', 'utf8');
+      const readmeSource = readFileSync('README.md', 'utf8');
+      assert(
+        serverSource.includes("import { createServer as createHttpServer } from 'node:http';") &&
+          serverSource.includes('const parseServerPort = (value: string | undefined, fallback: number) => {') &&
+          serverSource.includes('const PORT = parseServerPort(process.env.PORT || process.env.VITE_PORT, 3000);') &&
+          serverSource.includes('const httpServer = createHttpServer(app);') &&
+          serverSource.includes('server: { middlewareMode: true, hmr: { server: httpServer } }') &&
+          serverSource.includes("httpServer.listen(PORT, '0.0.0.0'") &&
+          !serverSource.includes('const PORT = 3000;') &&
+          !serverSource.includes("app.listen(PORT, '0.0.0.0'"),
+        '本地服务端口不应写死，需支持 PORT/VITE_PORT 以便同时运行展示实例和隔离测试实例'
+      );
+      assert(
+        readmeSource.includes('To run a second local instance for isolated role testing') &&
+          readmeSource.includes('$env:PORT="3001"; npm run dev'),
+        'README 应说明如何启动第二个本地实例用于隔离角色测试'
+      );
+    }
+  },
+  {
     name: 'clinical model status cannot open engineer-only ai settings',
     run: () => {
       const appSource = readFileSync('src/App.tsx', 'utf8');

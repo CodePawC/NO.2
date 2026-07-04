@@ -4,6 +4,7 @@
  */
 
 import express from 'express';
+import { createServer as createHttpServer } from 'node:http';
 import path from 'path';
 import { GoogleGenAI, Type } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
@@ -13,7 +14,11 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const parseServerPort = (value: string | undefined, fallback: number) => {
+  const port = Number(value);
+  return Number.isInteger(port) && port > 0 && port < 65536 ? port : fallback;
+};
+const PORT = parseServerPort(process.env.PORT || process.env.VITE_PORT, 3000);
 
 // Initialize Gemini SDK securely on the server
 const ai = new GoogleGenAI({
@@ -780,9 +785,11 @@ app.post("/api/gemini/chat", async (req, res) => {
 
 // Serve frontend build static files in production, use Vite middleware in dev
 async function setupVite() {
+  const httpServer = createHttpServer(app);
+
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { middlewareMode: true, hmr: { server: httpServer } },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -796,7 +803,7 @@ async function setupVite() {
     console.log('Serving production static files from dist');
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }
