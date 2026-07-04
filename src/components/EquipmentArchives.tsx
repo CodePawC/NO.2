@@ -2054,7 +2054,7 @@ Clinical class: Life-saving respiratory device`;
       </header>
 
       {/* Main Grid Content Container */}
-      <main id="main_container" className="flex-1 min-h-0 relative flex flex-col">
+      <main id="main_container" className="flex-1 min-h-0 relative flex flex-col pb-20 md:pb-0">
         {viewMode === 'inventory' ? (
           <div className="grid grid-cols-12 gap-3 md:gap-6 flex-1 min-h-0 w-full">
         
@@ -3676,7 +3676,7 @@ Clinical class: Life-saving respiratory device`;
         </section>
 
         {/* RIGHT COLUMN: Real-time QR Card & AI Clinical Engineering Diagnostic Assistant */}
-        <aside id="right_column_panel" className={`col-span-12 md:col-span-3 ${mobileView === 'ai' ? 'flex' : 'hidden md:flex'} flex-col gap-4 md:gap-6 h-full min-h-0`}>
+        <aside id="right_column_panel" className={`col-span-12 md:col-span-3 ${mobileView === 'ai' ? 'fixed inset-x-3 top-48 bottom-20 z-20 flex' : 'hidden md:flex'} md:static md:inset-auto md:z-auto flex-col gap-4 md:gap-6 min-h-0 md:h-full`}>
           
 
 

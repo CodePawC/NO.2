@@ -1692,6 +1692,13 @@ const checks: Check[] = [
         '临床快捷面板入口应在本科室无可报修设备时直接禁用并提示原因，避免打开空报修弹窗'
       );
       assert(
+        archiveSource.includes('id="main_container" className="flex-1 min-h-0 relative flex flex-col pb-20 md:pb-0"') &&
+          archiveSource.includes('id="right_column_panel"') &&
+          archiveSource.includes("mobileView === 'ai' ? 'fixed inset-x-3 top-48 bottom-20 z-20 flex' : 'hidden md:flex'") &&
+          archiveSource.includes('md:static md:inset-auto md:z-auto'),
+        '资产档案移动端应为固定底栏预留安全空间，避免 AI 智脑输入框被底部导航遮挡'
+      );
+      assert(
         archiveSource.includes('id={`equipment-card-${eq.id}`}') &&
           archiveSource.includes('role="button"') &&
           archiveSource.includes('aria-label={`打开设备档案：${eq.deviceName}，${eq.dept}，${eq.status}`}') &&
