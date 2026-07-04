@@ -2615,6 +2615,8 @@ export default function App() {
                             {[1, 2, 3, 4, 5].map((star) => (
                               <button
                                 key={star}
+                                id={`clinical-rating-star-${star}`}
+                                aria-label={`设置临床满意度为${star}星`}
                                 type="button"
                                 onClick={() => setRatingValue(star)}
                                 className="p-1 hover:scale-110 transition cursor-pointer"
@@ -2632,10 +2634,12 @@ export default function App() {
                         <div className="space-y-1.5">
                           <span className="text-[10px] text-slate-400 block font-semibold">快速评价词（点击直接填入）:</span>
                           <div className="flex flex-wrap gap-1.5">
-                            {['设备试运行良好，已正常投用', '工程师上门神速，态度极好', '修的很专业，点赞！', '提供了备用机，非常周到'].map((preset) => (
+                            {['设备试运行良好，已正常投用', '工程师上门神速，态度极好', '修的很专业，点赞！', '提供了备用机，非常周到'].map((preset, index) => (
                               <button
                                 key={preset}
+                                id={`clinical-rating-preset-${index + 1}`}
                                 type="button"
+                                aria-label={`填写验收评价：${preset}`}
                                 onClick={() => setRatingComment(preset)}
                                 className="text-[10px] bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 rounded px-2 py-0.5 cursor-pointer"
                               >
@@ -2648,6 +2652,8 @@ export default function App() {
                         {/* Comment Input */}
                         <div className="space-y-1">
                           <textarea
+                            id="clinical-rating-comment"
+                            aria-label="临床验收补充意见"
                             placeholder="请填写您的补充意见（选填）..."
                             value={ratingComment}
                             onChange={(e) => setRatingComment(e.target.value)}
@@ -2657,6 +2663,8 @@ export default function App() {
 
                         {/* Submit closure button */}
                         <button
+                          id="btn-clinical-accept-task"
+                          aria-label="签署临床验收并确认结单"
                           onClick={() => handleClinicalAcceptTask(selectedTask.id)}
                           className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2 px-4 rounded-lg shadow-sm transition flex items-center justify-center gap-1.5 cursor-pointer"
                         >

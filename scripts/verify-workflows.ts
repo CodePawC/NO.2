@@ -253,6 +253,17 @@ const checks: Check[] = [
           acceptSource.includes('pendingClinicalAcceptanceTaskIdsRef.current.delete(taskId);'),
         '临床验收提交应基于最新任务列表写入并阻断同一工单连续点击，避免重复验收日志'
       );
+      assert(
+        appSource.includes('id={`clinical-rating-star-${star}`}') &&
+          appSource.includes('aria-label={`设置临床满意度为${star}星`}') &&
+          appSource.includes('id={`clinical-rating-preset-${index + 1}`}') &&
+          appSource.includes('aria-label={`填写验收评价：${preset}`}') &&
+          appSource.includes('id="clinical-rating-comment"') &&
+          appSource.includes('aria-label="临床验收补充意见"') &&
+          appSource.includes('id="btn-clinical-accept-task"') &&
+          appSource.includes('aria-label="签署临床验收并确认结单"'),
+        '临床验收表单应提供稳定控件标识和可访问名称，便于人工识别、无障碍使用和自动化回归'
+      );
     }
   },
   {
