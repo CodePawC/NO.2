@@ -2144,6 +2144,11 @@ const checks: Check[] = [
         'AI 设置弹窗本身也应禁止临床角色渲染'
       );
       assert(
+        appSource.includes('if (isClinicalUser && isSettingsOpen)') &&
+          appSource.includes('setIsSettingsOpen(false);'),
+        '工程师已打开 AI 设置后切换到临床角色时，应立即关闭配置弹窗，避免工程师配置界面残留给临床端'
+      );
+      assert(
         !appSource.includes('onClick={() => setIsSettingsOpen(true)}'),
         '大模型状态与侧边栏按钮应统一走 openAiSettings 权限入口'
       );
