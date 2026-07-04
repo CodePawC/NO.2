@@ -69,6 +69,7 @@ function getRuleBasedFallback(message: string, currentDraft: any, isApiError: bo
   const draft = currentDraft || {};
   const currentUserDepartment = normalizeDepartmentName(currentUser?.department || currentUser?.dept);
   const isClinicalUser = currentUser?.role === 'medical_staff' && !!currentUserDepartment;
+  const explicitlyNoVendorCoop = /暂不需要厂家|不需要厂家|无需厂家|不用厂家|不联系厂家|无需供应商|不需要供应商|院内自主|设备科看一下/i.test(textLower);
   
   // 1. Task Type
   let taskType = '设备报修';
@@ -78,7 +79,7 @@ function getRuleBasedFallback(message: string, currentDraft: any, isApiError: bo
     taskType = '医用气体异常';
   } else if (/验收|安装|到货|开箱/.test(textLower)) {
     taskType = '验收安装协同';
-  } else if (/厂家|外送|寄修|供应商|奥林巴斯/.test(textLower)) {
+  } else if (!explicitlyNoVendorCoop && /厂家|外送|寄修|供应商|奥林巴斯/.test(textLower)) {
     taskType = '供应商协同';
   } else if (/计量|强检|质控|送检/.test(textLower)) {
     taskType = '计量/质控提醒';
@@ -124,7 +125,9 @@ function getRuleBasedFallback(message: string, currentDraft: any, isApiError: bo
 
   // 7. Need backup / Vendor coop
   const needBackupDevice = isUrgent ? '是' : (draft.needBackupDevice || '否');
-  const needVendorCoop = taskType === '供应商协同' || taskType === '验收安装协同' ? '是' : (draft.needVendorCoop || '否');
+  const needVendorCoop = explicitlyNoVendorCoop
+    ? '否'
+    : (taskType === '供应商协同' || taskType === '验收安装协同' ? '是' : (draft.needVendorCoop || '否'));
 
   // 8. Recommended Dept
   const recommendedDept = taskType === '非设备类转派任务' ? '信息科' : (draft.recommendedDept || '医学装备科');

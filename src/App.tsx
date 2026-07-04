@@ -625,6 +625,7 @@ export default function App() {
 
   const fallbackParse = (text: string): Partial<StructuredTicket> => {
     const textLower = text.toLowerCase();
+    const explicitlyNoVendorCoop = /暂不需要厂家|不需要厂家|无需厂家|不用厂家|不联系厂家|无需供应商|不需要供应商|院内自主|设备科看一下/i.test(textLower);
     
     // 1. Task Type
     let taskType: TaskType = '设备报修';
@@ -634,7 +635,7 @@ export default function App() {
       taskType = '医用气体异常';
     } else if (/验收|安装|到货|开箱/.test(textLower)) {
       taskType = '验收安装协同';
-    } else if (/厂家|外送|寄修|供应商|奥林巴斯/.test(textLower)) {
+    } else if (!explicitlyNoVendorCoop && /厂家|外送|寄修|供应商|奥林巴斯/.test(textLower)) {
       taskType = '供应商协同';
     } else if (/计量|强检|质控|送检/.test(textLower)) {
       taskType = '计量/质控提醒';
@@ -892,7 +893,9 @@ export default function App() {
     const normalizedTaskType = currentUserRole === 'medical_staff'
       ? (routing.recommendedDept !== '医学装备科'
         ? '非设备类转派任务'
-        : (draftTicket.taskType === '非设备类转派任务' ? '设备报修' : ((draftTicket.taskType as TaskType) || '设备报修')))
+        : (draftTicket.taskType === '非设备类转派任务' || (draftTicket.taskType === '供应商协同' && routing.needVendorCoop !== '是')
+          ? '设备报修'
+          : ((draftTicket.taskType as TaskType) || '设备报修')))
       : ((draftTicket.taskType as TaskType) || '设备报修');
     const autoMatchedEquipment = currentUserRole === 'medical_staff' && normalizedTaskType !== '非设备类转派任务'
       ? findUniqueEquipmentMatchForDraft(visibleEquipments, {

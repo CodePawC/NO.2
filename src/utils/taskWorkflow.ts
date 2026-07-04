@@ -134,7 +134,7 @@ export const getRecommendedRoutingForTask = (taskType?: TaskType, text = '') => 
   const isEquipmentLeakIssue = /漏水/i.test(normalizedText) && /胃镜|内镜|奥林巴斯|插入管|探头|管路|设备|泵|机/i.test(normalizedText);
   const isLogisticsIssue = /后勤|跳闸|照明|插座|强电|水管|空调|门锁|电源插座|漏电|配电/i.test(normalizedText) || (/漏水/i.test(normalizedText) && !isEquipmentLeakIssue);
   const explicitlyNoVendorCoop = /暂不需要厂家|不需要厂家|无需厂家|不用厂家|不联系厂家|无需供应商|不需要供应商|院内自主|设备科看一下/i.test(normalizedText);
-  const isVendorIssue = taskType === '供应商协同' || (!explicitlyNoVendorCoop && /厂家|供应商|外送|寄修|返厂|奥林巴斯|维保公司|售后/i.test(normalizedText));
+  const isVendorIssue = !explicitlyNoVendorCoop && (taskType === '供应商协同' || /厂家|供应商|外送|寄修|返厂|奥林巴斯|维保公司|售后/i.test(normalizedText));
 
   if (isVendorIssue) {
     return {
@@ -147,7 +147,7 @@ export const getRecommendedRoutingForTask = (taskType?: TaskType, text = '') => 
   if (isMedicalEquipmentIssue) {
     return {
       recommendedDept: '医学装备科',
-      needVendorCoop: taskType === '验收安装协同' ? '是' as const : '否' as const,
+      needVendorCoop: !explicitlyNoVendorCoop && taskType === '验收安装协同' ? '是' as const : '否' as const,
       routingNote: ''
     };
   }
@@ -178,7 +178,7 @@ export const getRecommendedRoutingForTask = (taskType?: TaskType, text = '') => 
 
   return {
     recommendedDept: '医学装备科',
-    needVendorCoop: taskType === '验收安装协同' ? '是' as const : '否' as const,
+    needVendorCoop: !explicitlyNoVendorCoop && taskType === '验收安装协同' ? '是' as const : '否' as const,
     routingNote: ''
   };
 };

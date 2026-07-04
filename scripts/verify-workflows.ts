@@ -335,6 +335,10 @@ const checks: Check[] = [
       assertEqual(noVendorRouting.recommendedDept, '医学装备科', '否定厂家协同时仍应归医学装备科');
       assertEqual(noVendorRouting.needVendorCoop, '否', '出现“暂不需要厂家”这类否定语义时不应误标厂家协同');
 
+      const staleSupplierNoVendorRouting = getRecommendedRoutingForTask('供应商协同', 'DR机房转运监护仪黑屏，暂不需要厂家，麻烦设备科看一下');
+      assertEqual(staleSupplierNoVendorRouting.recommendedDept, '医学装备科', '上游误分为供应商协同时仍应按设备问题归医学装备科');
+      assertEqual(staleSupplierNoVendorRouting.needVendorCoop, '否', '即使草稿类型误为供应商协同，明确否定厂家时也不应标记厂家协同');
+
       const equipmentLeakRouting = getRecommendedRoutingForTask('供应商协同', '奥林巴斯胃镜插入管漏水，需要厂家协同检测');
       assertEqual(equipmentLeakRouting.recommendedDept, '医学装备科', '医学设备漏水不应被误判为后勤水电问题');
     }
@@ -1225,14 +1229,25 @@ const checks: Check[] = [
         '临床端只有系统识别为非装备科问题时才应生成转派任务'
       );
       assert(
-        createSource.includes("draftTicket.taskType === '非设备类转派任务' ? '设备报修'"),
+        createSource.includes("draftTicket.taskType === '非设备类转派任务' ||") &&
+          createSource.includes("? '设备报修'"),
         '临床端不能通过手动把任务类型改为非设备转派来绕过设备维修闭环'
+      );
+      assert(
+        createSource.includes("draftTicket.taskType === '供应商协同' && routing.needVendorCoop !== '是'") &&
+          createSource.includes("? '设备报修'"),
+        '临床端不能保留与故障内容矛盾的供应商协同类型'
       );
       assert(
         createSource.includes("const effectiveNeedVendorCoop = currentUserRole === 'medical_staff'") &&
           createSource.includes('? routing.needVendorCoop') &&
           createSource.includes(": (routing.needVendorCoop === '是' ? '是' : (draftTicket.needVendorCoop || '否'))"),
         '临床端建单时厂家协同应按故障内容重算，不能采用手动标记值'
+      );
+      assert(
+        appSource.includes('const explicitlyNoVendorCoop = /暂不需要厂家|不需要厂家|无需厂家') &&
+          appSource.includes('!explicitlyNoVendorCoop && /厂家|外送|寄修|供应商|奥林巴斯/.test(textLower)'),
+        '前端本地兜底解析应识别厂家协同否定语义，不能仅因出现“厂家”就归为供应商协同'
       );
 
       const inlineTaskTypeStart = appSource.indexOf('<label className="text-[10px] font-bold text-slate-500 block mb-1">任务分类</label>');
@@ -1405,6 +1420,14 @@ const checks: Check[] = [
         serverSource.includes('getRuleBasedFallback(message, currentDraft, false, user)') &&
           serverSource.includes('getRuleBasedFallback(message, currentDraft, true, user)'),
         '无 API Key 或模型异常时，服务端 fallback 都应保留当前用户上下文'
+      );
+      assert(
+        serverSource.includes('const explicitlyNoVendorCoop = /暂不需要厂家|不需要厂家|无需厂家') &&
+          serverSource.includes('!explicitlyNoVendorCoop && /厂家|外送|寄修|供应商|奥林巴斯/.test(textLower)') &&
+          serverSource.includes("explicitlyNoVendorCoop") &&
+          serverSource.includes("? '否'") &&
+          serverSource.includes("taskType === '供应商协同' || taskType === '验收安装协同' ? '是'"),
+        '服务端本地降级应识别厂家协同否定语义，避免临床草稿被误标为供应商协同'
       );
 
       const indexSource = readFileSync('index.html', 'utf8');
