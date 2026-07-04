@@ -325,6 +325,7 @@ export default function App() {
     setShowVoiceMockModal(false);
     setSimulationText('');
     stopVoiceSimulation();
+    stopListening();
     setIsLoading(false);
     setSearchQuery('');
     setTypeFilter('All');
@@ -492,6 +493,7 @@ export default function App() {
     speechSupported,
     showVoiceMockModal,
     setShowVoiceMockModal,
+    stopListening,
     toggleListening
   } = useSpeechRecognition({ setInputMessage });
 

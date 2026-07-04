@@ -1545,8 +1545,24 @@ const checks: Check[] = [
       assert(
         switchSource.includes('setShowVoiceMockModal(false);') &&
           switchSource.includes("setSimulationText('');") &&
-          switchSource.includes('stopVoiceSimulation();'),
-        '切换身份时应关闭语音仿真弹窗、清空仿真文本并停止上一身份的听写计时器'
+          switchSource.includes('stopVoiceSimulation();') &&
+          switchSource.includes('stopListening();'),
+        '切换身份时应关闭语音仿真弹窗、清空仿真文本并停止上一身份的听写计时器和真实麦克风识别'
+      );
+      const speechSource = readFileSync('src/hooks/useSpeechRecognition.ts', 'utf8');
+      assert(
+        speechSource.includes('const speechSessionVersionRef = useRef(0);') &&
+          speechSource.includes('const SpeechRecognitionRef = useRef<any>(null);') &&
+          speechSource.includes('const createRecognitionSession = (sessionVersion: number) => {') &&
+          speechSource.includes('if (sessionVersion !== speechSessionVersionRef.current) return;') &&
+          speechSource.includes('const stopListening = (resetState = true) => {') &&
+          speechSource.includes('speechSessionVersionRef.current += 1;') &&
+          speechSource.includes('recognitionRef.current?.abort();') &&
+          speechSource.includes('recognitionRef.current = null;') &&
+          speechSource.includes('if (resetState)') &&
+          speechSource.includes('stopListening(false);') &&
+          speechSource.includes('stopListening,'),
+        '真实麦克风语音识别应使用会话版本隔离旧回调，停止录音时作废旧识别结果'
       );
       assert(
         appSource.includes('const activeRoleSessionVersion = roleSessionVersionRef.current;') &&
