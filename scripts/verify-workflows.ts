@@ -1818,6 +1818,31 @@ const checks: Check[] = [
           switchSource.includes('stopListening();'),
         '切换身份时应关闭语音仿真弹窗、清空仿真文本并停止上一身份的听写计时器和真实麦克风识别'
       );
+      const roleToastStart = appSource.indexOf('const showRoleToast = (message: string) => {');
+      const roleToastEnd = appSource.indexOf('const handleSwitchUser = (userId: string) => {', roleToastStart);
+      assert(roleToastStart !== -1 && roleToastEnd > roleToastStart, '应能定位顶部角色/权限提示逻辑');
+      const roleToastSource = appSource.slice(roleToastStart, roleToastEnd);
+      assert(
+        appSource.includes('const roleToastTimerRef = useRef<number | null>(null);') &&
+          roleToastSource.includes('if (roleToastTimerRef.current !== null)') &&
+          roleToastSource.includes('window.clearTimeout(roleToastTimerRef.current);') &&
+          roleToastSource.includes('roleToastTimerRef.current = window.setTimeout(() => {') &&
+          roleToastSource.includes('setShowRoleSwitchedToast(null);') &&
+          roleToastSource.includes('roleToastTimerRef.current = null;') &&
+          roleToastSource.includes('return () => {') &&
+          roleToastSource.includes('window.clearTimeout(roleToastTimerRef.current);') &&
+          !appSource.includes('setTimeout(() => setShowRoleSwitchedToast(null), 4500);'),
+        '顶部角色/权限 toast 应统一清理旧定时器，避免快速切换身份或连续权限提醒时旧定时器提前清掉新提示'
+      );
+      const roleToastCallCount = (appSource.match(/showRoleToast\(/g) || []).length;
+      assert(
+        roleToastCallCount >= 5 &&
+          appSource.includes('已切换身份为') &&
+          appSource.includes('已阻止跨科室工单访问') &&
+          appSource.includes("showRoleToast('AI配置由医学装备科维护，临床端仅可查看当前模型运行状态');") &&
+          appSource.includes("showRoleToast('临床端无权重置全院演示数据');"),
+        '角色切换、跨科室拦截、临床 AI 配置提醒和重置数据拦截都应走统一顶部 toast 入口'
+      );
       const speechSource = readFileSync('src/hooks/useSpeechRecognition.ts', 'utf8');
       assert(
         speechSource.includes('const speechSessionVersionRef = useRef(0);') &&

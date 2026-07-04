@@ -282,6 +282,7 @@ export default function App() {
   const [ratingValue, setRatingValue] = useState<number>(5);
   const [ratingComment, setRatingComment] = useState<string>('');
   const [showRoleSwitchedToast, setShowRoleSwitchedToast] = useState<string | null>(null);
+  const roleToastTimerRef = useRef<number | null>(null);
 
   const currentSimulatedUser = SIMULATED_USERS.find(u => u.id === currentSimulatedUserId) || SIMULATED_USERS[0];
   const isClinicalUser = currentUserRole === 'medical_staff';
@@ -334,6 +335,25 @@ export default function App() {
     }]);
   };
 
+  const showRoleToast = (message: string) => {
+    if (roleToastTimerRef.current !== null) {
+      window.clearTimeout(roleToastTimerRef.current);
+    }
+    setShowRoleSwitchedToast(message);
+    roleToastTimerRef.current = window.setTimeout(() => {
+      setShowRoleSwitchedToast(null);
+      roleToastTimerRef.current = null;
+    }, 4500);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (roleToastTimerRef.current !== null) {
+        window.clearTimeout(roleToastTimerRef.current);
+      }
+    };
+  }, []);
+
   const handleSwitchUser = (userId: string) => {
     const targetUser = SIMULATED_USERS.find(u => u.id === userId);
     if (!targetUser) return;
@@ -358,8 +378,7 @@ export default function App() {
     setShowSimulatedAuthModal(false);
     
     // Set a toast to show role switch
-    setShowRoleSwitchedToast(`已切换身份为 【${targetUser.name}】(${targetUser.title})`);
-    setTimeout(() => setShowRoleSwitchedToast(null), 4500);
+    showRoleToast(`已切换身份为 【${targetUser.name}】(${targetUser.title})`);
 
     // If clinical user, add an automatic greeting from the AI assistant
     if (targetUser.role === 'medical_staff') {
@@ -450,8 +469,7 @@ export default function App() {
         setSelectedTask(fallbackTask);
         setCurrentWorkspace('tasks');
         setMobileTab(fallbackTask ? 'list' : 'chat');
-        setShowRoleSwitchedToast(`已阻止跨科室工单访问，仅显示【${scopeLabel}】任务`);
-        setTimeout(() => setShowRoleSwitchedToast(null), 4500);
+        showRoleToast(`已阻止跨科室工单访问，仅显示【${scopeLabel}】任务`);
         setChatMessages(prev => [...prev, {
           id: `msg-ticket-deeplink-blocked-${Date.now()}`,
           sender: 'assistant',
@@ -498,8 +516,7 @@ export default function App() {
     const fallbackTask = tasksRef.current.find(canCurrentUserSeeTask) || null;
     setSelectedTask(fallbackTask);
     setMobileTab(fallbackTask ? 'list' : 'chat');
-    setShowRoleSwitchedToast(`已阻止跨科室工单访问，仅显示【${currentUserDepartment || '本科室'}】任务`);
-    setTimeout(() => setShowRoleSwitchedToast(null), 4500);
+    showRoleToast(`已阻止跨科室工单访问，仅显示【${currentUserDepartment || '本科室'}】任务`);
   }, [isClinicalUser, currentUserDepartment, selectedTask?.id, tasks]);
 
   // Advanced AI custom settings states
@@ -519,8 +536,7 @@ export default function App() {
   } = useAiSettings();
 
   const notifyAiSettingsManagedByEngineer = () => {
-    setShowRoleSwitchedToast('AI配置由医学装备科维护，临床端仅可查看当前模型运行状态');
-    setTimeout(() => setShowRoleSwitchedToast(null), 4500);
+    showRoleToast('AI配置由医学装备科维护，临床端仅可查看当前模型运行状态');
   };
 
   const openAiSettings = () => {
@@ -1254,8 +1270,7 @@ export default function App() {
     const blockReason = getEngineerActionBlockReason('重置演示数据');
     if (blockReason) {
       appendWorkflowNotice(`⚠️ **操作权限提醒**\n${blockReason}`, 'msg-reset-role-blocked');
-      setShowRoleSwitchedToast('临床端无权重置全院演示数据');
-      setTimeout(() => setShowRoleSwitchedToast(null), 4500);
+      showRoleToast('临床端无权重置全院演示数据');
       return;
     }
 
