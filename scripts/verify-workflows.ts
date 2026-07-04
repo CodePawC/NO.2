@@ -1125,6 +1125,33 @@ const checks: Check[] = [
           addAttachmentSource.includes('localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));'),
         '资料附件上传应基于最新设备列表追加附件并同步本地存储，避免连续上传覆盖旧附件'
       );
+      const addMaintenanceStart = archiveSource.indexOf('const handleAddMaintenanceLog = (e: React.FormEvent) => {');
+      const addMaintenanceEnd = archiveSource.indexOf('// Add Calibration Log', addMaintenanceStart);
+      assert(addMaintenanceStart !== -1 && addMaintenanceEnd > addMaintenanceStart, '应能定位新增维保履历逻辑');
+      const addMaintenanceSource = archiveSource.slice(addMaintenanceStart, addMaintenanceEnd);
+      assert(
+        addMaintenanceSource.includes("if (!ensureCanManageEquipmentArchive('新增维保工单')) return;") &&
+          addMaintenanceSource.includes('setEquipments(prevEquipments => {') &&
+          addMaintenanceSource.includes('const nextEquipments = prevEquipments.map(eq => {') &&
+          addMaintenanceSource.includes('if (eq.id !== selectedId) return eq;') &&
+          addMaintenanceSource.includes('const updatedLogs = [log, ...eq.maintenanceLogs];') &&
+          addMaintenanceSource.includes('maintenanceLogs: updatedLogs') &&
+          addMaintenanceSource.includes('localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));'),
+        '新增维保/维修履历应基于最新设备列表写入，避免连续登记覆盖其他档案更新'
+      );
+      const addCalibrationStart = archiveSource.indexOf('const handleAddCalibrationLog = (e: React.FormEvent) => {');
+      const addCalibrationEnd = archiveSource.indexOf('// Delete Maintenance Log', addCalibrationStart);
+      assert(addCalibrationStart !== -1 && addCalibrationEnd > addCalibrationStart, '应能定位新增计量证书逻辑');
+      const addCalibrationSource = archiveSource.slice(addCalibrationStart, addCalibrationEnd);
+      assert(
+        addCalibrationSource.includes("if (!ensureCanManageEquipmentArchive('登记计量证书')) return;") &&
+          addCalibrationSource.includes('setEquipments(prevEquipments => {') &&
+          addCalibrationSource.includes('const nextEquipments = prevEquipments.map(eq => {') &&
+          addCalibrationSource.includes('if (eq.id !== selectedId) return eq;') &&
+          addCalibrationSource.includes('calibrationLogs: [log, ...eq.calibrationLogs]') &&
+          addCalibrationSource.includes('localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));'),
+        '新增计量证书应基于最新设备列表写入，避免连续登记覆盖其他档案更新'
+      );
       const printStart = archiveSource.indexOf('const handlePrintQR = () => {');
       const printEnd = archiveSource.indexOf('const createQuickRepairRecord = (', printStart);
       assert(printStart !== -1 && printEnd > printStart, '应能定位物联二维码打印逻辑');

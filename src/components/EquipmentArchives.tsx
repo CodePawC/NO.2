@@ -1268,8 +1268,9 @@ export default function EquipmentArchives({
       pmChecklist: newLogType === '保养' ? newLogPmChecklist : []
     };
 
-    setEquipments(equipments.map(eq => {
-      if (eq.id === selectedId) {
+    setEquipments(prevEquipments => {
+      const nextEquipments = prevEquipments.map(eq => {
+        if (eq.id !== selectedId) return eq;
         // Also update equipment dates & status if relevant
         const updatedLogs = [log, ...eq.maintenanceLogs];
         const updatedStatus = log.status === '进行中' && log.type === '维修' ? '故障维修' : eq.status;
@@ -1282,9 +1283,10 @@ export default function EquipmentArchives({
             : eq.nextMaintenanceDate,
           maintenanceLogs: updatedLogs
         };
-      }
-      return eq;
-    }));
+      });
+      localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));
+      return nextEquipments;
+    });
 
     // Reset fields
     setNewLogDescription('');
@@ -1319,8 +1321,9 @@ export default function EquipmentArchives({
       errorDescription: newCalErrorDescription || '各项检定物理指标良好，综合误差在法定合格允许公差范围内。'
     };
 
-    setEquipments(equipments.map(eq => {
-      if (eq.id === selectedId) {
+    setEquipments(prevEquipments => {
+      const nextEquipments = prevEquipments.map(eq => {
+        if (eq.id !== selectedId) return eq;
         return {
           ...eq,
           status: log.result === '合格' || log.result === '准用' ? '正常运行' : '计量中',
@@ -1328,9 +1331,10 @@ export default function EquipmentArchives({
           nextCalibrationDate: log.validUntil,
           calibrationLogs: [log, ...eq.calibrationLogs]
         };
-      }
-      return eq;
-    }));
+      });
+      localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));
+      return nextEquipments;
+    });
 
     // Reset fields
     setNewCalAgency('');
