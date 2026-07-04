@@ -989,6 +989,8 @@ const checks: Check[] = [
           archiveSource.includes('setIsAttachmentModalOpen(false);') &&
           archiveSource.includes('setIsDossierModalOpen(false);') &&
           archiveSource.includes('setIsScannerModalOpen(false);') &&
+          archiveSource.includes('setIsQuickRepairModalOpen(false);') &&
+          archiveSource.includes('resetQuickRepairDraft();') &&
           archiveSource.includes('archiveManageRequestVersionRef.current += 1;') &&
           archiveSource.includes('setIsAnalyzing(false);') &&
           archiveSource.includes('setAnalyzerError(null);') &&
@@ -1061,8 +1063,24 @@ const checks: Check[] = [
       assert(
         archiveSource.includes('const quickRepairEquipment = equipments.find(eq => eq.id === quickRepairEquipId);') &&
           archiveSource.includes('canStartQuickRepairForEquipment(quickRepairEquipment)') &&
-          archiveSource.includes("setQuickRepairEquipId(fallbackEquipment?.id || '');"),
+          archiveSource.includes("resetQuickRepairDraft(fallbackEquipment?.id || '');"),
         '快捷报修弹窗中的设备选择应随角色和科室切换重新校验可报修范围'
+      );
+      assert(
+        archiveSource.includes('const getDefaultQuickRepairUrgency = (equipment: MedicalEquipment | null):') &&
+          archiveSource.includes("return equipment.category === '急救生命支持' || equipment.riskLevel === '高' ? 'high' : 'medium';") &&
+          archiveSource.includes("const resetQuickRepairDraft = (nextEquipmentId = '') => {") &&
+          archiveSource.includes('setQuickRepairEquipId(nextEquipmentId);') &&
+          archiveSource.includes("setQuickRepairDesc('');") &&
+          archiveSource.includes('setQuickRepairUrgency(getDefaultQuickRepairUrgency(nextEquipment));'),
+        '快捷报修草稿应有统一重置入口，切换设备或角色时不能沿用旧设备故障描述'
+      );
+      assert(
+        archiveSource.includes("resetQuickRepairDraft(fallbackEquipment?.id || '');") &&
+          archiveSource.includes("onChange={(e) => resetQuickRepairDraft(e.target.value)}") &&
+          archiveSource.includes('setIsQuickRepairModalOpen(false);') &&
+          archiveSource.includes('resetQuickRepairDraft();'),
+        '快捷报修弹窗的设备切换、关闭和取消都应清空旧描述与旧紧急度'
       );
       assert(
         archiveSource.includes('const hasActiveRepairWorkOrder = (equipment: MedicalEquipment) => {') &&

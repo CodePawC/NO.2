@@ -640,6 +640,16 @@ export default function EquipmentArchives({
   const canStartQuickRepairForEquipment = (equipment: MedicalEquipment | null) => {
     return !!equipment && canCurrentUserReportEquipment(equipment) && !hasActiveRepairWorkOrder(equipment);
   };
+  const getDefaultQuickRepairUrgency = (equipment: MedicalEquipment | null): 'low' | 'medium' | 'high' => {
+    if (!equipment) return 'medium';
+    return equipment.category === '急救生命支持' || equipment.riskLevel === '高' ? 'high' : 'medium';
+  };
+  const resetQuickRepairDraft = (nextEquipmentId = '') => {
+    setQuickRepairEquipId(nextEquipmentId);
+    setQuickRepairDesc('');
+    const nextEquipment = nextEquipmentId ? equipments.find(eq => eq.id === nextEquipmentId) || null : null;
+    setQuickRepairUrgency(getDefaultQuickRepairUrgency(nextEquipment));
+  };
   const getQuickRepairBlockMessage = (equipment: MedicalEquipment | null) => {
     if (!equipment) return '请先选择需要报修的设备。';
     if (!canCurrentUserReportEquipment(equipment)) {
@@ -698,6 +708,8 @@ export default function EquipmentArchives({
     setIsAttachmentModalOpen(false);
     setIsDossierModalOpen(false);
     setIsScannerModalOpen(false);
+    setIsQuickRepairModalOpen(false);
+    resetQuickRepairDraft();
     setFormMode('create');
     setCurrentEditId(null);
   }, [canManageEquipmentArchive]);
@@ -833,7 +845,7 @@ export default function EquipmentArchives({
       }
 
       setSelectedId(matched.id);
-      setQuickRepairEquipId(matched.id);
+      resetQuickRepairDraft(matched.id);
       setIsScannerModalOpen(false);
       
       // 直接定位并自动填充报修工单
@@ -939,7 +951,7 @@ export default function EquipmentArchives({
     if (quickRepairEquipment && canStartQuickRepairForEquipment(quickRepairEquipment)) return;
 
     const fallbackEquipment = visibleEquipments.find(canStartQuickRepairForEquipment);
-    setQuickRepairEquipId(fallbackEquipment?.id || '');
+    resetQuickRepairDraft(fallbackEquipment?.id || '');
   }, [quickRepairEquipId, currentUser.id, currentUserDepartment, equipments, visibleEquipments]);
 
   // Refresh AI Chat context on device and user change
@@ -1216,8 +1228,7 @@ export default function EquipmentArchives({
     if (!workOrderNo) return;
 
     setIsQuickRepairModalOpen(false);
-    setQuickRepairDesc('');
-    setQuickRepairUrgency('medium');
+    resetQuickRepairDraft();
     setQuickRepairToast({
       type: 'success',
       message: `报修成功：${targetEq.deviceName} 已同步生成主工单与档案维修记录 ${workOrderNo}`
@@ -2053,7 +2064,7 @@ Clinical class: Life-saving respiratory device`;
                   type="button"
                   onClick={() => {
                     const firstDeptEq = visibleEquipments[0];
-                    setQuickRepairEquipId(firstDeptEq ? firstDeptEq.id : '');
+                    resetQuickRepairDraft(firstDeptEq ? firstDeptEq.id : '');
                     setIsQuickRepairModalOpen(true);
                   }}
                   className="w-full py-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded text-[10px] font-black shadow-sm flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
@@ -4065,7 +4076,7 @@ Clinical class: Life-saving respiratory device`;
                                         return;
                                       }
 
-                                      setQuickRepairEquipId(eq.id);
+                                      resetQuickRepairDraft(eq.id);
                                       setQuickRepairDesc(`【台账明细表一键快捷报修】\n管理员在“台账明细表”执行快捷报修，请立刻核实响应。`);
                                       setQuickRepairUrgency('high');
                                       setIsQuickRepairModalOpen(true);
@@ -5844,7 +5855,10 @@ Clinical class: Life-saving respiratory device`;
                 </div>
               </div>
               <button 
-                onClick={() => setIsQuickRepairModalOpen(false)} 
+                onClick={() => {
+                  setIsQuickRepairModalOpen(false);
+                  resetQuickRepairDraft();
+                }} 
                 className="text-white/80 hover:text-white transition-colors"
                 type="button"
               >
@@ -5862,7 +5876,7 @@ Clinical class: Life-saving respiratory device`;
                 </label>
                 <select
                   value={quickRepairEquipId}
-                  onChange={(e) => setQuickRepairEquipId(e.target.value)}
+                  onChange={(e) => resetQuickRepairDraft(e.target.value)}
                   className="w-full text-xs font-bold border border-slate-200 rounded-lg p-2.5 bg-slate-50 text-slate-700 focus:ring-2 focus:ring-rose-500 outline-none"
                   required
                 >
@@ -5922,7 +5936,10 @@ Clinical class: Life-saving respiratory device`;
               <div className="pt-4 flex justify-end gap-2 border-t border-slate-100 flex-shrink-0">
                 <button
                   type="button"
-                  onClick={() => setIsQuickRepairModalOpen(false)}
+                  onClick={() => {
+                    setIsQuickRepairModalOpen(false);
+                    resetQuickRepairDraft();
+                  }}
                   className="px-4 py-2 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-lg transition-colors cursor-pointer"
                 >
                   取消
