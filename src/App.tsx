@@ -1047,7 +1047,7 @@ export default function App() {
     setChatMessages(prev => [...prev, {
       id: `msg-${Date.now()}`,
       sender: 'assistant',
-      text: `🎉 **工单创建成功！**\n单号：**${newTicketId}** 已录入系统。\n\n当前状态：【待响应派单】。您可以点击右侧任务看板，查阅完整的流转时间轴并记录维修轨迹。`,
+      text: `🎉 **工单创建成功！**\n单号：**${newTicketId}** 已录入系统。\n\n当前状态：【${newTicket.status}】。您可以点击右侧任务看板，查阅完整的流转时间轴并记录维修轨迹。`,
       timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
     }]);
   };

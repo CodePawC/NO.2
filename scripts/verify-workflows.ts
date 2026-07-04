@@ -1620,6 +1620,11 @@ const checks: Check[] = [
         '草稿建单应基于最新任务列表生成单号并阻断连续点击，避免重复单号或重复工单'
       );
       assert(
+        createSource.includes('当前状态：【${newTicket.status}】') &&
+          !createSource.includes('当前状态：【待响应派单】'),
+        '建单成功提示应展示新工单真实状态，不能与右侧任务卡片状态不一致'
+      );
+      assert(
         appSource.includes('const explicitlyNoVendorCoop = /暂不需要厂家|不需要厂家|无需厂家') &&
           appSource.includes('!explicitlyNoVendorCoop && /厂家|外送|寄修|供应商|奥林巴斯/.test(textLower)'),
         '前端本地兜底解析应识别厂家协同否定语义，不能仅因出现“厂家”就归为供应商协同'
