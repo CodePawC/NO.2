@@ -444,6 +444,26 @@ export default function EquipmentArchives({
   const [quickRepairDesc, setQuickRepairDesc] = useState<string>('');
   const [quickRepairUrgency, setQuickRepairUrgency] = useState<'low' | 'medium' | 'high'>('medium');
   const [quickRepairToast, setQuickRepairToast] = useState<{ type: 'success' | 'warning'; message: string } | null>(null);
+  const quickRepairToastTimerRef = useRef<number | null>(null);
+
+  const showQuickRepairToast = (toast: { type: 'success' | 'warning'; message: string }) => {
+    if (quickRepairToastTimerRef.current !== null) {
+      window.clearTimeout(quickRepairToastTimerRef.current);
+    }
+    setQuickRepairToast(toast);
+    quickRepairToastTimerRef.current = window.setTimeout(() => {
+      setQuickRepairToast(null);
+      quickRepairToastTimerRef.current = null;
+    }, 5000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (quickRepairToastTimerRef.current !== null) {
+        window.clearTimeout(quickRepairToastTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (propCurrentUser) {
@@ -676,11 +696,10 @@ export default function EquipmentArchives({
   const canManageEquipmentArchive = currentUser.role === 'engineer';
   canManageEquipmentArchiveRef.current = canManageEquipmentArchive;
   const showArchiveManageBlockedToast = (actionName: string) => {
-    setQuickRepairToast({
+    showQuickRepairToast({
       type: 'warning',
       message: `当前临床账号只能查看本科室设备并发起报修，不能执行${actionName}。请切换到医学装备科工程师账号后再操作。`
     });
-    setTimeout(() => setQuickRepairToast(null), 5000);
   };
   const ensureCanManageEquipmentArchive = (actionName: string) => {
     if (canManageEquipmentArchive) return true;
@@ -875,11 +894,10 @@ export default function EquipmentArchives({
         const found = equipments.find(eq => eq.id === equipId || eq.sn === equipId);
         if (found) {
           if (!canCurrentUserViewEquipment(found)) {
-            setQuickRepairToast({
+            showQuickRepairToast({
               type: 'warning',
               message: `当前临床账号只能查看本科室设备：${currentUserDepartment}`
             });
-            setTimeout(() => setQuickRepairToast(null), 5000);
             return;
           }
 
@@ -1231,11 +1249,10 @@ export default function EquipmentArchives({
     if (!targetEq) return;
     const quickRepairBlockMessage = getQuickRepairBlockMessage(targetEq);
     if (quickRepairBlockMessage) {
-      setQuickRepairToast({
+      showQuickRepairToast({
         type: 'warning',
         message: quickRepairBlockMessage
       });
-      setTimeout(() => setQuickRepairToast(null), 5000);
       return;
     }
 
@@ -1244,11 +1261,10 @@ export default function EquipmentArchives({
 
     setIsQuickRepairModalOpen(false);
     resetQuickRepairDraft();
-    setQuickRepairToast({
+    showQuickRepairToast({
       type: 'success',
       message: `报修成功：${targetEq.deviceName} 已同步生成主工单与档案维修记录 ${workOrderNo}`
     });
-    setTimeout(() => setQuickRepairToast(null), 5000);
   };
 
   // Add Log Entry (Maintenance)
@@ -1698,11 +1714,10 @@ Clinical class: Life-saving respiratory device`;
   ) => {
     const quickRepairBlockMessage = getQuickRepairBlockMessage(targetEq);
     if (quickRepairBlockMessage) {
-      setQuickRepairToast({
+      showQuickRepairToast({
         type: 'warning',
         message: quickRepairBlockMessage
       });
-      setTimeout(() => setQuickRepairToast(null), 5000);
       return '';
     }
 
@@ -1717,11 +1732,10 @@ Clinical class: Life-saving respiratory device`;
     });
 
     if (parentAccepted === false) {
-      setQuickRepairToast({
+      showQuickRepairToast({
         type: 'warning',
         message: `当前登录身份无法同步该设备主工单，请确认设备归属科室：${targetEq.dept}`
       });
-      setTimeout(() => setQuickRepairToast(null), 5000);
       return '';
     }
 
@@ -1759,11 +1773,10 @@ Clinical class: Life-saving respiratory device`;
   const handleQuickRepair = () => {
     const quickRepairBlockMessage = getQuickRepairBlockMessage(selectedEquipment);
     if (quickRepairBlockMessage) {
-      setQuickRepairToast({
+      showQuickRepairToast({
         type: 'warning',
         message: quickRepairBlockMessage
       });
-      setTimeout(() => setQuickRepairToast(null), 5000);
       return;
     }
 
@@ -1773,11 +1786,10 @@ Clinical class: Life-saving respiratory device`;
       const workOrderNo = createQuickRepairRecord(selectedEquipment, description, urgency);
       if (!workOrderNo) return;
 
-      setQuickRepairToast({
+      showQuickRepairToast({
         type: 'success',
         message: `报修成功：${selectedEquipment.deviceName} 已同步生成主工单与档案维修记录 ${workOrderNo}`
       });
-      setTimeout(() => setQuickRepairToast(null), 5000);
     }
   };
 
@@ -4124,11 +4136,10 @@ Clinical class: Life-saving respiratory device`;
                                     onClick={() => {
                                       const quickRepairBlockMessage = getQuickRepairBlockMessage(eq);
                                       if (quickRepairBlockMessage) {
-                                        setQuickRepairToast({
+                                        showQuickRepairToast({
                                           type: 'warning',
                                           message: quickRepairBlockMessage
                                         });
-                                        setTimeout(() => setQuickRepairToast(null), 5000);
                                         return;
                                       }
 

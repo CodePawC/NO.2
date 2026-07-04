@@ -1129,6 +1129,24 @@ const checks: Check[] = [
           archiveSource.includes('!hasActiveRepairWorkOrder(equipment)'),
         '档案快捷报修应识别已有进行中维修，避免重复生成维修记录'
       );
+      const quickRepairToastStart = archiveSource.indexOf("const showQuickRepairToast = (toast: { type: 'success' | 'warning'; message: string }) => {");
+      const quickRepairToastEnd = archiveSource.indexOf('useEffect(() => {\n    if (propCurrentUser)', quickRepairToastStart);
+      assert(quickRepairToastStart !== -1 && quickRepairToastEnd > quickRepairToastStart, '应能定位档案快捷报修 toast 逻辑');
+      const quickRepairToastSource = archiveSource.slice(quickRepairToastStart, quickRepairToastEnd);
+      const quickRepairToastCallCount = (archiveSource.match(/showQuickRepairToast\(/g) || []).length;
+      assert(
+        archiveSource.includes('const quickRepairToastTimerRef = useRef<number | null>(null);') &&
+          quickRepairToastSource.includes('if (quickRepairToastTimerRef.current !== null)') &&
+          quickRepairToastSource.includes('window.clearTimeout(quickRepairToastTimerRef.current);') &&
+          quickRepairToastSource.includes('quickRepairToastTimerRef.current = window.setTimeout(() => {') &&
+          quickRepairToastSource.includes('setQuickRepairToast(null);') &&
+          quickRepairToastSource.includes('quickRepairToastTimerRef.current = null;') &&
+          quickRepairToastSource.includes('return () => {') &&
+          quickRepairToastSource.includes('window.clearTimeout(quickRepairToastTimerRef.current);') &&
+          quickRepairToastCallCount >= 8 &&
+          !archiveSource.includes('setTimeout(() => setQuickRepairToast(null), 5000);'),
+        '资产档案快捷报修和权限提醒 toast 应统一清理旧定时器，避免连续报修或连续权限提醒时旧定时器提前清掉新提示'
+      );
       assert(
         archiveSource.includes("const formatDepartmentScopeLabel = (dept: string) => {") &&
           archiveSource.includes("return currentUser.role === 'medical_staff' ? '本科室' : '全部科室';") &&
