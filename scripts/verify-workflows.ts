@@ -987,9 +987,10 @@ const checks: Check[] = [
           archiveSource.includes('setIsAiParserOpen(false);') &&
           archiveSource.includes('setIsLogModalOpen(false);') &&
           archiveSource.includes('setIsAttachmentModalOpen(false);') &&
+          archiveSource.includes('setIsDossierModalOpen(false);') &&
           archiveSource.includes("setFormMode('create');") &&
           archiveSource.includes('setCurrentEditId(null);'),
-        '切换到临床档案视图时应清理工程师档案管理弹窗和编辑态'
+        '切换到临床档案视图时应清理工程师档案管理弹窗、PDF 导出预览和编辑态'
       );
       assert(
         archiveSource.includes('previewFileBelongsToSelectedEquipment') &&
@@ -1080,6 +1081,10 @@ const checks: Check[] = [
           desktopReadonlyIndex !== -1 &&
           desktopReadonlyIndex > desktopPdfIndex,
         '桌面端资产档案 PDF 导出按钮应只在工程师权限下渲染，临床端保留只读说明'
+      );
+      assert(
+        archiveSource.includes('{canManageEquipmentArchive && isDossierModalOpen && selectedEquipment && ('),
+        'PDF 技术档案导出弹窗本体也应绑定工程师权限，避免工程师打开后切临床仍可打印导出'
       );
       assert(
         archiveSource.includes("title={canManageEquipmentArchive ? '点击打印二维码物联标签' : '临床只读：二维码打印由医学装备科工程师执行'}") &&

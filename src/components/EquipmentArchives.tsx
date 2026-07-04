@@ -661,6 +661,7 @@ export default function EquipmentArchives({
     setIsAiParserOpen(false);
     setIsLogModalOpen(false);
     setIsAttachmentModalOpen(false);
+    setIsDossierModalOpen(false);
     setFormMode('create');
     setCurrentEditId(null);
   }, [canManageEquipmentArchive]);
@@ -6071,7 +6072,7 @@ Clinical class: Life-saving respiratory device`;
       )}
 
       {/* ================= MODAL 6: MEDICAL EQUIPMENT DOSSIER PDF EXPORT ================= */}
-      {isDossierModalOpen && selectedEquipment && (
+      {canManageEquipmentArchive && isDossierModalOpen && selectedEquipment && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto">
           <div className="relative bg-slate-100 rounded-xl border border-slate-200/80 w-full max-w-4xl shadow-2xl flex flex-col my-4 max-h-[90vh]">
             
