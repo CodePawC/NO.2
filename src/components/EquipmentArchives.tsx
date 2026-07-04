@@ -652,6 +652,10 @@ export default function EquipmentArchives({
   const visibleEquipments = equipments.filter(canCurrentUserViewEquipment);
   const visibleDepartments: string[] = ['全部科室', ...Array.from(new Set(visibleEquipments.map(eq => eq.dept))).filter((dept): dept is string => Boolean(dept))];
   const assetScopeLabel = currentUser.role === 'medical_staff' ? '本科室' : '全院';
+  const formatDepartmentScopeLabel = (dept: string) => {
+    if (dept !== '全部科室') return dept;
+    return currentUser.role === 'medical_staff' ? '本科室' : '全部科室';
+  };
   const categories = ['全部分类', '急救生命支持', '影像诊断', '检验分析', '手术治疗', '其他'];
   const statusOptions = ['全部状态', '正常运行', '故障维修', '计量中', '已停用'];
 
@@ -2000,7 +2004,7 @@ Clinical class: Life-saving respiratory device`;
                   onClick={() => setFilterMenuOpen(filterMenuOpen === 'dept' ? null : 'dept')}
                   className={`w-full flex items-center justify-between text-[11px] bg-slate-50 border border-slate-200 hover:bg-slate-100 rounded-lg px-2 py-2 text-slate-700 outline-none transition-all ${filterMenuOpen === 'dept' ? 'ring-2 ring-blue-500 border-transparent bg-white shadow-sm' : ''}`}
                 >
-                  <span className="truncate font-medium">{selectedDept}</span>
+                  <span className="truncate font-medium">{formatDepartmentScopeLabel(selectedDept)}</span>
                   <ChevronDown className="w-3 h-3 text-slate-400 flex-shrink-0 ml-0.5" />
                 </button>
                 {filterMenuOpen === 'dept' && (
@@ -2018,7 +2022,7 @@ Clinical class: Life-saving respiratory device`;
                           }}
                           className={`w-full text-left px-3.5 py-3 md:py-2 text-[12px] md:text-[11px] flex items-center justify-between transition-colors hover:bg-slate-50 ${selectedDept === d ? 'text-blue-600 font-bold bg-blue-50/50' : 'text-slate-700'}`}
                         >
-                          <span>{d}</span>
+                          <span>{formatDepartmentScopeLabel(d)}</span>
                           {selectedDept === d && <Check className="w-3.5 h-3.5 text-blue-600" />}
                         </button>
                       ))}
@@ -3713,7 +3717,7 @@ Clinical class: Life-saving respiratory device`;
                     onChange={(e) => setMatrixSelectedDept(e.target.value)}
                     className="w-full text-xs bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-slate-600 focus:outline-none font-bold"
                   >
-                    <option value="全部科室">全部科室 ({visibleDepartments.length - 1}个)</option>
+                    <option value="全部科室">{assetScopeLabel} ({visibleDepartments.length - 1}个)</option>
                     {visibleDepartments.filter(dept => dept !== '全部科室').sort().map(dept => (
                       <option key={dept} value={dept}>{dept}</option>
                     ))}
@@ -4058,7 +4062,7 @@ Clinical class: Life-saving respiratory device`;
                   <LayoutGrid className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest">业务实体科室数</p>
+                  <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest">{assetScopeLabel}实体科室数</p>
                   <div className="flex items-baseline gap-1 mt-0.5">
                     <span className="text-xl md:text-2xl font-black text-indigo-600">
                       {visibleDepartments.length - 1}
@@ -4088,7 +4092,7 @@ Clinical class: Life-saving respiratory device`;
                 <table className="w-full text-xs text-left border-collapse">
                   <thead>
                     <tr className="bg-slate-50/80 text-slate-500 font-bold border-b border-slate-100">
-                      <th className="p-3 min-w-[140px] font-black text-slate-600">科室机构 (点击整行筛选)</th>
+                      <th className="p-3 min-w-[140px] font-black text-slate-600">{assetScopeLabel}科室机构 (点击整行筛选)</th>
                       {['急救生命支持', '影像诊断', '检验分析', '手术治疗', '其他'].map(cat => {
                         return (
                           <th 
@@ -4099,7 +4103,7 @@ Clinical class: Life-saving respiratory device`;
                               setViewMode('list');
                             }}
                             className="p-3 text-center cursor-pointer hover:bg-slate-150 hover:text-indigo-600 transition-all"
-                            title={`点击查看全院“${cat}”装备明细列表`}
+                            title={`点击查看${assetScopeLabel}“${cat}”装备明细列表`}
                           >
                             <span className="block font-bold">{cat}</span>
                             <span className="text-[9px] font-normal text-slate-400">
@@ -4115,7 +4119,7 @@ Clinical class: Life-saving respiratory device`;
                           setViewMode('list');
                         }}
                         className="p-3 text-center font-black text-blue-600 bg-blue-50/30 cursor-pointer hover:bg-blue-100 transition-all"
-                        title="点击查看全院所有设备台账明细列表"
+                        title={`点击查看${assetScopeLabel}所有设备台账明细列表`}
                       >
                         科室资产总计
                       </th>
@@ -4194,7 +4198,7 @@ Clinical class: Life-saving respiratory device`;
 
                     {/* Overall Summary Row */}
                     <tr className="bg-slate-100/60 font-black border-t-2 border-slate-200">
-                      <td className="p-3 text-slate-800 font-extrabold">全院品类小计</td>
+                      <td className="p-3 text-slate-800 font-extrabold">{assetScopeLabel}品类小计</td>
                       {['急救生命支持', '影像诊断', '检验分析', '手术治疗', '其他'].map(cat => {
                         const colTotal = visibleEquipments.filter(e => e.category === cat).length;
                         
@@ -4208,7 +4212,7 @@ Clinical class: Life-saving respiratory device`;
                                 setViewMode('list');
                               }}
                               className="px-3 py-1 rounded-lg text-xs font-extrabold transition-all bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-700"
-                              title={`点击穿透查看全院“${cat}”装备明细`}
+                              title={`点击穿透查看${assetScopeLabel}“${cat}”装备明细`}
                             >
                               {colTotal}台
                             </button>

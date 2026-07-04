@@ -930,6 +930,22 @@ const checks: Check[] = [
           archiveSource.includes("setQuickRepairEquipId(fallbackEquipment?.id || '');"),
         '快捷报修弹窗中的设备选择应随角色和科室切换重新校验可报修范围'
       );
+      assert(
+        archiveSource.includes("const formatDepartmentScopeLabel = (dept: string) => {") &&
+          archiveSource.includes("return currentUser.role === 'medical_staff' ? '本科室' : '全部科室';") &&
+          archiveSource.includes('{formatDepartmentScopeLabel(selectedDept)}') &&
+          archiveSource.includes('{formatDepartmentScopeLabel(d)}') &&
+          archiveSource.includes('<option value="全部科室">{assetScopeLabel} ({visibleDepartments.length - 1}个)</option>'),
+        '临床档案筛选控件应显示本科室范围，避免用“全部科室”误导为全院可见'
+      );
+      assert(
+        archiveSource.includes('>{assetScopeLabel}科室机构 (点击整行筛选)</th>') &&
+          archiveSource.includes('title={`点击查看${assetScopeLabel}“${cat}”装备明细列表`}') &&
+          archiveSource.includes('title={`点击查看${assetScopeLabel}所有设备台账明细列表`}') &&
+          archiveSource.includes('>{assetScopeLabel}品类小计</td>') &&
+          archiveSource.includes('title={`点击穿透查看${assetScopeLabel}“${cat}”装备明细`}'),
+        '资产矩阵看板应按当前角色范围展示全院/本科室文案，不能在临床端硬编码全院'
+      );
       const printStart = archiveSource.indexOf('const handlePrintQR = () => {');
       const printEnd = archiveSource.indexOf('const createQuickRepairRecord = (', printStart);
       assert(printStart !== -1 && printEnd > printStart, '应能定位物联二维码打印逻辑');
