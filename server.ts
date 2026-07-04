@@ -76,6 +76,9 @@ function getRuleBasedFallback(message: string, currentDraft: any, isApiError: bo
   const isClinicalUser = currentUser?.role === 'medical_staff' && !!currentUserDepartment;
   const explicitlyNoVendorCoop = /暂不需要厂家|不需要厂家|无需厂家|不用厂家|不联系厂家|无需供应商|不需要供应商|院内自主|设备科看一下/i.test(textLower);
   const isEndoscopeVendorIssue = /胃镜|内镜|奥林巴斯|插入管/i.test(textLower) && /漏水|气密|破损|模糊/i.test(textLower);
+  const isEquipmentLeakIssue = /漏水/i.test(textLower) && /胃镜|内镜|奥林巴斯|插入管|探头|管路|设备|泵|机/i.test(textLower);
+  const isInformationIssue = /电脑|网络|网线|系统|his|pacs|lis|打印机|卡纸|扫码枪|处方|开立|登录|信息系统|办公系统/i.test(textLower);
+  const isLogisticsIssue = /后勤|跳闸|照明|插座|强电|水管|空调|门锁|电源插座|漏电|配电/i.test(textLower) || (/漏水/i.test(textLower) && !isEquipmentLeakIssue);
   
   // 1. Task Type
   let taskType = '设备报修';
@@ -91,7 +94,7 @@ function getRuleBasedFallback(message: string, currentDraft: any, isApiError: bo
     taskType = '计量/质控提醒';
   } else if (/配件|耗材|更换|电池/.test(textLower)) {
     taskType = '配件耗材申请';
-  } else if (/电脑|网络|网线|系统|his|后勤|打印机|卡纸|跳闸|照明|插座/.test(textLower)) {
+  } else if (isInformationIssue || isLogisticsIssue) {
     taskType = '非设备类转派任务';
   } else if (/巡检|保养|培训|鉴定|盘点/.test(textLower)) {
     taskType = '普通杂项任务';
@@ -124,7 +127,8 @@ function getRuleBasedFallback(message: string, currentDraft: any, isApiError: bo
   // 5. Urgency level rules
   const urgentKeywords = ['呼吸机', '除颤仪', '麻醉机', '监护仪', '氧气', '负压吸引', '抢救', '生命支持', '病人正在用', '无法通气', '压力不足'];
   const isUrgent = urgentKeywords.some(kw => textLower.includes(kw));
-  const urgency = isUrgent ? '生命支持' : (textLower.includes('急') ? '特急' : (draft.urgency || '普通'));
+  const hasExplicitUrgency = /紧急|急需|急用|急修|赶紧|尽快|立即|马上|危急|严重|无法正常运行|影响患者|影响临床/i.test(textLower);
+  const urgency = isUrgent ? '生命支持' : (hasExplicitUrgency ? '特急' : (draft.urgency || '普通'));
 
   // 6. Clinical Impact
   const affectClinical = isUrgent || textLower.includes('影响临床') ? '是' : (draft.affectClinical || '否');
@@ -136,7 +140,9 @@ function getRuleBasedFallback(message: string, currentDraft: any, isApiError: bo
     : (taskType === '供应商协同' || taskType === '验收安装协同' ? '是' : (draft.needVendorCoop || '否'));
 
   // 8. Recommended Dept
-  const recommendedDept = taskType === '非设备类转派任务' ? '信息科' : (draft.recommendedDept || '医学装备科');
+  const recommendedDept = taskType === '非设备类转派任务'
+    ? (isLogisticsIssue ? '后勤保障科' : '信息科')
+    : (draft.recommendedDept || '医学装备科');
 
   // 9. Contacts
   let contactPerson = isClinicalUser ? currentUser.name : (draft.contactPerson || '科室医护人员');
@@ -191,7 +197,7 @@ function getRuleBasedFallback(message: string, currentDraft: any, isApiError: bo
       '对于未提取到或有误差的字段，您可在弹窗或确认页面中直接手动微调。'
     ],
     isClarification: false,
-    forwardDepartment: taskType === '非设备类转派任务' ? '信息科' : null
+    forwardDepartment: taskType === '非设备类转派任务' ? recommendedDept : null
   };
 }
 

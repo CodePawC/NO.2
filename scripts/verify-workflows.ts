@@ -351,6 +351,9 @@ const checks: Check[] = [
       const logisticsRouting = getRecommendedRoutingForTask('非设备类转派任务', '治疗室插座跳闸，照明异常');
       assertEqual(logisticsRouting.recommendedDept, '后勤保障科', '强电/照明问题应建议后勤保障科');
 
+      const logisticsLeakRouting = getRecommendedRoutingForTask('非设备类转派任务', '治疗室水管漏水，地面湿滑，需要后勤处理');
+      assertEqual(logisticsLeakRouting.recommendedDept, '后勤保障科', '水管/场地漏水问题应建议后勤保障科');
+
       const vendorRouting = getRecommendedRoutingForTask('供应商协同', '奥林巴斯设备需要返厂寄修');
       assertEqual(vendorRouting.recommendedDept, '医学装备科', '供应商协同应由医学装备科牵头');
       assertEqual(vendorRouting.needVendorCoop, '是', '供应商协同应标记厂家协同');
@@ -1762,6 +1765,12 @@ const checks: Check[] = [
           appSource.includes('!explicitlyNoVendorCoop && (isEndoscopeVendorIssue || /厂家|外送|寄修|供应商|奥林巴斯/.test(textLower))'),
         '前端本地兜底解析应识别厂家协同否定语义，并将典型内镜漏水/气密性问题归为供应商协同'
       );
+      assert(
+        appSource.includes('const hasExplicitUrgency = /紧急|急需|急用|急修|赶紧|尽快|立即|马上|危急|严重|无法正常运行|影响患者|影响临床/i.test(textLower)') &&
+          appSource.includes("isUrgent ? '生命支持' : (hasExplicitUrgency ? '特急' : '普通')") &&
+          !appSource.includes("textLower.includes('急') ? '特急'"),
+        '前端本地兜底紧急度不应因“急诊科”的“急”误判为特急，必须匹配明确急迫语义'
+      );
 
       const inlineTaskTypeStart = appSource.indexOf('<label className="text-[10px] font-bold text-slate-500 block mb-1">任务分类</label>');
       const inlineTaskTypeEnd = appSource.indexOf('<label className="text-[10px] font-bold text-slate-500 block mb-1">任务来源</label>', inlineTaskTypeStart);
@@ -2066,11 +2075,17 @@ const checks: Check[] = [
       assert(
         serverSource.includes('const explicitlyNoVendorCoop = /暂不需要厂家|不需要厂家|无需厂家') &&
           serverSource.includes('const isEndoscopeVendorIssue = /胃镜|内镜|奥林巴斯|插入管/i.test(textLower)') &&
+          serverSource.includes('const isLogisticsIssue = /后勤|跳闸|照明|插座|强电|水管|空调|门锁|电源插座|漏电|配电/i.test(textLower)') &&
           serverSource.includes('!explicitlyNoVendorCoop && (isEndoscopeVendorIssue || /厂家|外送|寄修|供应商|奥林巴斯/.test(textLower))') &&
+          serverSource.includes("? (isLogisticsIssue ? '后勤保障科' : '信息科')") &&
+          serverSource.includes("forwardDepartment: taskType === '非设备类转派任务' ? recommendedDept : null") &&
+          serverSource.includes('const hasExplicitUrgency = /紧急|急需|急用|急修|赶紧|尽快|立即|马上|危急|严重|无法正常运行|影响患者|影响临床/i.test(textLower)') &&
+          serverSource.includes("isUrgent ? '生命支持' : (hasExplicitUrgency ? '特急' : (draft.urgency || '普通'))") &&
+          !serverSource.includes("textLower.includes('急') ? '特急'") &&
           serverSource.includes("explicitlyNoVendorCoop") &&
           serverSource.includes("? '否'") &&
           serverSource.includes("taskType === '供应商协同' || taskType === '验收安装协同' ? '是'"),
-        '服务端本地降级应识别厂家协同否定语义，并将典型内镜漏水/气密性问题归为供应商协同'
+        '服务端本地降级应识别厂家协同否定语义、典型内镜供应商协同，把后勤类转派归口后勤保障科，并避免急诊科误触发特急'
       );
 
       const indexSource = readFileSync('index.html', 'utf8');

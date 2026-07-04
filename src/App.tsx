@@ -716,7 +716,8 @@ export default function App() {
     // 5. Urgency level rules (Rule 3)
     const urgentKeywords = ['呼吸机', '除颤仪', '麻醉机', '监护仪', '氧气', '负压吸引', '抢救', '生命支持', '病人正在用', '无法通气', '压力不足'];
     const isUrgent = urgentKeywords.some(kw => textLower.includes(kw));
-    const urgency: UrgencyLevel = isUrgent ? '生命支持' : (textLower.includes('急') ? '特急' : '普通');
+    const hasExplicitUrgency = /紧急|急需|急用|急修|赶紧|尽快|立即|马上|危急|严重|无法正常运行|影响患者|影响临床/i.test(textLower);
+    const urgency: UrgencyLevel = isUrgent ? '生命支持' : (hasExplicitUrgency ? '特急' : '普通');
 
     // 6. Clinical Impact
     const affectClinical: ClinicalImpact = isUrgent || textLower.includes('影响临床') ? '是' : '否';
