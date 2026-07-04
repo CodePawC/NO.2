@@ -93,6 +93,22 @@ interface QuickRepairRequest {
   workOrderNo: string;
 }
 
+const getDiagnosticSessionKey = (equipment: MedicalEquipment | null, user: UserProfile) => {
+  return `${user.id}:${equipment?.id || 'no-equipment'}`;
+};
+
+const createDiagnosticWelcome = (equipment?: MedicalEquipment | null, user?: UserProfile) => {
+  if (!equipment) {
+    return '当前筛选条件下暂无可选设备。请调整左侧筛选条件后，再选择设备进行故障诊断、PM 维保或计量检测咨询。';
+  }
+
+  const userScope = user?.role === 'medical_staff'
+    ? `${user.department || user.dept || '本科室'}临床只读视角`
+    : '医学装备科工程师视角';
+
+  return `已切换至【${equipment.deviceName}】诊断会话。\n当前设备：${equipment.model} / SN: ${equipment.sn || '未登记'}\n当前视角：${userScope}\n请描述故障现象、报警代码或想核对的维保/计量操作，我会基于当前设备档案给出建议。`;
+};
+
 export const generatePreviewData = (equipment: MedicalEquipment, file: Attachment): PreviewData => {
   const fileTypeStr = 
     file.type === 'manual' ? '操作手册' :
@@ -597,8 +613,10 @@ export default function EquipmentArchives({
   const [chatInput, setChatInput] = useState('');
   const [isChatSending, setIsChatSending] = useState(false);
   const [chatMessages, setChatMessages] = useState<Array<{role: 'user' | 'model', text: string}>>([
-    { role: 'model', text: '您好！我是AI临床医学装备管理工程师。请选择一台设备，我可以为您进行故障诊断、推荐预防性维保(PM)方案或提供专业的技术操作规范建议！' }
+    { role: 'model', text: createDiagnosticWelcome() }
   ]);
+  const chatRequestVersionRef = useRef(0);
+  const diagnosticChatSessionKeyRef = useRef('');
 
   // 扫码报修状态与引用
   const [isScannerModalOpen, setIsScannerModalOpen] = useState(false);
@@ -857,6 +875,7 @@ export default function EquipmentArchives({
   }, [currentUser, onlyMyDept, clinicalFilterMode, selectedDept, selectedCategory, selectedStatus, searchTerm, equipments, selectedId, mobileView]);
 
   const selectedEquipment = filteredEquipments.find(eq => eq.id === selectedId) || filteredEquipments[0] || null;
+  const currentDiagnosticSessionKey = getDiagnosticSessionKey(selectedEquipment, currentUser);
 
   const previewFileBelongsToSelectedEquipment = Boolean(
     selectedEquipment && previewFile && selectedEquipment.attachments.some(file => file.id === previewFile.id)
@@ -899,18 +918,23 @@ export default function EquipmentArchives({
     setQuickRepairEquipId(fallbackEquipment?.id || '');
   }, [quickRepairEquipId, currentUser.id, currentUserDepartment, equipments, visibleEquipments]);
 
-  // Refresh AI Chat context on device select change
+  // Refresh AI Chat context on device and user change
   useEffect(() => {
-    if (selectedEquipment) {
-      setChatMessages([
-        { role: 'model', text: `您已选中【${selectedEquipment.deviceName}】(型号: ${selectedEquipment.model})。我可以协助您：\n1. 诊断可能出现的故障代码与排故方案。\n2. 提供该设备的年/季预防性维护 (PM) 技术大纲。\n3. 解答临床操作、计量检测规范或日常消毒疑问。` }
-      ]);
-    } else {
-      setChatMessages([
-        { role: 'model', text: '当前筛选条件下暂无可选设备。请调整左侧筛选条件后，再选择设备进行故障诊断、PM 维保或计量检测咨询。' }
-      ]);
-    }
-  }, [selectedEquipment?.id]);
+    diagnosticChatSessionKeyRef.current = currentDiagnosticSessionKey;
+    chatRequestVersionRef.current += 1;
+    setIsChatSending(false);
+    setChatInput('');
+    setChatMessages([
+      { role: 'model', text: createDiagnosticWelcome(selectedEquipment, currentUser) }
+    ]);
+  }, [
+    currentDiagnosticSessionKey,
+    selectedEquipment?.deviceName,
+    selectedEquipment?.model,
+    selectedEquipment?.sn,
+    currentUser.role,
+    currentUserDepartment
+  ]);
 
   // Unique list for filtering dropdowns
   const departments = visibleDepartments;
@@ -1457,8 +1481,11 @@ Clinical class: Life-saving respiratory device`;
 
   // Chat with AI Diagnostician Expert
   const sendChatMessage = () => {
-    if (!chatInput.trim() || !selectedEquipment) return;
+    if (!chatInput.trim() || !selectedEquipment || isChatSending) return;
     const userMsg = chatInput;
+    const requestVersion = chatRequestVersionRef.current;
+    const requestSessionKey = currentDiagnosticSessionKey;
+    diagnosticChatSessionKeyRef.current = currentDiagnosticSessionKey;
     setChatInput('');
     
     const newHistory = [...chatMessages, { role: 'user' as const, text: userMsg }];
@@ -1476,6 +1503,7 @@ Clinical class: Life-saving respiratory device`;
       messageHistory: formattedHistory
     })
       .then(result => {
+        if (requestVersion !== chatRequestVersionRef.current || requestSessionKey !== diagnosticChatSessionKeyRef.current) return;
         setIsChatSending(false);
         if (result.text) {
           setChatMessages([...newHistory, { role: 'model', text: result.text }]);
@@ -1484,6 +1512,7 @@ Clinical class: Life-saving respiratory device`;
         }
       })
       .catch(err => {
+        if (requestVersion !== chatRequestVersionRef.current || requestSessionKey !== diagnosticChatSessionKeyRef.current) return;
         setIsChatSending(false);
         setChatMessages([...newHistory, { role: 'model', text: `[错误] 无法连接到 AI 诊断服务端: ${err.message}` }]);
       });

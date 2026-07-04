@@ -957,7 +957,7 @@ const checks: Check[] = [
       );
       assert(
         archiveSource.includes('当前筛选条件下暂无可选设备') &&
-          archiveSource.includes('[selectedEquipment?.id]'),
+          archiveSource.includes('currentDiagnosticSessionKey'),
         '档案 AI 智脑应在当前过滤无设备时同步切换为空态提示'
       );
       assert(
@@ -1597,6 +1597,53 @@ const checks: Check[] = [
         serverSource.includes("const normalizedEndpoint = typeof endpoint === 'string' ? endpoint.trim() : '';") &&
           serverSource.includes("throw new Error(`自定义供应商 ${name || id || ''} 未配置 API 请求地址"),
         '自定义供应商联通测试应明确提示缺少 API 请求地址'
+      );
+    }
+  },
+  {
+    name: 'equipment diagnostic chat resets on equipment or role change',
+    run: () => {
+      const archiveSource = readFileSync('src/components/EquipmentArchives.tsx', 'utf8');
+      const chatResetStart = archiveSource.indexOf('// Refresh AI Chat context on device and user change');
+      const chatResetEnd = archiveSource.indexOf('// Unique list for filtering dropdowns', chatResetStart);
+      assert(chatResetStart !== -1 && chatResetEnd > chatResetStart, '应能定位资产档案 AI 诊断会话重置逻辑');
+      const chatResetSource = archiveSource.slice(chatResetStart, chatResetEnd);
+
+      const sendChatStart = archiveSource.indexOf('const sendChatMessage = () => {');
+      const sendChatEnd = archiveSource.indexOf('// Process OCR files', sendChatStart);
+      assert(sendChatStart !== -1 && sendChatEnd > sendChatStart, '应能定位资产档案 AI 诊断发送逻辑');
+      const sendChatSource = archiveSource.slice(sendChatStart, sendChatEnd);
+      const staleGuardMatches = sendChatSource.match(/requestVersion !== chatRequestVersionRef\.current \|\| requestSessionKey !== diagnosticChatSessionKeyRef\.current/g) || [];
+
+      assert(
+        archiveSource.includes('const getDiagnosticSessionKey = (equipment: MedicalEquipment | null, user: UserProfile)') &&
+          archiveSource.includes("return `${user.id}:${equipment?.id || 'no-equipment'}`;") &&
+          archiveSource.includes('const createDiagnosticWelcome = (equipment?: MedicalEquipment | null, user?: UserProfile)'),
+        '资产档案 AI 诊断会话应绑定当前设备与当前登录身份'
+      );
+      assert(
+        archiveSource.includes('const chatRequestVersionRef = useRef(0);') &&
+          archiveSource.includes("const diagnosticChatSessionKeyRef = useRef('');") &&
+          archiveSource.includes('const currentDiagnosticSessionKey = getDiagnosticSessionKey(selectedEquipment, currentUser);'),
+        '资产档案 AI 诊断异步请求应有会话版本和设备/用户 key'
+      );
+      assert(
+        chatResetSource.includes('diagnosticChatSessionKeyRef.current = currentDiagnosticSessionKey;') &&
+          chatResetSource.includes('chatRequestVersionRef.current += 1;') &&
+          chatResetSource.includes('setIsChatSending(false);') &&
+          chatResetSource.includes("setChatInput('');") &&
+          chatResetSource.includes('createDiagnosticWelcome(selectedEquipment, currentUser)') &&
+          chatResetSource.includes('currentDiagnosticSessionKey') &&
+          chatResetSource.includes('currentUser.role') &&
+          chatResetSource.includes('currentUserDepartment'),
+        '切换设备或角色时应重置资产档案 AI 诊断上下文并废弃旧请求'
+      );
+      assert(
+        sendChatSource.includes('if (!chatInput.trim() || !selectedEquipment || isChatSending) return;') &&
+          sendChatSource.includes('const requestVersion = chatRequestVersionRef.current;') &&
+          sendChatSource.includes('const requestSessionKey = currentDiagnosticSessionKey;') &&
+          staleGuardMatches.length >= 2,
+        '资产档案 AI 诊断返回成功或失败时都应丢弃旧设备/旧角色的异步响应'
       );
     }
   },
