@@ -244,13 +244,16 @@ const checks: Check[] = [
       assert(
         appSource.includes('const tasksRef = useRef(tasks);') &&
           appSource.includes('const pendingClinicalAcceptanceTaskIdsRef = useRef<Set<string>>(new Set());') &&
+          appSource.includes('const [pendingClinicalAcceptanceTaskIds, setPendingClinicalAcceptanceTaskIds] = useState<Set<string>>(() => new Set());') &&
           acceptSource.includes('const targetTask = tasksRef.current.find(t => t.id === taskId);') &&
           acceptSource.includes('if (pendingClinicalAcceptanceTaskIdsRef.current.has(taskId))') &&
           acceptSource.includes('msg-accept-pending') &&
           acceptSource.includes('pendingClinicalAcceptanceTaskIdsRef.current.add(taskId);') &&
+          acceptSource.includes('setPendingClinicalAcceptanceTaskIds(prev => new Set(prev).add(taskId));') &&
           acceptSource.includes('const nextTasks = tasksRef.current.map(t => t.id === taskId ? updatedTask : t);') &&
           acceptSource.includes('tasksRef.current = nextTasks;') &&
-          acceptSource.includes('pendingClinicalAcceptanceTaskIdsRef.current.delete(taskId);'),
+          acceptSource.includes('pendingClinicalAcceptanceTaskIdsRef.current.delete(taskId);') &&
+          acceptSource.includes('next.delete(taskId);'),
         '临床验收提交应基于最新任务列表写入并阻断同一工单连续点击，避免重复验收日志'
       );
       assert(
@@ -261,8 +264,16 @@ const checks: Check[] = [
           appSource.includes('id="clinical-rating-comment"') &&
           appSource.includes('aria-label="临床验收补充意见"') &&
           appSource.includes('id="btn-clinical-accept-task"') &&
-          appSource.includes('aria-label="签署临床验收并确认结单"'),
+          appSource.includes("'签署临床验收并确认结单'"),
         '临床验收表单应提供稳定控件标识和可访问名称，便于人工识别、无障碍使用和自动化回归'
+      );
+      assert(
+        appSource.includes('const isClinicalAcceptancePending = pendingClinicalAcceptanceTaskIds.has(selectedTask.id);') &&
+          appSource.includes('disabled={isClinicalAcceptancePending}') &&
+          appSource.includes("aria-label={isClinicalAcceptancePending ? '正在同步临床验收签署' : '签署临床验收并确认结单'}") &&
+          appSource.includes("isClinicalAcceptancePending ? '正在同步验收签署...' : '签署签字并确认验收结单'") &&
+          appSource.includes("placeholder={isClinicalAcceptancePending ? '正在同步验收签署，请稍候...' : '请填写您的补充意见（选填）...'}"),
+        '临床验收表单应在签署同步中禁用输入与按钮并显示明确等待状态，避免用户连续点击产生混乱反馈'
       );
     }
   },

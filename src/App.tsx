@@ -294,6 +294,7 @@ export default function App() {
   const [showSimulatedAuthModal, setShowSimulatedAuthModal] = useState(false);
   const [ratingValue, setRatingValue] = useState<number>(5);
   const [ratingComment, setRatingComment] = useState<string>('');
+  const [pendingClinicalAcceptanceTaskIds, setPendingClinicalAcceptanceTaskIds] = useState<Set<string>>(() => new Set());
   const [showRoleSwitchedToast, setShowRoleSwitchedToast] = useState<string | null>(null);
   const roleToastTimerRef = useRef<number | null>(null);
 
@@ -1108,6 +1109,7 @@ export default function App() {
     }
 
     pendingClinicalAcceptanceTaskIdsRef.current.add(taskId);
+    setPendingClinicalAcceptanceTaskIds(prev => new Set(prev).add(taskId));
 
     const logMessage = `临床科室进行验收。确认评价：【${ratingValue}星】。评价意见：${ratingComment.trim() || '设备运行正常，质量完好，确认验收并结单。'}`;
     const newLog = {
@@ -1142,6 +1144,11 @@ export default function App() {
       return nextStateTasks;
     });
     pendingClinicalAcceptanceTaskIdsRef.current.delete(taskId);
+    setPendingClinicalAcceptanceTaskIds(prev => {
+      const next = new Set(prev);
+      next.delete(taskId);
+      return next;
+    });
     setSelectedTask(updatedTask);
     setRatingComment('');
     setRatingValue(5);
@@ -2628,80 +2635,94 @@ export default function App() {
                     </div>
 
                     {/* Operational Rating Form or Rated Badge */}
-                    {selectedTask.status === '待科室验收' && needsClinicalAcceptance(selectedTask) && (
-                      <div className="bg-gradient-to-br from-emerald-50/60 to-teal-50/40 p-5 rounded-xl border border-emerald-200/70 shadow-sm space-y-4 animate-fade-in">
-                        <div>
-                          <h4 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
-                            ✍️ 签署验收 & 满意度打分
-                          </h4>
-                          <p className="text-[11px] text-slate-500 mt-0.5">设备已试运行确认通过，请客观打分以提升医学装备科服务质量</p>
-                        </div>
+                    {selectedTask.status === '待科室验收' && needsClinicalAcceptance(selectedTask) && (() => {
+                      const isClinicalAcceptancePending = pendingClinicalAcceptanceTaskIds.has(selectedTask.id);
 
-                        {/* Star widget */}
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-semibold text-slate-600">服务满意度:</span>
-                          <div className="flex items-center gap-1">
-                            {[1, 2, 3, 4, 5].map((star) => (
-                              <button
-                                key={star}
-                                id={`clinical-rating-star-${star}`}
-                                aria-label={`设置临床满意度为${star}星`}
-                                type="button"
-                                onClick={() => setRatingValue(star)}
-                                className="p-1 hover:scale-110 transition cursor-pointer"
-                              >
-                                <Star className={`w-6 h-6 ${star <= ratingValue ? 'text-amber-400 fill-amber-400' : 'text-slate-300'}`} />
-                              </button>
-                            ))}
+                      return (
+                        <div className="bg-gradient-to-br from-emerald-50/60 to-teal-50/40 p-5 rounded-xl border border-emerald-200/70 shadow-sm space-y-4 animate-fade-in">
+                          <div>
+                            <h4 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                              ✍️ 签署验收 & 满意度打分
+                            </h4>
+                            <p className="text-[11px] text-slate-500 mt-0.5">设备已试运行确认通过，请客观打分以提升医学装备科服务质量</p>
                           </div>
-                          <span className="text-xs font-bold text-amber-600 ml-1">
-                            {ratingValue === 5 ? '非常满意' : ratingValue === 4 ? '满意' : ratingValue === 3 ? '一般' : ratingValue === 2 ? '不满意' : '极不满意'}
-                          </span>
-                        </div>
 
-                        {/* Preset templates */}
-                        <div className="space-y-1.5">
-                          <span className="text-[10px] text-slate-400 block font-semibold">快速评价词（点击直接填入）:</span>
-                          <div className="flex flex-wrap gap-1.5">
-                            {['设备试运行良好，已正常投用', '工程师上门神速，态度极好', '修的很专业，点赞！', '提供了备用机，非常周到'].map((preset, index) => (
-                              <button
-                                key={preset}
-                                id={`clinical-rating-preset-${index + 1}`}
-                                type="button"
-                                aria-label={`填写验收评价：${preset}`}
-                                onClick={() => setRatingComment(preset)}
-                                className="text-[10px] bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 rounded px-2 py-0.5 cursor-pointer"
-                              >
-                                {preset}
-                              </button>
-                            ))}
+                          {/* Star widget */}
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-slate-600">服务满意度:</span>
+                            <div className="flex items-center gap-1">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <button
+                                  key={star}
+                                  id={`clinical-rating-star-${star}`}
+                                  aria-label={`设置临床满意度为${star}星`}
+                                  type="button"
+                                  disabled={isClinicalAcceptancePending}
+                                  onClick={() => setRatingValue(star)}
+                                  className={`p-1 transition ${isClinicalAcceptancePending ? 'cursor-not-allowed opacity-60' : 'hover:scale-110 cursor-pointer'}`}
+                                >
+                                  <Star className={`w-6 h-6 ${star <= ratingValue ? 'text-amber-400 fill-amber-400' : 'text-slate-300'}`} />
+                                </button>
+                              ))}
+                            </div>
+                            <span className="text-xs font-bold text-amber-600 ml-1">
+                              {ratingValue === 5 ? '非常满意' : ratingValue === 4 ? '满意' : ratingValue === 3 ? '一般' : ratingValue === 2 ? '不满意' : '极不满意'}
+                            </span>
                           </div>
-                        </div>
 
-                        {/* Comment Input */}
-                        <div className="space-y-1">
-                          <textarea
-                            id="clinical-rating-comment"
-                            aria-label="临床验收补充意见"
-                            placeholder="请填写您的补充意见（选填）..."
-                            value={ratingComment}
-                            onChange={(e) => setRatingComment(e.target.value)}
-                            className="w-full bg-white border border-slate-200 focus:border-emerald-500 rounded-lg p-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 min-h-[60px]"
-                          />
-                        </div>
+                          {/* Preset templates */}
+                          <div className="space-y-1.5">
+                            <span className="text-[10px] text-slate-400 block font-semibold">快速评价词（点击直接填入）:</span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {['设备试运行良好，已正常投用', '工程师上门神速，态度极好', '修的很专业，点赞！', '提供了备用机，非常周到'].map((preset, index) => (
+                                <button
+                                  key={preset}
+                                  id={`clinical-rating-preset-${index + 1}`}
+                                  type="button"
+                                  aria-label={`填写验收评价：${preset}`}
+                                  disabled={isClinicalAcceptancePending}
+                                  onClick={() => setRatingComment(preset)}
+                                  className={`text-[10px] border border-slate-200 rounded px-2 py-0.5 ${isClinicalAcceptancePending ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white hover:bg-slate-50 text-slate-600 cursor-pointer'}`}
+                                >
+                                  {preset}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
 
-                        {/* Submit closure button */}
-                        <button
-                          id="btn-clinical-accept-task"
-                          aria-label="签署临床验收并确认结单"
-                          onClick={() => handleClinicalAcceptTask(selectedTask.id)}
-                          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2 px-4 rounded-lg shadow-sm transition flex items-center justify-center gap-1.5 cursor-pointer"
-                        >
-                          <Check className="w-4 h-4" />
-                          签署签字并确认验收结单
-                        </button>
-                      </div>
-                    )}
+                          {/* Comment Input */}
+                          <div className="space-y-1">
+                            <textarea
+                              id="clinical-rating-comment"
+                              aria-label="临床验收补充意见"
+                              placeholder={isClinicalAcceptancePending ? '正在同步验收签署，请稍候...' : '请填写您的补充意见（选填）...'}
+                              value={ratingComment}
+                              disabled={isClinicalAcceptancePending}
+                              onChange={(e) => setRatingComment(e.target.value)}
+                              className="w-full bg-white border border-slate-200 focus:border-emerald-500 rounded-lg p-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 min-h-[60px] disabled:bg-slate-100 disabled:text-slate-400"
+                            />
+                          </div>
+
+                          {/* Submit closure button */}
+                          <button
+                            id="btn-clinical-accept-task"
+                            aria-label={isClinicalAcceptancePending ? '正在同步临床验收签署' : '签署临床验收并确认结单'}
+                            onClick={() => handleClinicalAcceptTask(selectedTask.id)}
+                            disabled={isClinicalAcceptancePending}
+                            className={`w-full text-white font-bold text-xs py-2 px-4 rounded-lg shadow-sm transition flex items-center justify-center gap-1.5 ${
+                              isClinicalAcceptancePending ? 'bg-emerald-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 cursor-pointer'
+                            }`}
+                          >
+                            {isClinicalAcceptancePending ? (
+                              <Activity className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Check className="w-4 h-4" />
+                            )}
+                            {isClinicalAcceptancePending ? '正在同步验收签署...' : '签署签字并确认验收结单'}
+                          </button>
+                        </div>
+                      );
+                    })()}
 
                     {selectedTask.status === '已完成' && (() => {
                       const acceptance = getTaskAcceptanceDisplay(selectedTask);
