@@ -75,6 +75,7 @@ function getRuleBasedFallback(message: string, currentDraft: any, isApiError: bo
   const currentUserDepartment = normalizeDepartmentName(currentUser?.department || currentUser?.dept);
   const isClinicalUser = currentUser?.role === 'medical_staff' && !!currentUserDepartment;
   const explicitlyNoVendorCoop = /暂不需要厂家|不需要厂家|无需厂家|不用厂家|不联系厂家|无需供应商|不需要供应商|院内自主|设备科看一下/i.test(textLower);
+  const isEndoscopeVendorIssue = /胃镜|内镜|奥林巴斯|插入管/i.test(textLower) && /漏水|气密|破损|模糊/i.test(textLower);
   
   // 1. Task Type
   let taskType = '设备报修';
@@ -84,7 +85,7 @@ function getRuleBasedFallback(message: string, currentDraft: any, isApiError: bo
     taskType = '医用气体异常';
   } else if (/验收|安装|到货|开箱/.test(textLower)) {
     taskType = '验收安装协同';
-  } else if (!explicitlyNoVendorCoop && /厂家|外送|寄修|供应商|奥林巴斯/.test(textLower)) {
+  } else if (!explicitlyNoVendorCoop && (isEndoscopeVendorIssue || /厂家|外送|寄修|供应商|奥林巴斯/.test(textLower))) {
     taskType = '供应商协同';
   } else if (/计量|强检|质控|送检/.test(textLower)) {
     taskType = '计量/质控提醒';

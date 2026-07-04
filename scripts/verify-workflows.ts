@@ -365,6 +365,11 @@ const checks: Check[] = [
 
       const equipmentLeakRouting = getRecommendedRoutingForTask('供应商协同', '奥林巴斯胃镜插入管漏水，需要厂家协同检测');
       assertEqual(equipmentLeakRouting.recommendedDept, '医学装备科', '医学设备漏水不应被误判为后勤水电问题');
+      assertEqual(equipmentLeakRouting.needVendorCoop, '是', '奥林巴斯/胃镜漏水应标记厂家协同');
+
+      const implicitEndoscopeVendorRouting = getRecommendedRoutingForTask('设备报修', '胃镜插入管处漏水测试气密性不合格，画面模糊，疑似破损');
+      assertEqual(implicitEndoscopeVendorRouting.recommendedDept, '医学装备科', '胃镜气密性漏水问题应归医学装备科牵头');
+      assertEqual(implicitEndoscopeVendorRouting.needVendorCoop, '是', '胃镜气密性漏水即使未写厂家，也应识别为厂家协同');
     }
   },
   {
@@ -1753,8 +1758,9 @@ const checks: Check[] = [
       );
       assert(
         appSource.includes('const explicitlyNoVendorCoop = /暂不需要厂家|不需要厂家|无需厂家') &&
-          appSource.includes('!explicitlyNoVendorCoop && /厂家|外送|寄修|供应商|奥林巴斯/.test(textLower)'),
-        '前端本地兜底解析应识别厂家协同否定语义，不能仅因出现“厂家”就归为供应商协同'
+          appSource.includes('const isEndoscopeVendorIssue = /胃镜|内镜|奥林巴斯|插入管/i.test(textLower)') &&
+          appSource.includes('!explicitlyNoVendorCoop && (isEndoscopeVendorIssue || /厂家|外送|寄修|供应商|奥林巴斯/.test(textLower))'),
+        '前端本地兜底解析应识别厂家协同否定语义，并将典型内镜漏水/气密性问题归为供应商协同'
       );
 
       const inlineTaskTypeStart = appSource.indexOf('<label className="text-[10px] font-bold text-slate-500 block mb-1">任务分类</label>');
@@ -2059,11 +2065,12 @@ const checks: Check[] = [
       );
       assert(
         serverSource.includes('const explicitlyNoVendorCoop = /暂不需要厂家|不需要厂家|无需厂家') &&
-          serverSource.includes('!explicitlyNoVendorCoop && /厂家|外送|寄修|供应商|奥林巴斯/.test(textLower)') &&
+          serverSource.includes('const isEndoscopeVendorIssue = /胃镜|内镜|奥林巴斯|插入管/i.test(textLower)') &&
+          serverSource.includes('!explicitlyNoVendorCoop && (isEndoscopeVendorIssue || /厂家|外送|寄修|供应商|奥林巴斯/.test(textLower))') &&
           serverSource.includes("explicitlyNoVendorCoop") &&
           serverSource.includes("? '否'") &&
           serverSource.includes("taskType === '供应商协同' || taskType === '验收安装协同' ? '是'"),
-        '服务端本地降级应识别厂家协同否定语义，避免临床草稿被误标为供应商协同'
+        '服务端本地降级应识别厂家协同否定语义，并将典型内镜漏水/气密性问题归为供应商协同'
       );
 
       const indexSource = readFileSync('index.html', 'utf8');
