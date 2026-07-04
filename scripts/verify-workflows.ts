@@ -818,10 +818,17 @@ const checks: Check[] = [
           status: '进行中',
           aiStatus: 'OK',
           source: '旧系统',
-          createdAt: '2026-07-03T08:00:00+08:00',
-          updatedAt: '2026-07-03T09:00:00+08:00',
+          createdAt: '',
+          updatedAt: 'not-a-date',
           aiSuggestions: ['请现场排查', 123],
           logs: [{ time: '2026-07-03 08:00', action: '旧系统导入', operator: 'AI' }, false],
+          clinicalAcceptance: {
+            rating: 9,
+            comment: 123,
+            acceptedBy: null,
+            acceptedByTitle: '护士长',
+            acceptedAt: 'bad-date'
+          },
           needBackupDevice: '需要',
           needVendorCoop: '不需要'
         },
@@ -847,6 +854,13 @@ const checks: Check[] = [
       assertEqual(repairedTask?.deviceId, 'EQ-TEMP-UNKNOWN', '非字符串设备编号应回退安全临时编号');
       assertEqual(repairedTask?.aiSuggestions.length, 1, 'AI 建议数组应过滤非字符串项');
       assert(repairedTask!.logs.length > 0, '任务存储清洗后必须保留可展示的时间线日志');
+      assert(!Number.isNaN(new Date(repairedTask!.createdAt).getTime()), '任务存储清洗应修复无效创建时间，避免列表显示 Invalid Date');
+      assert(!Number.isNaN(new Date(repairedTask!.updatedAt).getTime()), '任务存储清洗应修复无效更新时间，避免详情显示 Invalid Date');
+      assertEqual(repairedTask?.clinicalAcceptance?.rating, 5, '临床验收评分应夹紧到 1-5 星范围');
+      assert(
+        !Number.isNaN(new Date(repairedTask!.clinicalAcceptance!.acceptedAt).getTime()),
+        '任务存储清洗应修复无效验收时间，避免验收卡片显示 Invalid Date'
+      );
 
       const corruptTaskStorage = withoutConsoleWarn(() => parseStoredTaskList('{not json'));
       assert(corruptTaskStorage.tasks.length > 0, '损坏任务存储应回退默认任务列表');

@@ -162,6 +162,16 @@ const getOptionalString = (value: unknown, fallback: string | undefined, markRep
   return markAndReturn(fallback, markRepaired);
 };
 
+const isValidDateString = (value: string | undefined) => {
+  return !!value && !Number.isNaN(new Date(value).getTime());
+};
+
+const getDateString = (value: unknown, fallback: string, markRepaired: () => void) => {
+  if (typeof value === 'string' && isValidDateString(value)) return value;
+  if (isValidDateString(fallback)) return markAndReturn(fallback, markRepaired);
+  return markAndReturn(new Date().toISOString(), markRepaired);
+};
+
 const getNumber = (value: unknown, fallback: number, markRepaired: () => void) => {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   return markAndReturn(fallback, markRepaired);
@@ -240,7 +250,7 @@ const normalizeClinicalAcceptance = (
     comment: getString(value.comment, fallback?.comment || '设备使用一切正常', markRepaired),
     acceptedBy: getString(value.acceptedBy, fallback?.acceptedBy || '临床科室', markRepaired),
     acceptedByTitle: getString(value.acceptedByTitle, fallback?.acceptedByTitle || '科室验收人', markRepaired),
-    acceptedAt: getString(value.acceptedAt, fallback?.acceptedAt || '', markRepaired)
+    acceptedAt: getDateString(value.acceptedAt, fallback?.acceptedAt || '', markRepaired)
   };
 };
 
@@ -261,6 +271,8 @@ const normalizeTaskRecord = (value: unknown): { task: StructuredTicket | null; r
   }
 
   const department = normalizeDepartmentName(getString(value.department, fallback.department, markRepaired)) || fallback.department;
+  const createdAt = getDateString(value.createdAt, fallback.createdAt, markRepaired);
+  const updatedAt = getDateString(value.updatedAt, fallback.updatedAt || createdAt, markRepaired);
   const task: StructuredTicket = {
     id,
     taskType: getOption(value.taskType, TASK_TYPES, fallback.taskType, markRepaired),
@@ -276,8 +288,8 @@ const normalizeTaskRecord = (value: unknown): { task: StructuredTicket | null; r
     status: getOption(value.status, TASK_STATUSES, fallback.status, markRepaired, TASK_STATUS_ALIASES),
     aiStatus: getOption(value.aiStatus, AI_STATUSES, fallback.aiStatus, markRepaired),
     source: getOption(value.source, TASK_SOURCES, fallback.source, markRepaired),
-    createdAt: getString(value.createdAt, fallback.createdAt, markRepaired),
-    updatedAt: getString(value.updatedAt, fallback.updatedAt, markRepaired),
+    createdAt,
+    updatedAt,
     aiSuggestions: getStringArray(value.aiSuggestions, fallback.aiSuggestions, markRepaired),
     logs: getTaskLogs(value.logs, fallback.logs, markRepaired),
     rawText: getOptionalString(value.rawText, fallback.rawText, markRepaired),
