@@ -364,6 +364,11 @@ export default function App() {
     setIsClarification(false);
     setIsFullDraftOpen(false);
     setIsLoading(false);
+    setSearchQuery('');
+    setTypeFilter('All');
+    setUrgencyFilter('All');
+    setStatusFilter('All');
+    setSourceFilter('All');
     setCurrentSimulatedUserId(userId);
     setCurrentUserRole(targetUser.role);
     setShowSimulatedAuthModal(false);

@@ -1160,8 +1160,13 @@ const checks: Check[] = [
           switchSource.includes('setForwardDept(null);') &&
           switchSource.includes('setIsClarification(false);') &&
           switchSource.includes('setIsFullDraftOpen(false);') &&
-          switchSource.includes('setIsLoading(false);'),
-        '切换身份时应清空未提交草稿、展开确认窗口、AI 建议与加载状态，避免上一身份草稿串入新身份'
+          switchSource.includes('setIsLoading(false);') &&
+          switchSource.includes("setSearchQuery('');") &&
+          switchSource.includes("setTypeFilter('All');") &&
+          switchSource.includes("setUrgencyFilter('All');") &&
+          switchSource.includes("setStatusFilter('All');") &&
+          switchSource.includes("setSourceFilter('All');"),
+        '切换身份时应清空未提交草稿、展开确认窗口、AI 建议、加载状态与工单筛选，避免上一身份上下文串入新身份'
       );
       assert(
         appSource.includes('const activeRoleSessionVersion = roleSessionVersionRef.current;') &&
