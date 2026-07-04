@@ -2285,23 +2285,37 @@ const checks: Check[] = [
       assert(
         calendarSource.includes('const selectedEquipment = filteredEquipmentsForDeploy.find(eq => eq.id === deployEquipmentId);') &&
           calendarSource.includes('当前筛选条件下无法部署到该设备') &&
+          calendarSource.includes("const submittedDate = String(new FormData(form).get('deployDate') || deployDate).trim();") &&
+          calendarSource.includes('nextMaintenanceDate: submittedDate') &&
+          calendarSource.includes('nextCalibrationDate: submittedDate') &&
+          calendarSource.includes('date: submittedDate') &&
+          calendarSource.includes('计划执行日期为 ${submittedDate}') &&
           calendarSource.includes('const filteredDeployEquipmentIds = filteredEquipmentsForDeploy.map(eq => eq.id).join') &&
           calendarSource.includes("if (!isDeployMode) return;") &&
           calendarSource.includes('!filteredEquipmentsForDeploy.some(eq => eq.id === deployEquipmentId)') &&
           calendarSource.includes("setDeployEquipmentId(filteredEquipmentsForDeploy[0]?.id || '');"),
-        '工程师部署表单应随设备搜索筛选校正选中设备，并阻止向隐藏设备下发工单'
+        '工程师部署表单应读取表单当前日期值、随设备搜索筛选校正选中设备，并阻止向隐藏设备下发工单'
       );
       assert(
         calendarSource.includes('<option value="" disabled className="text-slate-400 italic">未找到相匹配的受试设备</option>') &&
-          calendarSource.includes('disabled={!deployEquipmentId || filteredEquipmentsForDeploy.length === 0}'),
-        '工程师部署表单无可见设备时应显示空值提示并禁用提交按钮'
+          calendarSource.includes('disabled={!deployEquipmentId || filteredEquipmentsForDeploy.length === 0}') &&
+          calendarSource.includes('id="maintenance-deploy-search"') &&
+          calendarSource.includes('id="maintenance-deploy-equipment"') &&
+          calendarSource.includes('id="maintenance-deploy-date"') &&
+          calendarSource.includes('id="maintenance-deploy-notes"') &&
+          calendarSource.includes('id="btn-maintenance-submit-deploy"'),
+        '工程师部署表单无可见设备时应显示空值提示、禁用提交按钮，并暴露稳定控件 id 便于回归验证'
       );
       assert(
         calendarSource.includes('const targetEventId = selectedEvent.id;') &&
-          calendarSource.includes('const targetDate = newScheduleDate;') &&
+          calendarSource.includes("const submittedDate = String(new FormData(form).get('newScheduleDate') || newScheduleDate).trim();") &&
+          calendarSource.includes('const targetDate = submittedDate;') &&
+          calendarSource.includes('setNewScheduleDate(submittedDate);') &&
+          calendarSource.includes('id="maintenance-reschedule-date"') &&
+          calendarSource.includes('id="btn-maintenance-confirm-reschedule"') &&
           calendarSource.includes('if (prev.id !== targetEventId) return prev;') &&
           calendarSource.includes('date: targetDate'),
-        '维保调期的异步完成回写只能更新原始选中的日程，避免用户切换日程后误改右侧详情面板'
+        '维保调期应读取表单当前日期值，并且异步完成回写只能更新原始选中的日程，避免用户切换日程后误改右侧详情面板'
       );
     }
   }

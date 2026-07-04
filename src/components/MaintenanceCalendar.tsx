@@ -410,7 +410,9 @@ export default function MaintenanceCalendar({
   // Reschedule submit handler (future tasks only)
   const handleReschedule = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedEvent || !newScheduleDate) return;
+    const form = e.currentTarget as HTMLFormElement;
+    const submittedDate = String(new FormData(form).get('newScheduleDate') || newScheduleDate).trim();
+    if (!selectedEvent || !submittedDate) return;
     const blockReason = getScheduleManageBlockReason('日程调期');
     if (blockReason) {
       triggerNotification(`⚠️ ${blockReason}`);
@@ -423,7 +425,8 @@ export default function MaintenanceCalendar({
     const taskType = selectedEvent.type;
     const assignedTechnician = selectedEvent.technician;
     const deviceName = selectedEvent.equipment.deviceName;
-    const targetDate = newScheduleDate;
+    const targetDate = submittedDate;
+    setNewScheduleDate(submittedDate);
 
     setTimeout(() => {
       setEquipments(prev => prev.map(eq => {
@@ -496,13 +499,15 @@ export default function MaintenanceCalendar({
   // Work Deployment Form Submission
   const handleDeployWorkSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const form = e.currentTarget as HTMLFormElement;
+    const submittedDate = String(new FormData(form).get('deployDate') || deployDate).trim();
     const blockReason = getScheduleManageBlockReason('新工单部署');
     if (blockReason) {
       triggerNotification(`⚠️ ${blockReason}`);
       return;
     }
 
-    if (!deployEquipmentId || !deployDate) {
+    if (!deployEquipmentId || !submittedDate) {
       triggerNotification('❌ 请完整选择受托医疗设备及计划日期。');
       return;
     }
@@ -513,18 +518,20 @@ export default function MaintenanceCalendar({
       return;
     }
 
+    setDeployDate(submittedDate);
+
     setEquipments(prev => prev.map(eq => {
       if (eq.id === deployEquipmentId) {
         if (deployTaskType === 'maintenance') {
           return {
             ...eq,
-            nextMaintenanceDate: deployDate,
+            nextMaintenanceDate: submittedDate,
             assignedMaintenanceEngineer: deployEngineer
           };
         } else if (deployTaskType === 'calibration') {
           return {
             ...eq,
-            nextCalibrationDate: deployDate,
+            nextCalibrationDate: submittedDate,
             assignedCalibrationEngineer: deployEngineer,
             calibrationRequired: true
           };
@@ -533,12 +540,12 @@ export default function MaintenanceCalendar({
           const newWorkOrder: MaintenanceLog = {
             id: `WO-REPAIR-${Date.now().toString().substring(6)}`,
             type: '维修',
-            date: deployDate,
+            date: submittedDate,
             technician: deployEngineer,
             description: deployNotes || '应急维修指令，请迅速排除故障',
             cost: 0,
             status: '进行中',
-            workOrderNo: `WO-${deployDate.replace(/-/g, '')}-${Math.floor(100 + Math.random() * 900)}`,
+            workOrderNo: `WO-${submittedDate.replace(/-/g, '')}-${Math.floor(100 + Math.random() * 900)}`,
             faultPhenomenon: deployNotes || '设备出现非预期异常，需要现场紧急维修'
           };
           return {
@@ -553,7 +560,7 @@ export default function MaintenanceCalendar({
 
     triggerNotification(`🚀 工单部署成功！已将《${selectedEquipment.deviceName}》的 ${
       deployTaskType === 'maintenance' ? '计划PM保养' : deployTaskType === 'calibration' ? '计量周期强检' : '紧急维修任务'
-    } 下发给技术员【${deployEngineer}】，计划执行日期为 ${deployDate}。`);
+    } 下发给技术员【${deployEngineer}】，计划执行日期为 ${submittedDate}。`);
 
     // Reset Form
     setIsDeployMode(false);
@@ -1080,15 +1087,19 @@ export default function MaintenanceCalendar({
 
                       <div className="space-y-1">
                         <input 
+                          id="maintenance-reschedule-date"
+                          name="newScheduleDate"
                           type="date" 
                           value={newScheduleDate}
                           onChange={(e) => setNewScheduleDate(e.target.value)}
+                          onInput={(e) => setNewScheduleDate(e.currentTarget.value)}
                           className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-800 bg-slate-50/50 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors font-mono font-bold"
                           required
                         />
                       </div>
 
                       <button
+                        id="btn-maintenance-confirm-reschedule"
                         type="submit"
                         disabled={isRescheduling || newScheduleDate === selectedEvent.date}
                         className="w-full py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-lg text-[11px] font-bold shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
@@ -1257,6 +1268,7 @@ export default function MaintenanceCalendar({
                   <div className="relative">
                     <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" />
                     <input 
+                      id="maintenance-deploy-search"
                       type="text"
                       placeholder="检索：设备名 / 编号 / SN码 / 科室"
                       value={deploySearchQuery}
@@ -1266,6 +1278,7 @@ export default function MaintenanceCalendar({
                   </div>
 
                   <select
+                    id="maintenance-deploy-equipment"
                     value={deployEquipmentId}
                     onChange={(e) => setDeployEquipmentId(e.target.value)}
                     className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-2 text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 font-bold"
@@ -1287,6 +1300,7 @@ export default function MaintenanceCalendar({
                 <div className="space-y-1.5">
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">指派责任临床工程师</label>
                   <select
+                    id="maintenance-deploy-engineer"
                     value={deployEngineer}
                     onChange={(e) => setDeployEngineer(e.target.value)}
                     className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 font-bold"
@@ -1301,9 +1315,12 @@ export default function MaintenanceCalendar({
                 <div className="space-y-1.5">
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">排期计划开展日期</label>
                   <input 
+                    id="maintenance-deploy-date"
+                    name="deployDate"
                     type="date"
                     value={deployDate}
                     onChange={(e) => setDeployDate(e.target.value)}
+                    onInput={(e) => setDeployDate(e.currentTarget.value)}
                     className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono font-bold"
                     required
                   />
@@ -1313,6 +1330,7 @@ export default function MaintenanceCalendar({
                 <div className="space-y-1.5">
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">特殊指令/派发备注</label>
                   <textarea
+                    id="maintenance-deploy-notes"
                     rows={2}
                     value={deployNotes}
                     onChange={(e) => setDeployNotes(e.target.value)}
@@ -1325,6 +1343,7 @@ export default function MaintenanceCalendar({
               {/* Action buttons */}
               <div className="space-y-2 pt-3 border-t border-slate-200">
                 <button
+                  id="btn-maintenance-submit-deploy"
                   type="submit"
                   disabled={!deployEquipmentId || filteredEquipmentsForDeploy.length === 0}
                   className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-lg text-xs font-black shadow-sm transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
