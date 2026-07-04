@@ -739,6 +739,13 @@ export default function EquipmentArchives({
   }, [canManageEquipmentArchive]);
 
   const visibleEquipments = equipments.filter(canCurrentUserViewEquipment);
+  const quickRepairableEquipments = visibleEquipments.filter(canStartQuickRepairForEquipment);
+  const firstQuickRepairableEquipment = quickRepairableEquipments[0] || null;
+  const clinicalQuickRepairBlockMessage = firstQuickRepairableEquipment
+    ? ''
+    : visibleEquipments.length === 0
+      ? '当前科室暂无可报修的在册设备。'
+      : '本科室设备已有进行中的维修工单，请在现有工单中补充故障信息，避免重复派单。';
   const visibleDepartments: string[] = ['全部科室', ...Array.from(new Set(visibleEquipments.map(eq => eq.dept))).filter((dept): dept is string => Boolean(dept))];
   const assetScopeLabel = currentUser.role === 'medical_staff' ? '本科室' : '全院';
   const formatDepartmentScopeLabel = (dept: string) => {
@@ -2130,14 +2137,26 @@ Clinical class: Life-saving respiratory device`;
                   id="btn-clinical-open-quick-repair"
                   aria-label="打开本科室故障一键快捷上报"
                   type="button"
+                  disabled={!firstQuickRepairableEquipment}
+                  title={firstQuickRepairableEquipment ? '打开本科室故障一键快捷上报' : clinicalQuickRepairBlockMessage}
                   onClick={() => {
-                    const firstDeptEq = visibleEquipments[0];
-                    resetQuickRepairDraft(firstDeptEq ? firstDeptEq.id : '');
+                    if (!firstQuickRepairableEquipment) {
+                      showQuickRepairToast({
+                        type: 'warning',
+                        message: clinicalQuickRepairBlockMessage
+                      });
+                      return;
+                    }
+                    resetQuickRepairDraft(firstQuickRepairableEquipment.id);
                     setIsQuickRepairModalOpen(true);
                   }}
-                  className="w-full py-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded text-[10px] font-black shadow-sm flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  className={`w-full py-1.5 rounded text-[10px] font-black shadow-sm flex items-center justify-center gap-1.5 transition-colors ${
+                    firstQuickRepairableEquipment
+                      ? 'bg-rose-500 hover:bg-rose-600 text-white cursor-pointer'
+                      : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                  }`}
                 >
-                  <AlertTriangle className="w-3 h-3 text-white" />
+                  <AlertTriangle className={`w-3 h-3 ${firstQuickRepairableEquipment ? 'text-white' : 'text-slate-400'}`} />
                   <span>本科室故障一键快捷上报</span>
                 </button>
 

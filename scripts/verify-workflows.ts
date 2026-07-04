@@ -1665,6 +1665,12 @@ const checks: Check[] = [
       assert(
         archiveSource.includes('id="btn-clinical-open-quick-repair"') &&
           archiveSource.includes('aria-label="打开本科室故障一键快捷上报"') &&
+          archiveSource.includes('const quickRepairableEquipments = visibleEquipments.filter(canStartQuickRepairForEquipment);') &&
+          archiveSource.includes('const firstQuickRepairableEquipment = quickRepairableEquipments[0] || null;') &&
+          archiveSource.includes('const clinicalQuickRepairBlockMessage = firstQuickRepairableEquipment') &&
+          archiveSource.includes('disabled={!firstQuickRepairableEquipment}') &&
+          archiveSource.includes("resetQuickRepairDraft(firstQuickRepairableEquipment.id)") &&
+          archiveSource.includes('cursor-not-allowed') &&
           archiveSource.includes('id="btn-archive-instant-repair"') &&
           archiveSource.includes('aria-label="一键报修当前设备"') &&
           archiveSource.includes('id="quick-repair-equipment-select"') &&
@@ -1676,6 +1682,14 @@ const checks: Check[] = [
           archiveSource.includes('id="btn-submit-quick-repair"') &&
           archiveSource.includes('aria-label="提交快捷报修并分派"'),
         '资产档案快捷报修控件应提供稳定标识和可访问名称，便于临床人测与自动化回归'
+      );
+      assert(
+        archiveSource.includes('quickRepairableEquipments') &&
+          archiveSource.includes('firstQuickRepairableEquipment') &&
+          archiveSource.includes('clinicalQuickRepairBlockMessage') &&
+          archiveSource.includes('showQuickRepairToast({') &&
+          archiveSource.includes('本科室设备已有进行中的维修工单，请在现有工单中补充故障信息，避免重复派单。'),
+        '临床快捷面板入口应在本科室无可报修设备时直接禁用并提示原因，避免打开空报修弹窗'
       );
       assert(
         archiveSource.includes('id={`equipment-card-${eq.id}`}') &&
