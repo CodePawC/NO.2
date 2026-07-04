@@ -2137,6 +2137,26 @@ const checks: Check[] = [
           appSource.includes("showRoleToast('临床端无权重置全院演示数据');"),
         '角色切换、跨科室拦截、临床 AI 配置提醒和重置数据拦截都应走统一顶部 toast 入口'
       );
+      const restoreStart = appSource.indexOf('const handleRestoreDefaults = () => {');
+      const restoreEnd = appSource.indexOf('// Filters calculation', restoreStart);
+      assert(restoreStart !== -1 && restoreEnd > restoreStart, '应能定位恢复演示数据逻辑');
+      const restoreSource = appSource.slice(restoreStart, restoreEnd);
+      assert(
+        appSource.includes("import { EQUIPMENT_STORAGE_KEY, getDefaultEquipmentList, parseStoredEquipmentList } from './utils/equipmentStorage';") &&
+          restoreSource.includes("getEngineerActionBlockReason('重置演示数据')") &&
+          restoreSource.includes("confirm('确定要清除所有修改，恢复系统默认内置任务单和设备档案吗？')") &&
+          restoreSource.includes('const defaultEquipments = getDefaultEquipmentList();') &&
+          restoreSource.includes('pendingQuickRepairEquipmentIdsRef.current.clear();') &&
+          restoreSource.includes('pendingClinicalAcceptanceTaskIdsRef.current.clear();') &&
+          restoreSource.includes('tasksRef.current = INITIAL_TASKS;') &&
+          restoreSource.includes('setTasks(INITIAL_TASKS);') &&
+          restoreSource.includes('setAllEquipments(defaultEquipments);') &&
+          restoreSource.includes('localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(INITIAL_TASKS));') &&
+          restoreSource.includes('localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(defaultEquipments));') &&
+          restoreSource.includes('初始化的演示任务与设备档案状态') &&
+          restoreSource.includes("setCurrentWorkspace('tasks');"),
+        '工程师重置演示数据应同时恢复任务、设备档案、内存统计和防重复 pending 状态，避免任务与资产档案不同步'
+      );
       const speechSource = readFileSync('src/hooks/useSpeechRecognition.ts', 'utf8');
       assert(
         speechSource.includes('const speechSessionVersionRef = useRef(0);') &&

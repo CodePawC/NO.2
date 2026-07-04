@@ -54,7 +54,7 @@ import { sendAssistantChat } from './services/aiApi';
 import { getDateDiffDaysFromToday } from './utils/dateUtils';
 import { isSameDepartment, normalizeDepartmentName } from './utils/departmentUtils';
 import { findUniqueEquipmentMatchForDraft, syncTasksToEquipmentArchives } from './utils/equipmentSync';
-import { EQUIPMENT_STORAGE_KEY, parseStoredEquipmentList } from './utils/equipmentStorage';
+import { EQUIPMENT_STORAGE_KEY, getDefaultEquipmentList, parseStoredEquipmentList } from './utils/equipmentStorage';
 import { getDepartmentTasks, sortTasksByOperationalPriority } from './utils/taskOrdering';
 import { loadStoredTasks, TASK_STORAGE_KEY } from './utils/taskStorage';
 import { getClinicalAcceptanceBlockReason, getEngineerNextStatus, getEngineerStatusBlockReason, getEngineerWorkflowHint, getRecommendedRoutingForTask, needsClinicalAcceptance } from './utils/taskWorkflow';
@@ -1311,19 +1311,26 @@ export default function App() {
       return;
     }
 
-    if (confirm('确定要清除所有修改，恢复系统默认内置任务单吗？')) {
+    if (confirm('确定要清除所有修改，恢复系统默认内置任务单和设备档案吗？')) {
+      const defaultEquipments = getDefaultEquipmentList();
+      pendingQuickRepairEquipmentIdsRef.current.clear();
+      pendingClinicalAcceptanceTaskIdsRef.current.clear();
       tasksRef.current = INITIAL_TASKS;
       setTasks(INITIAL_TASKS);
+      setAllEquipments(defaultEquipments);
+      localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(INITIAL_TASKS));
+      localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(defaultEquipments));
       setSelectedTask(INITIAL_TASKS[0]);
       setChatMessages([
         {
           id: 'system-reset',
           sender: 'assistant',
-          text: '系统已成功恢复至初始化的演示数据状态。您可以使用左下角或下方的预设对话模板，快速测试医学装备 AI 的分类、提炼及部门流转功能！',
+          text: '系统已成功恢复至初始化的演示任务与设备档案状态。您可以使用左下角或下方的预设对话模板，快速测试医学装备 AI 的分类、提炼及部门流转功能！',
           timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
         }
       ]);
       setDraftTicket(null);
+      setCurrentWorkspace('tasks');
     }
   };
 
