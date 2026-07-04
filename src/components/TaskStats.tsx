@@ -7,6 +7,7 @@ import React from 'react';
 import { StructuredTicket, UserProfile } from '../types';
 import { ShieldCheck, AlertTriangle, Play, CheckCircle2, Clock } from 'lucide-react';
 import { isSameDepartment } from '../utils/departmentUtils';
+import { needsClinicalAcceptance } from '../utils/taskWorkflow';
 
 interface TaskStatsProps {
   tasks: StructuredTicket[];
@@ -29,7 +30,7 @@ export default function TaskStats({ tasks, userRole = 'engineer', simulatedUser 
   const completed = displayTasks.filter((t) => t.status === '已完成' || t.status === '已归档' || t.status === '已关闭').length;
 
   const urgentCount = displayTasks.filter(
-    (t) => (t.urgency === '特急' || t.urgency === '紧急' || t.urgency === '生命支持') && t.status !== '已关闭' && t.status !== '已完成' && t.status !== '已归档'
+    (t) => needsClinicalAcceptance(t) && (t.urgency === '特急' || t.urgency === '紧急' || t.urgency === '生命支持') && t.status !== '已关闭' && t.status !== '已完成' && t.status !== '已归档'
   ).length;
 
   // Closure Rate calculation
@@ -59,7 +60,7 @@ export default function TaskStats({ tasks, userRole = 'engineer', simulatedUser 
           </p>
           <h3 className={`text-lg md:text-2xl font-bold mt-1 ${urgentCount > 0 ? 'text-red-600 animate-pulse' : 'text-gray-950'}`}>{urgentCount}</h3>
           <p className="text-[10px] text-red-500 mt-0.5 font-medium">
-            {isClinical ? '科室高危保障中' : '生命支持抢救设备'}
+            {isClinical ? '科室高危保障中' : '医学装备高危任务'}
           </p>
         </div>
         <div className="p-1.5 md:p-2 bg-red-50 text-red-600 rounded-lg">

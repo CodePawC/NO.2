@@ -528,6 +528,45 @@ const checks: Check[] = [
     }
   },
   {
+    name: 'task emergency stats exclude non-equipment transfers',
+    run: () => {
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+      assert(
+        appSource.includes("const sidebarEmergencyCount = visibleTasks.filter(t => needsClinicalAcceptance(t) && (t.urgency === '生命支持' || t.urgency === '特急')).length;"),
+        '侧边栏应急任务统计应只统计医学设备类应急，不能把电脑/后勤转派特急单算作设备抢救任务'
+      );
+
+      const statsSource = readFileSync('src/components/TaskStats.tsx', 'utf8');
+      assert(
+        statsSource.includes("import { needsClinicalAcceptance } from '../utils/taskWorkflow';") &&
+          statsSource.includes("needsClinicalAcceptance(t) && (t.urgency === '特急' || t.urgency === '紧急' || t.urgency === '生命支持')") &&
+          statsSource.includes("医学装备高危任务"),
+        '任务统计看板的特急/紧急计数应排除非设备转派单，并用医学装备高危任务口径展示'
+      );
+
+      const urgentEquipmentTask = createTask({
+        id: 'TKT-URGENT-EQUIPMENT',
+        taskType: '设备报修',
+        urgency: '特急',
+        status: '待确认'
+      });
+      const urgentTransferTask = createTask({
+        id: 'TKT-URGENT-TRANSFER',
+        taskType: '非设备类转派任务',
+        deviceName: '诊室电脑',
+        deviceId: 'NON-EQUIPMENT-TKT-URGENT-TRANSFER',
+        urgency: '特急',
+        status: '待确认',
+        recommendedDept: '信息科'
+      });
+      const urgentStatCount = [urgentEquipmentTask, urgentTransferTask].filter(
+        task => needsClinicalAcceptance(task) && ['特急', '紧急', '生命支持'].includes(task.urgency) && !['已关闭', '已完成', '已归档'].includes(task.status)
+      ).length;
+
+      assertEqual(urgentStatCount, 1, '统计口径应保留设备特急单，同时排除非设备转派特急单');
+    }
+  },
+  {
     name: 'mobile sidebar navigation is accessible and testable',
     run: () => {
       const appSource = readFileSync('src/App.tsx', 'utf8');
