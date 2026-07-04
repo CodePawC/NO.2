@@ -954,6 +954,28 @@ const checks: Check[] = [
           footerSource.indexOf('{canManageEquipmentArchive && (') < footerSource.indexOf('title="打印物联二维码"'),
         '设备详情底部的打印二维码按钮应只在工程师档案管理权限下渲染'
       );
+      const maintenancePrintStart = archiveSource.indexOf('医院设备资产管理系统 - 电子派工单');
+      const maintenancePrintEnd = archiveSource.indexOf('onClick={() => setViewMaintenanceLog(null)}', maintenancePrintStart);
+      assert(maintenancePrintStart !== -1 && maintenancePrintEnd > maintenancePrintStart, '应能定位维保派工单阅览弹窗头部');
+      const maintenancePrintSource = archiveSource.slice(maintenancePrintStart, maintenancePrintEnd);
+      assert(
+        maintenancePrintSource.includes('{canManageEquipmentArchive ? (') &&
+          maintenancePrintSource.includes('onClick={() => window.print()}') &&
+          maintenancePrintSource.includes('<span>打印单据</span>') &&
+          maintenancePrintSource.includes('临床只读阅览'),
+        '维保派工单可供临床只读查看，但打印单据按钮只能给工程师'
+      );
+      const calibrationPrintStart = archiveSource.indexOf('法定计量强制检定证书与科室绿标印证系统');
+      const calibrationPrintEnd = archiveSource.indexOf('onClick={() => setViewCalibrationLog(null)}', calibrationPrintStart);
+      assert(calibrationPrintStart !== -1 && calibrationPrintEnd > calibrationPrintStart, '应能定位计量证书阅览弹窗头部');
+      const calibrationPrintSource = archiveSource.slice(calibrationPrintStart, calibrationPrintEnd);
+      assert(
+        calibrationPrintSource.includes('{canManageEquipmentArchive ? (') &&
+          calibrationPrintSource.includes('onClick={() => window.print()}') &&
+          calibrationPrintSource.includes('<span>打印合格证 & 证书</span>') &&
+          calibrationPrintSource.includes('临床只读阅览'),
+        '计量证书可供临床只读查看，但打印证书按钮只能给工程师'
+      );
     }
   },
   {

@@ -5206,13 +5206,19 @@ Clinical class: Life-saving respiratory device`;
                 <span className="font-extrabold text-slate-800 text-sm">医院设备资产管理系统 - 电子派工单 (Work Order)</span>
               </div>
               <div className="flex items-center gap-2">
-                <button 
-                  onClick={() => window.print()} 
-                  className="px-2.5 py-1 text-[11px] font-bold bg-white text-slate-700 border border-slate-300 rounded hover:bg-slate-50 flex items-center gap-1 shadow-2xs"
-                >
-                  <Printer className="w-3 h-3" />
-                  <span>打印单据</span>
-                </button>
+                {canManageEquipmentArchive ? (
+                  <button 
+                    onClick={() => window.print()} 
+                    className="px-2.5 py-1 text-[11px] font-bold bg-white text-slate-700 border border-slate-300 rounded hover:bg-slate-50 flex items-center gap-1 shadow-2xs"
+                  >
+                    <Printer className="w-3 h-3" />
+                    <span>打印单据</span>
+                  </button>
+                ) : (
+                  <span className="px-2.5 py-1 text-[11px] font-bold bg-slate-100 text-slate-500 border border-slate-200 rounded flex items-center gap-1">
+                    临床只读阅览
+                  </span>
+                )}
                 <button 
                   onClick={() => setViewMaintenanceLog(null)} 
                   className="text-slate-400 hover:text-slate-600 transition-colors"
@@ -5398,13 +5404,19 @@ Clinical class: Life-saving respiratory device`;
                 <span className="font-extrabold text-slate-800 text-sm">法定计量强制检定证书与科室绿标印证系统</span>
               </div>
               <div className="flex items-center gap-2">
-                <button 
-                  onClick={() => window.print()} 
-                  className="px-2.5 py-1 text-[11px] font-bold bg-white text-slate-700 border border-slate-300 rounded hover:bg-slate-50 flex items-center gap-1 shadow-2xs"
-                >
-                  <Printer className="w-3 h-3" />
-                  <span>打印合格证 & 证书</span>
-                </button>
+                {canManageEquipmentArchive ? (
+                  <button 
+                    onClick={() => window.print()} 
+                    className="px-2.5 py-1 text-[11px] font-bold bg-white text-slate-700 border border-slate-300 rounded hover:bg-slate-50 flex items-center gap-1 shadow-2xs"
+                  >
+                    <Printer className="w-3 h-3" />
+                    <span>打印合格证 & 证书</span>
+                  </button>
+                ) : (
+                  <span className="px-2.5 py-1 text-[11px] font-bold bg-slate-100 text-slate-500 border border-slate-200 rounded flex items-center gap-1">
+                    临床只读阅览
+                  </span>
+                )}
                 <button 
                   onClick={() => setViewCalibrationLog(null)} 
                   className="text-slate-400 hover:text-slate-600 transition-colors"
