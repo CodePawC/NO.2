@@ -913,9 +913,21 @@ const checks: Check[] = [
         '应用应有统一终态判断，已归档/已关闭工单必须锁定'
       );
       assert(
-        addLogSource.includes('if (isTaskTerminal(selectedTask))') &&
+        addLogSource.includes('const latestTask = selectedTask ? tasksRef.current.find(task => task.id === selectedTask.id) || null : null;') &&
+          addLogSource.includes('if (isTaskTerminal(latestTask))') &&
           addLogSource.includes('该工单已归档或关闭，不能再追加处置日志。'),
-        '工程师不能在已归档或已关闭工单上继续追加处置日志'
+        '工程师追加日志应基于最新任务状态校验，不能在已归档或已关闭工单上继续追加处置日志'
+      );
+      assert(
+        appSource.includes('const pendingEngineerLogKeysRef = useRef<Set<string>>(new Set());') &&
+          addLogSource.includes('const pendingLogKey = `${latestTask.id}:${nextLogOperator}:${nextLogAction}`;') &&
+          addLogSource.includes('if (pendingEngineerLogKeysRef.current.has(pendingLogKey))') &&
+          addLogSource.includes('msg-log-pending-blocked') &&
+          addLogSource.includes('pendingEngineerLogKeysRef.current.add(pendingLogKey);') &&
+          addLogSource.includes('const nextTasks = tasksRef.current.map(t => t.id === latestTask.id ? updatedTask : t);') &&
+          addLogSource.includes('tasksRef.current = nextTasks;') &&
+          addLogSource.includes('setTasks(nextTasks);'),
+        '工程师追加日志应基于最新任务列表写入，并阻断同一条处置日志连续点击重复提交'
       );
       assert(
         appSource.includes("disabled={!activeLogAction.trim() || isTaskTerminal(selectedTask)}") &&
@@ -935,18 +947,27 @@ const checks: Check[] = [
       const statusEnd = appSource.indexOf('// Delete task with confirmation', statusStart);
       assert(statusStart !== -1 && statusEnd > statusStart, '应能定位工程师状态流转逻辑');
       const statusSource = appSource.slice(statusStart, statusEnd);
-      const terminalGuardIndex = statusSource.indexOf('if (isTaskTerminal(selectedTask))');
+      const terminalGuardIndex = statusSource.indexOf('if (isTaskTerminal(latestTask))');
       const blockedLogIndex = statusSource.indexOf('状态变更被系统拦截');
 
       assert(
         terminalGuardIndex !== -1 &&
+          statusSource.includes('const latestTask = selectedTask ? tasksRef.current.find(task => task.id === selectedTask.id) || null : null;') &&
           statusSource.includes('该工单已归档或关闭，状态已锁定，不能再变更流转状态。') &&
           statusSource.includes("appendWorkflowNotice('⚠️ **归档锁定提醒**"),
-        '终态工单尝试改状态时应只显示锁定提醒'
+        '终态工单尝试改状态时应基于最新任务状态只显示锁定提醒'
       );
       assert(
         blockedLogIndex !== -1 && terminalGuardIndex < blockedLogIndex,
         '终态工单状态变更必须在写入拦截日志前直接返回，避免已归档/已关闭工单继续被更新时间线'
+      );
+      assert(
+        statusSource.includes('const blockReason = getEngineerStatusBlockReason(latestTask, newStatus);') &&
+          statusSource.includes('action: `状态变更被系统拦截：尝试从【${latestTask.status}】改为【${newStatus}】。原因：${blockReason}`') &&
+          statusSource.includes('const nextTasks = tasksRef.current.map(t => t.id === latestTask.id ? updatedTask : t);') &&
+          statusSource.includes('tasksRef.current = nextTasks;') &&
+          statusSource.includes('setTasks(nextTasks);'),
+        '工程师状态流转应基于最新任务对象写入，避免覆盖刚追加的日志或验收状态'
       );
     }
   },
@@ -1571,6 +1592,16 @@ const checks: Check[] = [
         '临床端建单时厂家协同应按故障内容重算，不能采用手动标记值'
       );
       assert(
+        appSource.includes('const isCreatingDraftTicketRef = useRef(false);') &&
+          createSource.includes('if (isCreatingDraftTicketRef.current) return;') &&
+          createSource.includes('isCreatingDraftTicketRef.current = true;') &&
+          createSource.includes('const newTicketId = createNextTaskId(tasksRef.current);') &&
+          createSource.includes('const nextTasks = [newTicket, ...tasksRef.current];') &&
+          createSource.includes('tasksRef.current = nextTasks;') &&
+          createSource.includes('setTasks(nextTasks);'),
+        '草稿建单应基于最新任务列表生成单号并阻断连续点击，避免重复单号或重复工单'
+      );
+      assert(
         appSource.includes('const explicitlyNoVendorCoop = /暂不需要厂家|不需要厂家|无需厂家') &&
           appSource.includes('!explicitlyNoVendorCoop && /厂家|外送|寄修|供应商|奥林巴斯/.test(textLower)'),
         '前端本地兜底解析应识别厂家协同否定语义，不能仅因出现“厂家”就归为供应商协同'
@@ -1669,6 +1700,17 @@ const checks: Check[] = [
           !clinicalDetailSource.includes('status-set-') &&
           !clinicalDetailSource.includes('流转状态快速调节器'),
         '临床任务详情不能暴露工程师状态快控入口'
+      );
+      const deleteStart = appSource.indexOf('const handleDeleteTask = (id: string) => {');
+      const deleteEnd = appSource.indexOf('// Clear all and restore presets', deleteStart);
+      assert(deleteStart !== -1 && deleteEnd > deleteStart, '应能定位工程师删除工单逻辑');
+      const deleteSource = appSource.slice(deleteStart, deleteEnd);
+      assert(
+        deleteSource.includes('const filtered = tasksRef.current.filter(t => t.id !== id);') &&
+          deleteSource.includes('tasksRef.current = filtered;') &&
+          deleteSource.includes('setTasks(filtered);') &&
+          deleteSource.includes('setSelectedTask(filtered.find(canCurrentUserSeeTask) || null);'),
+        '工程师删除工单应基于最新任务列表过滤，并把详情切到仍可见任务'
       );
     }
   },

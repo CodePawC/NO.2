@@ -411,6 +411,13 @@ export default function App() {
   const [forwardDept, setForwardDept] = useState<string | null>(null);
   const [isFullDraftOpen, setIsFullDraftOpen] = useState(false);
   const roleSessionVersionRef = useRef(0);
+  const isCreatingDraftTicketRef = useRef(false);
+
+  useEffect(() => {
+    if (draftTicket) {
+      isCreatingDraftTicketRef.current = false;
+    }
+  }, [draftTicket]);
 
   useEffect(() => {
     const handleDeepLinkTicket = (e: any) => {
@@ -560,6 +567,7 @@ export default function App() {
   // Status modify form inside task detail
   const [activeLogAction, setActiveLogAction] = useState('');
   const [activeLogOperator, setActiveLogOperator] = useState('');
+  const pendingEngineerLogKeysRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     setRatingComment('');
@@ -567,6 +575,10 @@ export default function App() {
     setActiveLogAction('');
     setActiveLogOperator('');
   }, [selectedTask?.id, currentSimulatedUserId, currentUserRole]);
+
+  useEffect(() => {
+    pendingEngineerLogKeysRef.current.clear();
+  }, [activeLogAction, activeLogOperator, selectedTask?.id]);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -872,8 +884,10 @@ export default function App() {
   // Build ticket from current draft
   const handleCreateTicketFromDraft = () => {
     if (!draftTicket) return;
+    if (isCreatingDraftTicketRef.current) return;
+    isCreatingDraftTicketRef.current = true;
 
-    const newTicketId = createNextTaskId(tasks);
+    const newTicketId = createNextTaskId(tasksRef.current);
     
     const currentDept = normalizeDepartmentName(currentSimulatedUser.department || currentSimulatedUser.dept);
     const draftDept = normalizeDepartmentName(draftTicket.department) || draftTicket.department;
@@ -974,7 +988,9 @@ export default function App() {
       ].filter(Boolean).join('\n')
     };
 
-    setTasks(prev => [newTicket, ...prev]);
+    const nextTasks = [newTicket, ...tasksRef.current];
+    tasksRef.current = nextTasks;
+    setTasks(nextTasks);
     setSelectedTask(newTicket);
     setMobileTab('list');
     
@@ -1086,39 +1102,51 @@ export default function App() {
   // Add custom manual event/log to task
   const handleAddLog = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedTask || !activeLogAction.trim()) return;
+    const latestTask = selectedTask ? tasksRef.current.find(task => task.id === selectedTask.id) || null : null;
+    const nextLogAction = activeLogAction.trim();
+    const nextLogOperator = activeLogOperator.trim() || '值班工程师';
+    if (!latestTask || !nextLogAction) return;
 
     const blockReason = getEngineerActionBlockReason('工单处置日志追加');
     if (blockReason) {
       appendWorkflowNotice(`⚠️ **操作权限提醒**\n${blockReason}`, 'msg-log-blocked');
       return;
     }
-    if (isTaskTerminal(selectedTask)) {
+    if (isTaskTerminal(latestTask)) {
       appendWorkflowNotice('⚠️ **归档锁定提醒**\n该工单已归档或关闭，不能再追加处置日志。', 'msg-log-terminal-blocked');
       return;
     }
+    const pendingLogKey = `${latestTask.id}:${nextLogOperator}:${nextLogAction}`;
+    if (pendingEngineerLogKeysRef.current.has(pendingLogKey)) {
+      appendWorkflowNotice('⚠️ **重复日志提醒**\n该处置日志正在写入，请勿重复点击记录。', 'msg-log-pending-blocked');
+      return;
+    }
+    pendingEngineerLogKeysRef.current.add(pendingLogKey);
 
     const newLog = {
       time: new Date().toLocaleString('zh-CN', { hour12: false }).slice(0, 16),
-      action: activeLogAction.trim(),
-      operator: activeLogOperator.trim() || '值班工程师'
+      action: nextLogAction,
+      operator: nextLogOperator
     };
 
     const updatedTask: StructuredTicket = {
-      ...selectedTask,
-      logs: [...selectedTask.logs, newLog],
+      ...latestTask,
+      logs: [...latestTask.logs, newLog],
       updatedAt: new Date().toISOString()
     };
 
-    setTasks(prev => prev.map(t => t.id === selectedTask.id ? updatedTask : t));
+    const nextTasks = tasksRef.current.map(t => t.id === latestTask.id ? updatedTask : t);
+    tasksRef.current = nextTasks;
+    setTasks(nextTasks);
     setSelectedTask(updatedTask);
     setActiveLogAction('');
   };
 
   // Update status of selected task
   const handleUpdateStatus = (newStatus: TaskStatus) => {
-    if (!selectedTask) return;
-    if (selectedTask.status === newStatus) return;
+    const latestTask = selectedTask ? tasksRef.current.find(task => task.id === selectedTask.id) || null : null;
+    if (!latestTask) return;
+    if (latestTask.status === newStatus) return;
 
     const actionBlockReason = getEngineerActionBlockReason('工单状态流转');
     if (actionBlockReason) {
@@ -1126,25 +1154,27 @@ export default function App() {
       return;
     }
 
-    if (isTaskTerminal(selectedTask)) {
+    if (isTaskTerminal(latestTask)) {
       appendWorkflowNotice('⚠️ **归档锁定提醒**\n该工单已归档或关闭，状态已锁定，不能再变更流转状态。', 'msg-status-terminal-blocked');
       return;
     }
 
-    const blockReason = getEngineerStatusBlockReason(selectedTask, newStatus);
+    const blockReason = getEngineerStatusBlockReason(latestTask, newStatus);
     if (blockReason) {
       const newLog = {
         time: new Date().toLocaleString('zh-CN', { hour12: false }).slice(0, 16),
-        action: `状态变更被系统拦截：尝试从【${selectedTask.status}】改为【${newStatus}】。原因：${blockReason}`,
+        action: `状态变更被系统拦截：尝试从【${latestTask.status}】改为【${newStatus}】。原因：${blockReason}`,
         operator: activeLogOperator.trim() || '医学装备科人员'
       };
       const updatedTask: StructuredTicket = {
-        ...selectedTask,
-        logs: [...selectedTask.logs, newLog],
+        ...latestTask,
+        logs: [...latestTask.logs, newLog],
         updatedAt: new Date().toISOString()
       };
 
-      setTasks(prev => prev.map(t => t.id === selectedTask.id ? updatedTask : t));
+      const nextTasks = tasksRef.current.map(t => t.id === latestTask.id ? updatedTask : t);
+      tasksRef.current = nextTasks;
+      setTasks(nextTasks);
       setSelectedTask(updatedTask);
       setChatMessages(prev => [...prev, {
         id: `msg-status-blocked-${Date.now()}`,
@@ -1163,13 +1193,15 @@ export default function App() {
     };
 
     const updatedTask: StructuredTicket = {
-      ...selectedTask,
+      ...latestTask,
       status: newStatus,
-      logs: [...selectedTask.logs, newLog],
+      logs: [...latestTask.logs, newLog],
       updatedAt: new Date().toISOString()
     };
 
-    setTasks(prev => prev.map(t => t.id === selectedTask.id ? updatedTask : t));
+    const nextTasks = tasksRef.current.map(t => t.id === latestTask.id ? updatedTask : t);
+    tasksRef.current = nextTasks;
+    setTasks(nextTasks);
     setSelectedTask(updatedTask);
   };
 
@@ -1182,7 +1214,8 @@ export default function App() {
     }
 
     if (confirm('确认删除此条任务单？删除后不可恢复。')) {
-      const filtered = tasks.filter(t => t.id !== id);
+      const filtered = tasksRef.current.filter(t => t.id !== id);
+      tasksRef.current = filtered;
       setTasks(filtered);
       if (selectedTask?.id === id) {
         setSelectedTask(filtered.find(canCurrentUserSeeTask) || null);
@@ -1201,6 +1234,7 @@ export default function App() {
     }
 
     if (confirm('确定要清除所有修改，恢复系统默认内置任务单吗？')) {
+      tasksRef.current = INITIAL_TASKS;
       setTasks(INITIAL_TASKS);
       setSelectedTask(INITIAL_TASKS[0]);
       setChatMessages([
