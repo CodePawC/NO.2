@@ -1930,6 +1930,15 @@ const checks: Check[] = [
           clinicalDetailSource.includes('临床满意度评分:'),
         '设备维修单归档或关闭留痕后，临床端仍应展示已闭环验收评分与意见'
       );
+      const engineerDetailSource = appSource.slice(engineerStart);
+      assert(
+        engineerDetailSource.includes("needsClinicalAcceptance(selectedTask) && ['已完成', '已归档', '已关闭'].includes(selectedTask.status)") &&
+          engineerDetailSource.includes('const acceptance = getTaskAcceptanceDisplay(selectedTask);') &&
+          engineerDetailSource.includes('临床已闭环验收') &&
+          engineerDetailSource.includes('满意度:') &&
+          engineerDetailSource.includes('acceptance.comment'),
+        '设备维修单归档或关闭留痕后，工程师端也应展示临床验收摘要，便于归档审计'
+      );
     }
   },
   {

@@ -3266,6 +3266,33 @@ export default function App() {
                   </div>
                 )}
 
+                {needsClinicalAcceptance(selectedTask) && ['已完成', '已归档', '已关闭'].includes(selectedTask.status) && (() => {
+                  const acceptance = getTaskAcceptanceDisplay(selectedTask);
+
+                  return (
+                    <div className="bg-emerald-50/40 border border-emerald-100 rounded-xl p-3.5 text-xs text-slate-700 flex items-start gap-3">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-800">临床已闭环验收</h4>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <span className="text-[11px] text-slate-500">满意度:</span>
+                          <div className="flex items-center">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <Star key={star} className={`w-3.5 h-3.5 ${star <= acceptance.rating ? 'text-amber-400 fill-amber-400' : 'text-slate-200'}`} />
+                            ))}
+                          </div>
+                          <span className="text-[10px] text-slate-400">
+                            {acceptance.acceptedBy} · {new Date(acceptance.acceptedAt).toLocaleDateString('zh-CN')}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 mt-1.5">
+                          “ {acceptance.comment} ”
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* 3. Task Activity Logs & Timeline */}
                 <div className="space-y-3">
                   <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
