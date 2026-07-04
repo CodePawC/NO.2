@@ -736,6 +736,57 @@ const checks: Check[] = [
         '完成的设备维修单应写入档案维保履历'
       );
 
+      const quickRepairClosedTask = createTask({
+        id: 'TKT-QUICK-DONE',
+        status: '已完成',
+        deviceId: 'eq-verify-001',
+        updatedAt: '2026-07-04T15:30:00+08:00',
+        aiSuggestions: ['关联档案维修单号：WO-20260704-0001，请闭环后回写设备档案。'],
+        logs: [
+          { time: '2026-07-04 14:00', action: '工程师完成现场处置。', operator: '张明华 (工程师)' },
+          { time: '2026-07-04 15:30', action: '临床科室完成验收。', operator: '王健 (放射科主管医生)' }
+        ],
+        clinicalAcceptance: {
+          rating: 5,
+          comment: 'MRI 已恢复正常扫描',
+          acceptedBy: '王健',
+          acceptedByTitle: '放射科主管医生',
+          acceptedAt: '2026-07-04T15:30:00+08:00'
+        }
+      });
+      const quickRepairSync = syncTasksToEquipmentArchives(
+        [quickRepairClosedTask],
+        [
+          createEquipment({
+            status: '故障维修',
+            maintenanceLogs: [
+              {
+                id: 'm-log-quick',
+                type: '维修',
+                date: '2026-07-04',
+                technician: '未分派 (待响应)',
+                cost: 0,
+                description: '【一键快捷报修】紧急度: 中。描述: MRI 控制台报错，无法开始扫描',
+                status: '进行中',
+                workOrderNo: 'WO-20260704-0001',
+                faultPhenomenon: 'MRI 控制台报错，无法开始扫描',
+                verifyPerson: '王健'
+              }
+            ]
+          })
+        ],
+        new Date('2026-07-04T00:00:00+08:00')
+      );
+      const quickRepairArchiveLog = quickRepairSync.equipments[0].maintenanceLogs.find(log => log.workOrderNo === 'WO-20260704-0001');
+      assertEqual(quickRepairSync.equipments[0].status, '正常运行', '快捷报修工单验收完成后设备档案应恢复正常运行');
+      assertEqual(quickRepairArchiveLog?.status, '已完成', '快捷报修关联档案维修单应随主工单闭环');
+      assertEqual(quickRepairArchiveLog?.verifyPerson, '王健', '快捷报修关联档案维修单应保留临床验收人');
+      assertIncludes(
+        quickRepairArchiveLog?.description || '',
+        '主工单 TKT-QUICK-DONE 已闭环',
+        '快捷报修关联档案维修单应写入主工单闭环说明'
+      );
+
       const transferTask = createTask({
         id: 'TKT-TRANSFER-SAME-ID',
         taskType: '非设备类转派任务',
