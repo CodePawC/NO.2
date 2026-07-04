@@ -5,7 +5,8 @@ import { findUniqueEquipmentMatchForDraft, syncTasksToEquipmentArchives } from '
 import { repairMisroutedEquipmentTasks } from '../src/utils/taskRepair.ts';
 import { parseStoredTaskList } from '../src/utils/taskStorage.ts';
 import { getDepartmentTasks } from '../src/utils/taskOrdering.ts';
-import { getPresetPromptsForUser, PRESET_PROMPTS } from '../src/data/appPresets.ts';
+import { normalizeEngineerName } from '../src/utils/engineerAssignments.ts';
+import { getPresetPromptsForUser, PRESET_PROMPTS, SIMULATED_USERS } from '../src/data/appPresets.ts';
 import { INITIAL_TASKS } from '../src/data/defaultTasks.ts';
 import { DEFAULT_EQUIPMENT } from '../src/data/defaultEquipment.ts';
 import {
@@ -920,13 +921,30 @@ const checks: Check[] = [
         );
       });
 
+      const assignedEquipmentStorage = parseStoredEquipmentList(JSON.stringify([
+        createEquipment({
+          id: 'eq-assigned-calendar',
+          deviceName: '责任人持久化设备',
+          assignedMaintenanceEngineer: '王强',
+          assignedCalibrationEngineer: '李明'
+        })
+      ]));
+      const assignedEquipment = assignedEquipmentStorage.equipments.find(equipment => equipment.id === 'eq-assigned-calendar');
+      assertEqual(assignedEquipment?.assignedMaintenanceEngineer, '张明华', '旧版日历维保责任人应迁移到当前模拟工程师并持久化');
+      assertEqual(assignedEquipment?.assignedCalibrationEngineer, '赵安平', '旧版日历计量责任人应迁移到当前模拟工程师并持久化');
+      assertEqual(assignedEquipmentStorage.shouldPersist, true, '迁移旧版日历责任工程师字段后应提示重新持久化');
+
       const equipmentStorageSource = readFileSync('src/utils/equipmentStorage.ts', 'utf8');
       assert(
         equipmentStorageSource.includes("const EQUIPMENT_PRESET_MIGRATION_IDS = ['eq-006', 'eq-007', 'eq-008'];") &&
           equipmentStorageSource.includes('EQUIPMENT_PRESET_MIGRATION_KEY') &&
           equipmentStorageSource.includes('!seededPresetIds.has(equipment.id)') &&
-          equipmentStorageSource.includes("typeof localStorage === 'undefined' ? null : localStorage"),
-        '新增默认设备迁移应有一次性标记，避免用户删除后反复补回'
+          equipmentStorageSource.includes("typeof localStorage === 'undefined' ? null : localStorage") &&
+          equipmentStorageSource.includes("import { normalizeEngineerName } from './engineerAssignments';") &&
+          equipmentStorageSource.includes('const getOptionalEngineerName = (value: unknown') &&
+          equipmentStorageSource.includes('assignedMaintenanceEngineer: getOptionalEngineerName(value.assignedMaintenanceEngineer') &&
+          equipmentStorageSource.includes('assignedCalibrationEngineer: getOptionalEngineerName(value.assignedCalibrationEngineer'),
+        '新增默认设备迁移应有一次性标记，且设备存储应保留日历责任工程师改派字段'
       );
 
       const corruptStorage = withoutConsoleWarn(() => parseStoredEquipmentList('{not json'));
@@ -2337,6 +2355,69 @@ const checks: Check[] = [
           calendarSource.includes("currentUser.role === 'medical_staff' && !isSameDepartment"),
         '维保日历应按角色隔离管理权限并限制临床只看本科室设备'
       );
+      assert(
+        calendarSource.includes("import { getDefaultEngineerName, getEngineerNameByIndex, normalizeEngineerName, SIMULATED_ENGINEER_NAMES } from '../utils/engineerAssignments';") &&
+          calendarSource.includes("setDeployEngineer(currentUser.name);") &&
+          calendarSource.includes('SIMULATED_ENGINEER_NAMES.forEach(name => set.add(name));') &&
+          calendarSource.includes('const assignedMaintenanceEngineer = normalizeEngineerName(eq.assignedMaintenanceEngineer);') &&
+          calendarSource.includes('const assignedCalibrationEngineer = normalizeEngineerName(eq.assignedCalibrationEngineer);') &&
+          calendarSource.includes("const customAssigned = normalizeEngineerName(type === 'maintenance' ? eq.assignedMaintenanceEngineer : eq.assignedCalibrationEngineer);") &&
+          calendarSource.includes('return getEngineerNameByIndex(1);') &&
+          calendarSource.includes('return getEngineerNameByIndex(2);') &&
+          !calendarSource.includes('(eq as any).assignedMaintenanceEngineer') &&
+          !calendarSource.includes("set.add('王强');") &&
+          !calendarSource.includes("return '王强';") &&
+          !calendarSource.includes("return '张华';") &&
+          !calendarSource.includes("return '李明';") &&
+          !calendarSource.includes("return '赵四';"),
+        '维保日历默认责任工程师应复用系统模拟工程师，避免切换到个人工程师视图后看板空白或身份不一致'
+      );
+      {
+        const engineerAssignmentSource = readFileSync('src/utils/engineerAssignments.ts', 'utf8');
+        assert(
+          engineerAssignmentSource.includes("export const FALLBACK_ENGINEER_NAMES = ['张明华', '李建国', '赵安平'];") &&
+            engineerAssignmentSource.includes('export const SIMULATED_ENGINEER_NAMES = SIMULATED_USERS') &&
+            engineerAssignmentSource.includes('const LEGACY_ENGINEER_NAME_ALIASES') &&
+            engineerAssignmentSource.includes("王强: '张明华'") &&
+            engineerAssignmentSource.includes("张华: '李建国'") &&
+            engineerAssignmentSource.includes("李明: '赵安平'") &&
+            engineerAssignmentSource.includes("赵四: '赵安平'"),
+          '工程师责任人工具应集中维护模拟工程师和旧版演示姓名迁移表'
+        );
+        assertEqual(normalizeEngineerName('王强'), '张明华', '旧版王强责任人应迁移到张明华');
+        assertEqual(normalizeEngineerName('张华'), '李建国', '旧版张华责任人应迁移到李建国');
+        assertEqual(normalizeEngineerName('李明'), '赵安平', '旧版李明责任人应迁移到赵安平');
+
+        const simulatedEngineerNames = SIMULATED_USERS.filter(user => user.role === 'engineer').map(user => user.name);
+        assert(
+          simulatedEngineerNames.length >= 3 &&
+            ['张明华', '李建国', '赵安平'].every(name => simulatedEngineerNames.includes(name)),
+          '模拟用户应包含三位可测试的装备科工程师'
+        );
+
+        const getEngineerNameByIndex = (index: number) => simulatedEngineerNames[index % simulatedEngineerNames.length];
+        const assignedEngineerNames = new Set<string>();
+
+        DEFAULT_EQUIPMENT.forEach(eq => {
+          if (eq.nextMaintenanceDate) {
+            if (eq.category === '急救生命支持') assignedEngineerNames.add(getEngineerNameByIndex(0));
+            else if (eq.category === '影像诊断') assignedEngineerNames.add(getEngineerNameByIndex(1));
+            else if (eq.category === '检验分析') assignedEngineerNames.add(getEngineerNameByIndex(2));
+            else assignedEngineerNames.add(getEngineerNameByIndex(2));
+          }
+
+          if (eq.calibrationRequired && eq.nextCalibrationDate) {
+            if (eq.category === '影像诊断') assignedEngineerNames.add(getEngineerNameByIndex(2));
+            else if (eq.category === '检验分析') assignedEngineerNames.add(getEngineerNameByIndex(1));
+            else assignedEngineerNames.add(getEngineerNameByIndex(0));
+          }
+        });
+
+        assert(
+          simulatedEngineerNames.every(name => assignedEngineerNames.has(name)),
+          '默认设备排程应覆盖每位模拟工程师，保证不同工程师个人日历视图都有可见任务'
+        );
+      }
       assert(
         calendarSource.includes('临床日程只读视图') &&
           calendarSource.includes('新工单部署、调期和改派由医学装备科工程师执行'),

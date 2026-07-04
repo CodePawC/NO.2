@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { MedicalEquipment, MaintenanceLog, CalibrationLog, UserProfile } from '../types';
 import { isSameDepartment } from '../utils/departmentUtils';
+import { getDefaultEngineerName, getEngineerNameByIndex, normalizeEngineerName, SIMULATED_ENGINEER_NAMES } from '../utils/engineerAssignments';
 import { getLocalDateString } from '../utils/dateUtils';
 
 interface MaintenanceCalendarProps {
@@ -71,8 +72,10 @@ export default function MaintenanceCalendar({
       } else {
         setCurrentEngineer(currentUser.name);
       }
+      setDeployEngineer(currentUser.name);
     } else {
       setCurrentEngineer('all'); // 临床医护人员强制显示全部（因为已在 equipment.forEach 过滤了整科室的设备日程）
+      setDeployEngineer(getDefaultEngineerName());
     }
   }, [currentUser]);
 
@@ -98,7 +101,7 @@ export default function MaintenanceCalendar({
   const [deployEquipmentId, setDeployEquipmentId] = useState('');
   const [deployTaskType, setDeployTaskType] = useState<'maintenance' | 'calibration' | 'repair'>('maintenance');
   const [deployDate, setDeployDate] = useState(getLocalDateString);
-  const [deployEngineer, setDeployEngineer] = useState('王强');
+  const [deployEngineer, setDeployEngineer] = useState(() => currentUser.role === 'engineer' ? currentUser.name : getDefaultEngineerName());
   const [deployNotes, setDeployNotes] = useState('');
   const [deploySearchQuery, setDeploySearchQuery] = useState('');
 
@@ -120,34 +123,38 @@ export default function MaintenanceCalendar({
   // Predefined engineers list & dynamic extraction
   const availableEngineers = useMemo(() => {
     const set = new Set<string>();
-    set.add('王强');
-    set.add('张华');
-    set.add('李明');
-    set.add('赵四');
+    SIMULATED_ENGINEER_NAMES.forEach(name => set.add(name));
+    if (currentUser.role === 'engineer') {
+      set.add(currentUser.name);
+    }
     equipments.forEach(eq => {
+      const assignedMaintenanceEngineer = normalizeEngineerName(eq.assignedMaintenanceEngineer);
+      const assignedCalibrationEngineer = normalizeEngineerName(eq.assignedCalibrationEngineer);
+      if (assignedMaintenanceEngineer) set.add(assignedMaintenanceEngineer);
+      if (assignedCalibrationEngineer) set.add(assignedCalibrationEngineer);
       eq.maintenanceLogs.forEach(log => {
         if (log.technician) set.add(log.technician);
       });
     });
     return Array.from(set);
-  }, [equipments]);
+  }, [equipments, currentUser]);
 
   // Map deterministic fallback engineers for existing future events
   const getAssignedEngineer = (eq: MedicalEquipment, type: 'maintenance' | 'calibration') => {
     // Check if customized on equipment state
-    const customAssigned = (eq as any)[type === 'maintenance' ? 'assignedMaintenanceEngineer' : 'assignedCalibrationEngineer'];
+    const customAssigned = normalizeEngineerName(type === 'maintenance' ? eq.assignedMaintenanceEngineer : eq.assignedCalibrationEngineer);
     if (customAssigned) return customAssigned;
 
     // Fallback based on category & dept
     if (type === 'maintenance') {
-      if (eq.category === '急救生命支持') return '王强';
-      if (eq.category === '影像诊断') return '张华';
-      if (eq.category === '检验分析') return '李明';
-      return '赵四';
+      if (eq.category === '急救生命支持') return getEngineerNameByIndex(0);
+      if (eq.category === '影像诊断') return getEngineerNameByIndex(1);
+      if (eq.category === '检验分析') return getEngineerNameByIndex(2);
+      return getEngineerNameByIndex(2);
     } else {
-      if (eq.category === '影像诊断') return '李明';
-      if (eq.category === '检验分析') return '张华';
-      return '王强';
+      if (eq.category === '影像诊断') return getEngineerNameByIndex(2);
+      if (eq.category === '检验分析') return getEngineerNameByIndex(1);
+      return getEngineerNameByIndex(0);
     }
   };
 

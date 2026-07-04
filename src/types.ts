@@ -163,9 +163,11 @@ export interface MedicalEquipment {
   maintenanceCycleDays: number;
   lastMaintenanceDate: string;
   nextMaintenanceDate: string;
+  assignedMaintenanceEngineer?: string;
   calibrationRequired: boolean;
   lastCalibrationDate?: string;
   nextCalibrationDate?: string;
+  assignedCalibrationEngineer?: string;
   attachments: Attachment[];
   maintenanceLogs: MaintenanceLog[];
   calibrationLogs: CalibrationLog[];
@@ -200,4 +202,3 @@ export interface UserProfile {
   avatarColor?: string;
   phone?: string;
 }
-

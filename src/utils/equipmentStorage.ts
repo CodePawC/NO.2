@@ -1,5 +1,6 @@
 import type { Attachment, CalibrationLog, ExtractedSnapshot, MaintenanceLog, MedicalEquipment } from '../types';
 import { DEFAULT_EQUIPMENT } from '../data/defaultEquipment';
+import { normalizeEngineerName } from './engineerAssignments';
 
 export const EQUIPMENT_STORAGE_KEY = 'medical_equipment_data';
 const EQUIPMENT_PRESET_MIGRATION_KEY = 'medical_equipment_seeded_preset_ids';
@@ -110,6 +111,15 @@ const getOptionalString = (value: unknown, fallback: string | undefined, markRep
   return fallback;
 };
 
+const getOptionalEngineerName = (value: unknown, fallback: string | undefined, markRepaired: () => void) => {
+  const storedName = getOptionalString(value, fallback, markRepaired);
+  const normalizedName = normalizeEngineerName(storedName);
+  if (storedName !== normalizedName) {
+    markRepaired();
+  }
+  return normalizedName;
+};
+
 const getNumber = (value: unknown, fallback: number, markRepaired: () => void) => {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   markRepaired();
@@ -171,9 +181,11 @@ const normalizeEquipmentRecord = (value: unknown): { equipment: MedicalEquipment
     maintenanceCycleDays: getNumber(value.maintenanceCycleDays, fallback.maintenanceCycleDays, markRepaired),
     lastMaintenanceDate: getString(value.lastMaintenanceDate, fallback.lastMaintenanceDate, markRepaired),
     nextMaintenanceDate: getString(value.nextMaintenanceDate, fallback.nextMaintenanceDate, markRepaired),
+    assignedMaintenanceEngineer: getOptionalEngineerName(value.assignedMaintenanceEngineer, fallback.assignedMaintenanceEngineer, markRepaired),
     calibrationRequired: getBoolean(value.calibrationRequired, fallback.calibrationRequired, markRepaired),
     lastCalibrationDate: getOptionalString(value.lastCalibrationDate, fallback.lastCalibrationDate, markRepaired),
     nextCalibrationDate: getOptionalString(value.nextCalibrationDate, fallback.nextCalibrationDate, markRepaired),
+    assignedCalibrationEngineer: getOptionalEngineerName(value.assignedCalibrationEngineer, fallback.assignedCalibrationEngineer, markRepaired),
     attachments: getStoredArray<Attachment>(value.attachments, fallback.attachments, markRepaired),
     maintenanceLogs: getStoredArray<MaintenanceLog>(value.maintenanceLogs, fallback.maintenanceLogs, markRepaired),
     calibrationLogs: getStoredArray<CalibrationLog>(value.calibrationLogs, fallback.calibrationLogs, markRepaired),
