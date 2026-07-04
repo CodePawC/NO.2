@@ -1157,6 +1157,13 @@ const checks: Check[] = [
         '角色切换时应重置档案与台账筛选，避免工程师筛选条件残留到临床账号'
       );
       assert(
+        archiveSource.includes('if (propCurrentUser) {\n      setCurrentUser(propCurrentUser);') &&
+          archiveSource.includes('if (!propCurrentUser && onUserChange) {\n      onUserChange(currentUser);') &&
+          archiveSource.includes('}, [currentUser, onUserChange, propCurrentUser]);') &&
+          !archiveSource.includes('if (onUserChange && currentUser.id !== propCurrentUser?.id)'),
+        '资产档案嵌入 App 时应以父组件当前用户为权威来源，避免子组件旧用户状态反向覆盖角色切换'
+      );
+      assert(
         archiveSource.includes('2xl:flex-row') &&
           archiveSource.includes('2xl:w-auto 2xl:flex-shrink-0') &&
           archiveSource.includes('overflow-x-auto max-w-full'),

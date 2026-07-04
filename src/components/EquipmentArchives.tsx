@@ -473,10 +473,10 @@ export default function EquipmentArchives({
 
   useEffect(() => {
     localStorage.setItem('simulated_current_user', JSON.stringify(currentUser));
-    if (onUserChange && currentUser.id !== propCurrentUser?.id) {
+    if (!propCurrentUser && onUserChange) {
       onUserChange(currentUser);
     }
-  }, [currentUser]);
+  }, [currentUser, onUserChange, propCurrentUser]);
 
   useEffect(() => {
     if (currentUser) {
