@@ -617,6 +617,8 @@ export default function EquipmentArchives({
   ]);
   const chatRequestVersionRef = useRef(0);
   const diagnosticChatSessionKeyRef = useRef('');
+  const archiveManageRequestVersionRef = useRef(0);
+  const canManageEquipmentArchiveRef = useRef(false);
 
   // 扫码报修状态与引用
   const [isScannerModalOpen, setIsScannerModalOpen] = useState(false);
@@ -660,6 +662,7 @@ export default function EquipmentArchives({
       .filter(canCurrentUserViewTicket);
   };
   const canManageEquipmentArchive = currentUser.role === 'engineer';
+  canManageEquipmentArchiveRef.current = canManageEquipmentArchive;
   const showArchiveManageBlockedToast = (actionName: string) => {
     setQuickRepairToast({
       type: 'warning',
@@ -672,9 +675,22 @@ export default function EquipmentArchives({
     showArchiveManageBlockedToast(actionName);
     return false;
   };
+  const beginArchiveAiAnalyze = (actionName: string) => {
+    if (!ensureCanManageEquipmentArchive(actionName)) return null;
+    archiveManageRequestVersionRef.current += 1;
+    setIsAnalyzing(true);
+    setAnalyzerError(null);
+    return archiveManageRequestVersionRef.current;
+  };
+  const isArchiveAiAnalyzeCurrent = (requestVersion: number) => (
+    requestVersion === archiveManageRequestVersionRef.current && canManageEquipmentArchiveRef.current
+  );
 
   useEffect(() => {
     if (canManageEquipmentArchive) return;
+    archiveManageRequestVersionRef.current += 1;
+    setIsAnalyzing(false);
+    setAnalyzerError(null);
     setIsFormModalOpen(false);
     setIsAiParserOpen(false);
     setIsLogModalOpen(false);
@@ -1377,9 +1393,8 @@ export default function EquipmentArchives({
 
   // AI OCR Parser simulation with presets
   const runPresetOcr = (presetNum: number) => {
-    if (!ensureCanManageEquipmentArchive('AI 扫码入库')) return;
-    setIsAnalyzing(true);
-    setAnalyzerError(null);
+    const requestVersion = beginArchiveAiAnalyze('AI 扫码入库');
+    if (requestVersion === null) return;
     let sampleText = '';
     
     if (presetNum === 1) {
@@ -1408,6 +1423,7 @@ Clinical class: Life-saving respiratory device`;
     // Call the server Gemini analyze endpoint
     analyzeGeminiContent({ textContext: sampleText })
       .then(result => {
+        if (!isArchiveAiAnalyzeCurrent(requestVersion)) return;
         setIsAnalyzing(false);
         if (result.error) {
           setAnalyzerError(result.error);
@@ -1433,6 +1449,7 @@ Clinical class: Life-saving respiratory device`;
         }
       })
       .catch(err => {
+        if (!isArchiveAiAnalyzeCurrent(requestVersion)) return;
         setIsAnalyzing(false);
         setAnalyzerError(err.message || '分析时发生网络错误');
       });
@@ -1440,16 +1457,16 @@ Clinical class: Life-saving respiratory device`;
 
   // Run Custom Text OCR or Image upload OCR via Gemini API
   const handleCustomOcrAnalyze = () => {
-    if (!ensureCanManageEquipmentArchive('AI 扫码入库')) return;
     if (!aiInputText.trim()) {
       alert('请输入铭牌描述、规格单据文本或上传附件描述！');
       return;
     }
-    setIsAnalyzing(true);
-    setAnalyzerError(null);
+    const requestVersion = beginArchiveAiAnalyze('AI 扫码入库');
+    if (requestVersion === null) return;
 
     analyzeGeminiContent({ textContext: aiInputText }, 'AI 服务处理异常')
       .then(result => {
+        if (!isArchiveAiAnalyzeCurrent(requestVersion)) return;
         setIsAnalyzing(false);
         if (result.error) {
           setAnalyzerError(result.error);
@@ -1474,6 +1491,7 @@ Clinical class: Life-saving respiratory device`;
         }
       })
       .catch(err => {
+        if (!isArchiveAiAnalyzeCurrent(requestVersion)) return;
         setIsAnalyzing(false);
         setAnalyzerError(err.message || '通信故障，请稍后再试');
       });
@@ -1520,12 +1538,12 @@ Clinical class: Life-saving respiratory device`;
 
   // Process OCR files (images of nameplates, invoices, labels)
   const processOcrFile = (file: File) => {
-    if (!ensureCanManageEquipmentArchive('AI 扫码入库')) return;
-    setIsAnalyzing(true);
-    setAnalyzerError(null);
+    const requestVersion = beginArchiveAiAnalyze('AI 扫码入库');
+    if (requestVersion === null) return;
 
     const reader = new FileReader();
     reader.onload = function(event) {
+      if (!isArchiveAiAnalyzeCurrent(requestVersion)) return;
       const base64String = event.target?.result as string;
       if (!base64String) {
         setIsAnalyzing(false);
@@ -1543,6 +1561,7 @@ Clinical class: Life-saving respiratory device`;
         textContext: `This is an uploaded file name: ${file.name}`
       })
         .then(result => {
+          if (!isArchiveAiAnalyzeCurrent(requestVersion)) return;
           setIsAnalyzing(false);
           if (result.error) {
             setAnalyzerError(result.error);
@@ -1567,6 +1586,7 @@ Clinical class: Life-saving respiratory device`;
           }
         })
         .catch(err => {
+          if (!isArchiveAiAnalyzeCurrent(requestVersion)) return;
           setIsAnalyzing(false);
           setAnalyzerError(err.message || '铭牌图像智能解析失败');
         });

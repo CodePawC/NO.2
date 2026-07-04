@@ -988,9 +988,45 @@ const checks: Check[] = [
           archiveSource.includes('setIsLogModalOpen(false);') &&
           archiveSource.includes('setIsAttachmentModalOpen(false);') &&
           archiveSource.includes('setIsDossierModalOpen(false);') &&
+          archiveSource.includes('archiveManageRequestVersionRef.current += 1;') &&
+          archiveSource.includes('setIsAnalyzing(false);') &&
+          archiveSource.includes('setAnalyzerError(null);') &&
           archiveSource.includes("setFormMode('create');") &&
           archiveSource.includes('setCurrentEditId(null);'),
-        '切换到临床档案视图时应清理工程师档案管理弹窗、PDF 导出预览和编辑态'
+        '切换到临床档案视图时应清理工程师档案管理弹窗、AI 解析请求、PDF 导出预览和编辑态'
+      );
+      assert(
+        archiveSource.includes('const archiveManageRequestVersionRef = useRef(0);') &&
+          archiveSource.includes('const canManageEquipmentArchiveRef = useRef(false);') &&
+          archiveSource.includes('canManageEquipmentArchiveRef.current = canManageEquipmentArchive;') &&
+          archiveSource.includes('const beginArchiveAiAnalyze = (actionName: string) => {') &&
+          archiveSource.includes('archiveManageRequestVersionRef.current += 1;') &&
+          archiveSource.includes('const isArchiveAiAnalyzeCurrent = (requestVersion: number) => (') &&
+          archiveSource.includes('requestVersion === archiveManageRequestVersionRef.current && canManageEquipmentArchiveRef.current'),
+        'AI 扫码入库等管理型异步解析应绑定工程师权限和请求版本'
+      );
+      const presetOcrStart = archiveSource.indexOf('const runPresetOcr = (presetNum: number) => {');
+      const presetOcrEnd = archiveSource.indexOf('// Run Custom Text OCR or Image upload OCR via Gemini API', presetOcrStart);
+      assert(presetOcrStart !== -1 && presetOcrEnd > presetOcrStart, '应能定位 AI 预设扫码入库逻辑');
+      const presetOcrSource = archiveSource.slice(presetOcrStart, presetOcrEnd);
+      const customOcrStart = archiveSource.indexOf('const handleCustomOcrAnalyze = () => {');
+      const customOcrEnd = archiveSource.indexOf('// Chat with AI Diagnostician Expert', customOcrStart);
+      assert(customOcrStart !== -1 && customOcrEnd > customOcrStart, '应能定位 AI 文本扫码入库逻辑');
+      const customOcrSource = archiveSource.slice(customOcrStart, customOcrEnd);
+      const fileOcrStart = archiveSource.indexOf('const processOcrFile = (file: File) => {');
+      const fileOcrEnd = archiveSource.indexOf('// Simulates scanning label with file input', fileOcrStart);
+      assert(fileOcrStart !== -1 && fileOcrEnd > fileOcrStart, '应能定位 AI 文件扫码入库逻辑');
+      const fileOcrSource = archiveSource.slice(fileOcrStart, fileOcrEnd);
+      assert(
+        presetOcrSource.includes("const requestVersion = beginArchiveAiAnalyze('AI 扫码入库');") &&
+          presetOcrSource.includes('if (requestVersion === null) return;') &&
+          presetOcrSource.includes('if (!isArchiveAiAnalyzeCurrent(requestVersion)) return;') &&
+          customOcrSource.includes("const requestVersion = beginArchiveAiAnalyze('AI 扫码入库');") &&
+          customOcrSource.includes('if (!isArchiveAiAnalyzeCurrent(requestVersion)) return;') &&
+          fileOcrSource.includes("const requestVersion = beginArchiveAiAnalyze('AI 扫码入库');") &&
+          fileOcrSource.includes('reader.onload = function(event)') &&
+          fileOcrSource.includes('if (!isArchiveAiAnalyzeCurrent(requestVersion)) return;'),
+        'AI 扫码入库预设、文本和文件解析返回时都应丢弃切换角色后的旧结果'
       );
       assert(
         archiveSource.includes('previewFileBelongsToSelectedEquipment') &&
