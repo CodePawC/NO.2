@@ -322,6 +322,9 @@ export default function App() {
     setForwardDept(null);
     setIsClarification(false);
     setIsFullDraftOpen(false);
+    setShowVoiceMockModal(false);
+    setSimulationText('');
+    stopVoiceSimulation();
     setIsLoading(false);
     setSearchQuery('');
     setTypeFilter('All');
@@ -498,6 +501,16 @@ export default function App() {
   const [simulationText, setSimulationText] = useState('');
   const simulationIntervalRef = useRef<any>(null);
 
+  const stopVoiceSimulation = (resetState = true) => {
+    if (simulationIntervalRef.current) {
+      clearInterval(simulationIntervalRef.current);
+      simulationIntervalRef.current = null;
+    }
+    if (resetState) {
+      setIsSimulating(false);
+    }
+  };
+
   const startSimulation = (textToSimulate: string) => {
     if (simulationIntervalRef.current) {
       clearInterval(simulationIntervalRef.current);
@@ -512,6 +525,7 @@ export default function App() {
         index++;
       } else {
         clearInterval(simulationIntervalRef.current);
+        simulationIntervalRef.current = null;
         setIsSimulating(false);
       }
     }, 35); // elegant, high-fidelity typing speed
@@ -519,9 +533,7 @@ export default function App() {
 
   useEffect(() => {
     return () => {
-      if (simulationIntervalRef.current) {
-        clearInterval(simulationIntervalRef.current);
-      }
+      stopVoiceSimulation(false);
     };
   }, []);
 
@@ -3947,10 +3959,7 @@ export default function App() {
               <button 
                 onClick={() => {
                   setShowVoiceMockModal(false);
-                  setIsSimulating(false);
-                  if (simulationIntervalRef.current) {
-                    clearInterval(simulationIntervalRef.current);
-                  }
+                  stopVoiceSimulation();
                 }}
                 className="text-slate-400 hover:text-white transition p-1.5 rounded-lg hover:bg-slate-800 cursor-pointer text-sm"
               >
@@ -3991,6 +4000,7 @@ export default function App() {
                     type="button"
                     onClick={() => {
                       setShowVoiceMockModal(false);
+                      stopVoiceSimulation();
                       toggleListening();
                     }}
                     className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-lg text-[11px] transition shrink-0 cursor-pointer"
@@ -4010,10 +4020,7 @@ export default function App() {
                       type="button"
                       onClick={() => {
                         setSelectedMockScript(i);
-                        if (simulationIntervalRef.current) {
-                          clearInterval(simulationIntervalRef.current);
-                        }
-                        setIsSimulating(false);
+                        stopVoiceSimulation();
                         setSimulationText('');
                       }}
                       className={`w-full text-left p-2.5 rounded-xl border text-[11px] transition cursor-pointer flex flex-col gap-1 ${
@@ -4090,10 +4097,7 @@ export default function App() {
                   type="button"
                   onClick={() => {
                     setShowVoiceMockModal(false);
-                    setIsSimulating(false);
-                    if (simulationIntervalRef.current) {
-                      clearInterval(simulationIntervalRef.current);
-                    }
+                    stopVoiceSimulation();
                   }}
                   className="bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 px-4 py-2 rounded-xl text-xs transition font-semibold cursor-pointer"
                 >
@@ -4105,10 +4109,7 @@ export default function App() {
                     const finalInput = simulationText || MOCK_VOICE_TEMPLATES[selectedMockScript].text;
                     setInputMessage(finalInput);
                     setShowVoiceMockModal(false);
-                    if (simulationIntervalRef.current) {
-                      clearInterval(simulationIntervalRef.current);
-                    }
-                    setIsSimulating(false);
+                    stopVoiceSimulation();
                     // trigger send message instantly for the full automated flow requested by user
                     handleSendMessage(finalInput);
                   }}

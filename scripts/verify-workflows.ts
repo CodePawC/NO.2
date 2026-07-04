@@ -1483,6 +1483,20 @@ const checks: Check[] = [
         '切换身份时应清空未提交草稿、展开确认窗口、AI 建议、加载状态与工单筛选，避免上一身份上下文串入新身份'
       );
       assert(
+        appSource.includes('const stopVoiceSimulation = (resetState = true) => {') &&
+          appSource.includes('clearInterval(simulationIntervalRef.current);') &&
+          appSource.includes('simulationIntervalRef.current = null;') &&
+          appSource.includes('if (resetState)') &&
+          appSource.includes('setIsSimulating(false);'),
+        '语音仿真应通过统一入口停止计时器并复位仿真状态'
+      );
+      assert(
+        switchSource.includes('setShowVoiceMockModal(false);') &&
+          switchSource.includes("setSimulationText('');") &&
+          switchSource.includes('stopVoiceSimulation();'),
+        '切换身份时应关闭语音仿真弹窗、清空仿真文本并停止上一身份的听写计时器'
+      );
+      assert(
         appSource.includes('const activeRoleSessionVersion = roleSessionVersionRef.current;') &&
           appSource.includes('if (activeRoleSessionVersion !== roleSessionVersionRef.current) return;') &&
           appSource.includes('if (activeRoleSessionVersion === roleSessionVersionRef.current)'),
