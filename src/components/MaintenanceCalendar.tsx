@@ -405,8 +405,12 @@ export default function MaintenanceCalendar({
     }
 
     setIsRescheduling(true);
+    const targetEventId = selectedEvent.id;
     const targetEqId = selectedEvent.equipment.id;
     const taskType = selectedEvent.type;
+    const assignedTechnician = selectedEvent.technician;
+    const deviceName = selectedEvent.equipment.deviceName;
+    const targetDate = newScheduleDate;
 
     setTimeout(() => {
       setEquipments(prev => prev.map(eq => {
@@ -414,14 +418,14 @@ export default function MaintenanceCalendar({
           if (taskType === 'maintenance') {
             return { 
               ...eq, 
-              nextMaintenanceDate: newScheduleDate,
-              assignedMaintenanceEngineer: selectedEvent.technician // preserve or update
+              nextMaintenanceDate: targetDate,
+              assignedMaintenanceEngineer: assignedTechnician
             };
           } else if (taskType === 'calibration') {
             return { 
               ...eq, 
-              nextCalibrationDate: newScheduleDate,
-              assignedCalibrationEngineer: selectedEvent.technician // preserve or update
+              nextCalibrationDate: targetDate,
+              assignedCalibrationEngineer: assignedTechnician
             };
           }
         }
@@ -430,14 +434,15 @@ export default function MaintenanceCalendar({
 
       setSelectedEvent(prev => {
         if (!prev) return null;
+        if (prev.id !== targetEventId) return prev;
         return {
           ...prev,
-          date: newScheduleDate
+          date: targetDate
         };
       });
 
       setIsRescheduling(false);
-      triggerNotification(`🎉 成功将《${selectedEvent.equipment.deviceName}》的计划工作调整至 ${newScheduleDate}。工程师调度指令已下发。`);
+      triggerNotification(`🎉 成功将《${deviceName}》的计划工作调整至 ${targetDate}。工程师调度指令已下发。`);
     }, 400);
   };
 

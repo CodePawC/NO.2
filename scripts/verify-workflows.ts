@@ -2042,6 +2042,13 @@ const checks: Check[] = [
           calendarSource.includes('disabled={!deployEquipmentId || filteredEquipmentsForDeploy.length === 0}'),
         '工程师部署表单无可见设备时应显示空值提示并禁用提交按钮'
       );
+      assert(
+        calendarSource.includes('const targetEventId = selectedEvent.id;') &&
+          calendarSource.includes('const targetDate = newScheduleDate;') &&
+          calendarSource.includes('if (prev.id !== targetEventId) return prev;') &&
+          calendarSource.includes('date: targetDate'),
+        '维保调期的异步完成回写只能更新原始选中的日程，避免用户切换日程后误改右侧详情面板'
+      );
     }
   }
 ];
