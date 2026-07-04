@@ -1903,6 +1903,13 @@ const checks: Check[] = [
           !clinicalDetailSource.includes("const isCompleted = ['已完成', '已归档'].includes(selectedTask.status);"),
         '已完成后被工程师关闭留痕的设备维修单，在临床闭环时间线中也应显示为已闭环'
       );
+      assert(
+        clinicalDetailSource.includes("needsClinicalAcceptance(selectedTask) && ['已完成', '已归档', '已关闭'].includes(selectedTask.status)") &&
+          clinicalDetailSource.includes('const acceptance = getTaskAcceptanceDisplay(selectedTask);') &&
+          clinicalDetailSource.includes('已闭环验收') &&
+          clinicalDetailSource.includes('临床满意度评分:'),
+        '设备维修单归档或关闭留痕后，临床端仍应展示已闭环验收评分与意见'
+      );
     }
   },
   {

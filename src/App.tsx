@@ -2725,7 +2725,7 @@ export default function App() {
                       );
                     })()}
 
-                    {selectedTask.status === '已完成' && (() => {
+                    {needsClinicalAcceptance(selectedTask) && ['已完成', '已归档', '已关闭'].includes(selectedTask.status) && (() => {
                       const acceptance = getTaskAcceptanceDisplay(selectedTask);
 
                       return (
