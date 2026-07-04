@@ -55,8 +55,8 @@ import { getDateDiffDaysFromToday } from './utils/dateUtils';
 import { isSameDepartment, normalizeDepartmentName } from './utils/departmentUtils';
 import { findUniqueEquipmentMatchForDraft, syncTasksToEquipmentArchives } from './utils/equipmentSync';
 import { EQUIPMENT_STORAGE_KEY, parseStoredEquipmentList } from './utils/equipmentStorage';
-import { repairMisroutedEquipmentTasks } from './utils/taskRepair';
 import { getDepartmentTasks, sortTasksByOperationalPriority } from './utils/taskOrdering';
+import { loadStoredTasks, TASK_STORAGE_KEY } from './utils/taskStorage';
 import { getClinicalAcceptanceBlockReason, getEngineerNextStatus, getEngineerStatusBlockReason, getEngineerWorkflowHint, getRecommendedRoutingForTask, needsClinicalAcceptance } from './utils/taskWorkflow';
 import TaskStats from './components/TaskStats';
 import EquipmentArchives from './components/EquipmentArchives';
@@ -112,69 +112,8 @@ const getTaskAcceptanceDisplay = (task: StructuredTicket) => {
   };
 };
 
-const TASK_STORAGE_KEY = 'hospital_tasks';
-const TASK_PRESET_MIGRATION_KEY = 'hospital_tasks_seeded_preset_ids';
-const TASK_PRESET_MIGRATION_IDS = ['TKT-2026062805'];
-
-const getSeededPresetTaskIds = () => {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(TASK_PRESET_MIGRATION_KEY) || '[]');
-    return new Set(Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : []);
-  } catch (error) {
-    console.warn('Failed to load seeded preset task ids:', error);
-    return new Set<string>();
-  }
-};
-
-const saveSeededPresetTaskIds = (seededIds: Set<string>) => {
-  localStorage.setItem(TASK_PRESET_MIGRATION_KEY, JSON.stringify([...seededIds]));
-};
-
-const markPresetTaskMigrationsSeeded = () => {
-  const seededPresetIds = getSeededPresetTaskIds();
-  const nextSeededPresetIds = new Set([...seededPresetIds, ...TASK_PRESET_MIGRATION_IDS]);
-  saveSeededPresetTaskIds(nextSeededPresetIds);
-};
-
-const mergeMissingPresetTasks = (storedTasks: StructuredTicket[]) => {
-  const storedIds = new Set(storedTasks.map(task => task.id));
-  const seededPresetIds = getSeededPresetTaskIds();
-  const missingPresetTasks = INITIAL_TASKS.filter(
-    task => TASK_PRESET_MIGRATION_IDS.includes(task.id) && !storedIds.has(task.id) && !seededPresetIds.has(task.id)
-  );
-  markPresetTaskMigrationsSeeded();
-
-  return missingPresetTasks.length > 0 ? [...missingPresetTasks, ...storedTasks] : storedTasks;
-};
-
-const getStoredTasks = () => {
-  const saved = localStorage.getItem(TASK_STORAGE_KEY);
-  if (!saved) {
-    markPresetTaskMigrationsSeeded();
-    return INITIAL_TASKS;
-  }
-
-  try {
-    const parsed = JSON.parse(saved);
-    if (!Array.isArray(parsed)) {
-      return INITIAL_TASKS;
-    }
-
-    const mergedTasks = mergeMissingPresetTasks(parsed);
-    const { tasks, repaired } = repairMisroutedEquipmentTasks(mergedTasks);
-    if (repaired || tasks.length !== parsed.length) {
-      localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(tasks));
-    }
-
-    return tasks;
-  } catch (error) {
-    console.warn('Failed to load persisted tasks, falling back to defaults:', error);
-    return INITIAL_TASKS;
-  }
-};
-
 export default function App() {
-  const [tasks, setTasks] = useState<StructuredTicket[]>(getStoredTasks);
+  const [tasks, setTasks] = useState<StructuredTicket[]>(loadStoredTasks);
 
   const [currentWorkspace, setCurrentWorkspace] = useState<'tasks' | 'archives'>('tasks');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);

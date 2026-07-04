@@ -3,6 +3,7 @@ import { isSameDepartment } from '../src/utils/departmentUtils.ts';
 import { parseStoredEquipmentList } from '../src/utils/equipmentStorage.ts';
 import { findUniqueEquipmentMatchForDraft, syncTasksToEquipmentArchives } from '../src/utils/equipmentSync.ts';
 import { repairMisroutedEquipmentTasks } from '../src/utils/taskRepair.ts';
+import { parseStoredTaskList } from '../src/utils/taskStorage.ts';
 import { getDepartmentTasks } from '../src/utils/taskOrdering.ts';
 import { getPresetPromptsForUser, PRESET_PROMPTS } from '../src/data/appPresets.ts';
 import { INITIAL_TASKS } from '../src/data/defaultTasks.ts';
@@ -433,14 +434,11 @@ const checks: Check[] = [
       assertEqual(untouchedTransferTask?.taskType, '非设备类转派任务', '真实电脑网络转派单不能被历史修正误改');
       assertEqual(untouchedTransferTask?.status, '已关闭', '真实电脑网络转派单应保持原关闭状态');
 
-      const appSource = readFileSync('src/App.tsx', 'utf8');
-      const storedStart = appSource.indexOf('const getStoredTasks = () => {');
-      const storedEnd = appSource.indexOf('export default function App()', storedStart);
-      assert(storedStart !== -1 && storedEnd > storedStart, '应能定位本地任务读取逻辑');
-      const storedSource = appSource.slice(storedStart, storedEnd);
+      const storageSource = readFileSync('src/utils/taskStorage.ts', 'utf8');
       assert(
-        storedSource.includes('repairMisroutedEquipmentTasks(mergedTasks)') &&
-          storedSource.includes('localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(tasks));'),
+        storageSource.includes('repairMisroutedEquipmentTasks(mergedTasks)') &&
+          storageSource.includes('storage.setItem(TASK_STORAGE_KEY, JSON.stringify(tasks));') &&
+          storageSource.includes('repaired'),
         '修正后的历史任务应写回本地存储，避免每次加载重复修补'
       );
 
@@ -572,11 +570,11 @@ const checks: Check[] = [
         assert(!!linkedEquipment, `默认医疗设备工单 ${taskId} 应能关联默认设备档案`);
       });
 
-      const appSource = readFileSync('src/App.tsx', 'utf8');
-      const mergeStart = appSource.indexOf('const TASK_PRESET_MIGRATION_IDS');
-      const mergeEnd = appSource.indexOf('const getStoredTasks = () => {', mergeStart);
+      const storageSource = readFileSync('src/utils/taskStorage.ts', 'utf8');
+      const mergeStart = storageSource.indexOf('const TASK_PRESET_MIGRATION_IDS');
+      const mergeEnd = storageSource.indexOf('export const parseStoredTaskList', mergeStart);
       assert(mergeStart !== -1 && mergeEnd > mergeStart, '应能定位默认任务迁移逻辑');
-      const mergeSource = appSource.slice(mergeStart, mergeEnd);
+      const mergeSource = storageSource.slice(mergeStart, mergeEnd);
       assert(
         mergeSource.includes("const TASK_PRESET_MIGRATION_IDS = ['TKT-2026062805'];") &&
           mergeSource.includes('TASK_PRESET_MIGRATION_KEY') &&
@@ -585,15 +583,22 @@ const checks: Check[] = [
         '新增演示单应通过一次性迁移补齐到已有本地数据，不能把所有默认任务反复补回'
       );
 
-      const storedStart = appSource.indexOf('const getStoredTasks = () => {');
-      const storedEnd = appSource.indexOf('export default function App()', storedStart);
+      const storedStart = storageSource.indexOf('export const parseStoredTaskList = (saved: string | null)');
+      const storedEnd = storageSource.indexOf('export const loadStoredTasks', storedStart);
       assert(storedStart !== -1 && storedEnd > storedStart, '应能定位本地任务读取逻辑');
-      const storedSource = appSource.slice(storedStart, storedEnd);
+      const storedSource = storageSource.slice(storedStart, storedEnd);
       assert(
         storedSource.includes('if (!saved) {') &&
           storedSource.includes('markPresetTaskMigrationsSeeded();') &&
-          storedSource.includes('return INITIAL_TASKS;'),
+          storedSource.includes('getDefaultTaskList()'),
         '首次加载默认任务时也应记录迁移标记，避免用户删除演示单后刷新又被补回'
+      );
+
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+      assert(
+        appSource.includes("import { loadStoredTasks, TASK_STORAGE_KEY } from './utils/taskStorage';") &&
+          appSource.includes('useState<StructuredTicket[]>(loadStoredTasks)'),
+        'App 应通过任务存储工具初始化本地任务，避免组件内重复维护迁移和修复逻辑'
       );
     }
   },
@@ -792,6 +797,60 @@ const checks: Check[] = [
       const corruptStorage = withoutConsoleWarn(() => parseStoredEquipmentList('{not json'));
       assert(corruptStorage.equipments.length > 0, '损坏设备存储应回退默认设备列表');
       assertEqual(corruptStorage.shouldPersist, true, '损坏设备存储回退后应提示持久化');
+
+      const emptyTaskStorage = parseStoredTaskList(null);
+      assert(emptyTaskStorage.tasks.length > 0, '空任务存储应回退默认任务列表');
+      assertEqual(emptyTaskStorage.shouldPersist, true, '空任务存储回退后应提示持久化');
+
+      const dirtyTaskStorage = parseStoredTaskList(JSON.stringify([
+        {
+          id: 'TKT-DIRTY-STORAGE',
+          taskType: '未知分类',
+          department: '呼吸',
+          location: 5,
+          deviceName: '无创呼吸机',
+          deviceId: 42,
+          faultPhenomenon: '夜间低压报警',
+          contactPerson: null,
+          contactPhone: undefined,
+          urgency: '高',
+          affectClinical: '可能',
+          status: '进行中',
+          aiStatus: 'OK',
+          source: '旧系统',
+          createdAt: '2026-07-03T08:00:00+08:00',
+          updatedAt: '2026-07-03T09:00:00+08:00',
+          aiSuggestions: ['请现场排查', 123],
+          logs: [{ time: '2026-07-03 08:00', action: '旧系统导入', operator: 'AI' }, false],
+          needBackupDevice: '需要',
+          needVendorCoop: '不需要'
+        },
+        {
+          id: 'TKT-DIRTY-STORAGE',
+          taskType: '设备报修',
+          department: '呼吸内科',
+          deviceName: '重复旧记录'
+        },
+        'not-a-task'
+      ]));
+      const repairedTask = dirtyTaskStorage.tasks.find(task => task.id === 'TKT-DIRTY-STORAGE');
+      assertEqual(dirtyTaskStorage.shouldPersist, true, '脏任务存储修复后应提示写回本地存储');
+      assertEqual(
+        dirtyTaskStorage.tasks.filter(task => task.id === 'TKT-DIRTY-STORAGE').length,
+        1,
+        '任务存储清洗应删除重复 ID，避免任务列表和详情选中异常'
+      );
+      assertEqual(repairedTask?.department, '呼吸内科', '任务存储清洗应规范化科室别名');
+      assertEqual(repairedTask?.taskType, '设备报修', '未知任务分类应回退到可闭环的设备报修');
+      assertEqual(repairedTask?.status, '处理中', '旧状态别名应映射为当前业务状态');
+      assertEqual(repairedTask?.urgency, '紧急', '旧紧急度别名应映射为当前紧急程度');
+      assertEqual(repairedTask?.deviceId, 'EQ-TEMP-UNKNOWN', '非字符串设备编号应回退安全临时编号');
+      assertEqual(repairedTask?.aiSuggestions.length, 1, 'AI 建议数组应过滤非字符串项');
+      assert(repairedTask!.logs.length > 0, '任务存储清洗后必须保留可展示的时间线日志');
+
+      const corruptTaskStorage = withoutConsoleWarn(() => parseStoredTaskList('{not json'));
+      assert(corruptTaskStorage.tasks.length > 0, '损坏任务存储应回退默认任务列表');
+      assertEqual(corruptTaskStorage.shouldPersist, true, '损坏任务存储回退后应提示持久化');
     }
   },
   {
