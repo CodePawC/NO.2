@@ -45,9 +45,13 @@ export default function MaintenanceCalendar({
   setIsLogModalOpen,
   currentUser
 }: MaintenanceCalendarProps) {
-  const today = new Date();
-  const [currentYear, setCurrentYear] = useState(() => today.getFullYear());
-  const [currentMonth, setCurrentMonth] = useState(() => today.getMonth());
+  const todayDateString = getLocalDateString();
+  const [todayYear, todayMonthText, todayDayText] = todayDateString.split('-');
+  const todayYearNumber = Number(todayYear);
+  const todayMonthIndex = Number(todayMonthText) - 1;
+  const todayDayNumber = Number(todayDayText);
+  const [currentYear, setCurrentYear] = useState(() => todayYearNumber);
+  const [currentMonth, setCurrentMonth] = useState(() => todayMonthIndex);
 
   // Simulated logged-in engineer workspace state
   const [currentEngineer, setCurrentEngineer] = useState<string>('all'); // 'all' or specific engineer name
@@ -343,8 +347,8 @@ export default function MaintenanceCalendar({
   };
 
   const setTodayMonth = () => {
-    setCurrentYear(2026);
-    setCurrentMonth(6); // July 2026
+    setCurrentYear(todayYearNumber);
+    setCurrentMonth(todayMonthIndex);
     setSelectedEvent(null);
   };
 
@@ -877,7 +881,7 @@ export default function MaintenanceCalendar({
               const hasEvents = dayEvents.length > 0;
               const loadStatus = getDayLoadStatus(dayEvents.filter(e => e.type === 'maintenance' || e.type === 'calibration').length);
               
-              const isToday = cell.year === 2026 && cell.month === 6 && cell.day === 2;
+              const isToday = cell.year === todayYearNumber && cell.month === todayMonthIndex && cell.day === todayDayNumber;
 
               return (
                 <div 

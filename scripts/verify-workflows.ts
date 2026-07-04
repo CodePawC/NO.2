@@ -2343,6 +2343,16 @@ const checks: Check[] = [
         '维保日历通知应统一清理旧定时器，避免连续部署/调期/权限提醒时旧定时器提前清掉新提示'
       );
       assert(
+        calendarSource.includes('const todayDateString = getLocalDateString();') &&
+          calendarSource.includes("const [todayYear, todayMonthText, todayDayText] = todayDateString.split('-');") &&
+          calendarSource.includes('setCurrentYear(todayYearNumber);') &&
+          calendarSource.includes('setCurrentMonth(todayMonthIndex);') &&
+          calendarSource.includes('cell.year === todayYearNumber && cell.month === todayMonthIndex && cell.day === todayDayNumber') &&
+          !calendarSource.includes('setCurrentYear(2026);') &&
+          !calendarSource.includes('const isToday = cell.year === 2026'),
+        '维保日历“本月”和“今天”标记应使用本地当前日期，不能停留在演示硬编码日期'
+      );
+      assert(
         calendarSource.includes('{canManageSchedule ? (') &&
           calendarSource.includes('在此日期部署新任务') &&
           calendarSource.includes('临床只读：仅查看当天本科室排程'),
