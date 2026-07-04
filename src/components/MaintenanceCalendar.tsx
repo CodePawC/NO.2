@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   Calendar, ChevronLeft, ChevronRight, Wrench, ShieldCheck, 
   Check, Clock, AlertTriangle, FileText, Info, X, Sparkles, Send, Bell,
@@ -100,6 +100,7 @@ export default function MaintenanceCalendar({
 
   // Custom temporary success notifications
   const [notification, setNotification] = useState<string | null>(null);
+  const notificationTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (canManageSchedule) return;
@@ -148,11 +149,23 @@ export default function MaintenanceCalendar({
 
   // Show a notification briefly
   const triggerNotification = (msg: string) => {
+    if (notificationTimerRef.current !== null) {
+      window.clearTimeout(notificationTimerRef.current);
+    }
     setNotification(msg);
-    setTimeout(() => {
+    notificationTimerRef.current = window.setTimeout(() => {
       setNotification(null);
+      notificationTimerRef.current = null;
     }, 5000);
   };
+
+  useEffect(() => {
+    return () => {
+      if (notificationTimerRef.current !== null) {
+        window.clearTimeout(notificationTimerRef.current);
+      }
+    };
+  }, []);
 
   // Weekday headers
   const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];

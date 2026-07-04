@@ -2094,6 +2094,22 @@ const checks: Check[] = [
           calendarSource.includes("getScheduleManageBlockReason('通知推送')"),
         '日历所有管理型操作应统一走角色阻断逻辑'
       );
+      const notificationStart = calendarSource.indexOf('const triggerNotification = (msg: string) => {');
+      const notificationEnd = calendarSource.indexOf('// Weekday headers', notificationStart);
+      assert(notificationStart !== -1 && notificationEnd > notificationStart, '应能定位日历通知提示逻辑');
+      const notificationSource = calendarSource.slice(notificationStart, notificationEnd);
+      assert(
+        calendarSource.includes('const notificationTimerRef = useRef<number | null>(null);') &&
+          notificationSource.includes('if (notificationTimerRef.current !== null)') &&
+          notificationSource.includes('window.clearTimeout(notificationTimerRef.current);') &&
+          notificationSource.includes('notificationTimerRef.current = window.setTimeout(() => {') &&
+          notificationSource.includes('setNotification(null);') &&
+          notificationSource.includes('notificationTimerRef.current = null;') &&
+          notificationSource.includes('return () => {') &&
+          notificationSource.includes('window.clearTimeout(notificationTimerRef.current);') &&
+          !notificationSource.includes('setNotification(msg);\n    setTimeout(() => {'),
+        '维保日历通知应统一清理旧定时器，避免连续部署/调期/权限提醒时旧定时器提前清掉新提示'
+      );
       assert(
         calendarSource.includes('{canManageSchedule ? (') &&
           calendarSource.includes('在此日期部署新任务') &&
