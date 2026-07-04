@@ -1458,6 +1458,8 @@ const checks: Check[] = [
     name: 'clinical model status cannot open engineer-only ai settings',
     run: () => {
       const appSource = readFileSync('src/App.tsx', 'utf8');
+      const settingsSource = readFileSync('src/hooks/useAiSettings.ts', 'utf8');
+      const serverSource = readFileSync('server.ts', 'utf8');
       const openSettingsStart = appSource.indexOf('const openAiSettings = () => {');
       const openSettingsEnd = appSource.indexOf('useEffect(() => {', openSettingsStart);
       assert(openSettingsStart !== -1 && openSettingsEnd > openSettingsStart, '应能定位 AI 配置统一入口');
@@ -1480,6 +1482,29 @@ const checks: Check[] = [
       assert(
         !appSource.includes('onClick={() => setIsSettingsOpen(true)}'),
         '大模型状态与侧边栏按钮应统一走 openAiSettings 权限入口'
+      );
+      assert(
+        settingsSource.includes('const normalizeProviderConfigs = (rawValue: string) => {') &&
+          settingsSource.includes('if (!Array.isArray(parsed)) return DEFAULT_LLM_PRESETS;') &&
+          settingsSource.includes('DEFAULT_LLM_PRESETS.forEach((preset) => {') &&
+          settingsSource.includes('normalizeProviderConfig({ ...cfg, [field]: value }, fallback)'),
+        'AI 设置应清洗本地存储中的供应商配置，避免坏数据导致配置页或模型调用异常'
+      );
+      assert(
+        settingsSource.includes('const getSafeActiveProviderId = (rawValue: string) => {') &&
+          settingsSource.includes("return DEFAULT_LLM_PRESETS.some(config => config.id === candidateId) ? candidateId : 'gemini-default';"),
+        'AI 设置应在活跃供应商 ID 不存在时回退默认 Gemini，避免选择器处于悬空状态'
+      );
+      assert(
+        serverSource.includes("const normalizedEndpoint = typeof configToUse.endpoint === 'string' ? configToUse.endpoint.trim() : '';") &&
+          serverSource.includes("const isGeminiNative = configToUse.id === 'gemini-default' || normalizedEndpoint.includes('googleapis.com') || normalizedEndpoint.includes('gemini');") &&
+          serverSource.includes('Custom provider endpoint missing. Falling back to local heuristics.'),
+        '自定义供应商 endpoint 为空时服务端不能误走 Gemini，应降级到本地启发式'
+      );
+      assert(
+        serverSource.includes("const normalizedEndpoint = typeof endpoint === 'string' ? endpoint.trim() : '';") &&
+          serverSource.includes("throw new Error(`自定义供应商 ${name || id || ''} 未配置 API 请求地址"),
+        '自定义供应商联通测试应明确提示缺少 API 请求地址'
       );
     }
   },

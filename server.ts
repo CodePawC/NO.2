@@ -242,8 +242,11 @@ app.post('/api/assistant/test-config', async (req, res) => {
       return;
     }
 
-    // 2. Gemini native configuration (No custom endpoint, or matches gemini)
-    if (id === 'gemini-default' || !endpoint || endpoint.includes('googleapis.com') || endpoint.includes('gemini')) {
+    const normalizedEndpoint = typeof endpoint === 'string' ? endpoint.trim() : '';
+    const isGeminiNative = id === 'gemini-default' || normalizedEndpoint.includes('googleapis.com') || normalizedEndpoint.includes('gemini');
+
+    // 2. Gemini native configuration
+    if (isGeminiNative) {
       const apiKeyToUse = apiKey || process.env.GEMINI_API_KEY;
       if (!apiKeyToUse) {
         throw new Error('未配置 Gemini API Key，无法进行云端联通测试。请在配置中填入密钥。');
@@ -274,8 +277,11 @@ app.post('/api/assistant/test-config', async (req, res) => {
       });
     } else {
       // 3. Custom OpenAI-compatible endpoint
+      if (!normalizedEndpoint) {
+        throw new Error(`自定义供应商 ${name || id || ''} 未配置 API 请求地址，无法进行联通测试。`);
+      }
       const modelToUse = model || 'gpt-4o-mini';
-      const response = await fetch(`${endpoint.replace(/\/$/, '')}/chat/completions`, {
+      const response = await fetch(`${normalizedEndpoint.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -419,7 +425,8 @@ app.post('/api/assistant/chat', async (req, res) => {
     const finalPrompt = prompt.replace('{formatted_history_placeholder}', finalFormattedHistory);
 
     // 4. Call Model Provider
-    const isGeminiNative = configToUse.id === 'gemini-default' || !configToUse.endpoint || configToUse.endpoint.includes('googleapis.com') || configToUse.endpoint.includes('gemini');
+    const normalizedEndpoint = typeof configToUse.endpoint === 'string' ? configToUse.endpoint.trim() : '';
+    const isGeminiNative = configToUse.id === 'gemini-default' || normalizedEndpoint.includes('googleapis.com') || normalizedEndpoint.includes('gemini');
 
     if (isGeminiNative) {
       // Use native Gemini SDK
@@ -543,7 +550,13 @@ app.post('/api/assistant/chat', async (req, res) => {
       res.json(parsedResult);
     } else {
       // 5. OpenAI-compatible Custom HTTP Request
-      const endpoint = configToUse.endpoint.trim().replace(/\/+$/, '');
+      if (!normalizedEndpoint) {
+        console.log('[AI Routing] Custom provider endpoint missing. Falling back to local heuristics.');
+        const fallbackPayload = getRuleBasedFallback(message, currentDraft, false, user);
+        res.json(fallbackPayload);
+        return;
+      }
+      const endpoint = normalizedEndpoint.replace(/\/+$/, '');
       const url = endpoint.endsWith('/chat/completions') ? endpoint : `${endpoint}/chat/completions`;
       const modelName = configToUse.model ? configToUse.model.trim() : 'gpt-3.5-turbo';
 
