@@ -990,6 +990,10 @@ const checks: Check[] = [
           archiveSource.includes('setIsDossierModalOpen(false);') &&
           archiveSource.includes('setIsScannerModalOpen(false);') &&
           archiveSource.includes('setIsQuickRepairModalOpen(false);') &&
+          archiveSource.includes('setIsPreviewOpen(false);') &&
+          archiveSource.includes('setPreviewFile(null);') &&
+          archiveSource.includes('setIsExtractingSnapshot(false);') &&
+          archiveSource.includes('snapshotExtractRequestVersionRef.current += 1;') &&
           archiveSource.includes('resetQuickRepairDraft();') &&
           archiveSource.includes('archiveManageRequestVersionRef.current += 1;') &&
           archiveSource.includes('setIsAnalyzing(false);') &&
@@ -1050,8 +1054,10 @@ const checks: Check[] = [
         archiveSource.includes('previewFileBelongsToSelectedEquipment') &&
           archiveSource.includes('selectedEquipment.attachments.some(file => file.id === previewFile.id)') &&
           archiveSource.includes('setPreviewFile(null);') &&
-          archiveSource.includes('setActivePreviewPage(1);'),
-        '附件预览应在当前选中设备变化后关闭不属于该设备的旧预览'
+          archiveSource.includes('setActivePreviewPage(1);') &&
+          archiveSource.includes('setIsExtractingSnapshot(false);') &&
+          archiveSource.includes('snapshotExtractRequestVersionRef.current += 1;'),
+        '附件预览应在当前选中设备变化后关闭不属于该设备的旧预览并作废旧快照提取'
       );
       assert(
         archiveSource.includes('maintenanceLogBelongsToSelectedEquipment') &&
@@ -1127,8 +1133,20 @@ const checks: Check[] = [
       assert(snapshotExtractStart !== -1 && snapshotExtractEnd > snapshotExtractStart, '应能定位技术手册快照提取逻辑');
       const snapshotExtractSource = archiveSource.slice(snapshotExtractStart, snapshotExtractEnd);
       assert(
-        snapshotExtractSource.includes("if (!ensureCanManageEquipmentArchive('提取技术手册快照')) return;"),
-        '技术手册快照提取会修改设备档案，应统一走工程师权限拦截'
+        snapshotExtractSource.includes("if (!ensureCanManageEquipmentArchive('提取技术手册快照')) return;") &&
+          archiveSource.includes('const snapshotExtractRequestVersionRef = useRef(0);') &&
+          snapshotExtractSource.includes('const requestVersion = snapshotExtractRequestVersionRef.current + 1;') &&
+          snapshotExtractSource.includes('snapshotExtractRequestVersionRef.current = requestVersion;') &&
+          snapshotExtractSource.includes('const targetEquipmentId = selectedEquipment.id;') &&
+          snapshotExtractSource.includes('const targetFileId = previewFile.id;') &&
+          snapshotExtractSource.includes('const targetFileName = previewFile.name;') &&
+          snapshotExtractSource.includes('const latestTargetEquipment = equipments.find(eq => eq.id === targetEquipmentId);') &&
+          snapshotExtractSource.includes('const targetFileStillExists = latestTargetEquipment?.attachments.some(file => file.id === targetFileId);') &&
+          snapshotExtractSource.includes('if (requestVersion !== snapshotExtractRequestVersionRef.current) return;') &&
+          snapshotExtractSource.includes('if (!canManageEquipmentArchiveRef.current || !latestTargetEquipment || !targetFileStillExists)') &&
+          snapshotExtractSource.includes('if (eq.id === targetEquipmentId)') &&
+          snapshotExtractSource.includes('sourceFileName: targetFileName'),
+        '技术手册快照提取会延迟修改设备档案，应统一走工程师权限拦截并丢弃切换设备/角色后的旧请求'
       );
       const mobileActionsStart = archiveSource.indexOf('Quick action buttons on mobile next to title');
       const mobileActionsEnd = archiveSource.indexOf('{/* Dynamic Filters & Search Panel */}', mobileActionsStart);

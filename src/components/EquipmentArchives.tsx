@@ -600,6 +600,7 @@ export default function EquipmentArchives({
   const [activePreviewPage, setActivePreviewPage] = useState<number>(1);
   const [isExtractingSnapshot, setIsExtractingSnapshot] = useState(false);
   const [hoveredSlice, setHoveredSlice] = useState<number | null>(null);
+  const snapshotExtractRequestVersionRef = useRef(0);
 
   // AI OCR Parser State
   const [isAiParserOpen, setIsAiParserOpen] = useState(false);
@@ -709,6 +710,10 @@ export default function EquipmentArchives({
     setIsDossierModalOpen(false);
     setIsScannerModalOpen(false);
     setIsQuickRepairModalOpen(false);
+    setIsPreviewOpen(false);
+    setPreviewFile(null);
+    setIsExtractingSnapshot(false);
+    snapshotExtractRequestVersionRef.current += 1;
     resetQuickRepairDraft();
     setFormMode('create');
     setCurrentEditId(null);
@@ -928,6 +933,8 @@ export default function EquipmentArchives({
       setIsPreviewOpen(false);
       setPreviewFile(null);
       setActivePreviewPage(1);
+      setIsExtractingSnapshot(false);
+      snapshotExtractRequestVersionRef.current += 1;
     }
   }, [isPreviewOpen, previewFileBelongsToSelectedEquipment]);
 
@@ -1760,30 +1767,44 @@ Clinical class: Life-saving respiratory device`;
   const handleExtractSnapshot = (page: PreviewPage) => {
     if (!ensureCanManageEquipmentArchive('提取技术手册快照')) return;
     if (!previewFile || !selectedEquipment) return;
+    const requestVersion = snapshotExtractRequestVersionRef.current + 1;
+    snapshotExtractRequestVersionRef.current = requestVersion;
+    const targetEquipmentId = selectedEquipment.id;
+    const targetFileId = previewFile.id;
+    const targetFileName = previewFile.name;
+    const targetPageNum = page.pageNum;
     setIsExtractingSnapshot(true);
     
     // Simulate high-tech AI extraction with a realistic timeout
     setTimeout(() => {
+      const latestTargetEquipment = equipments.find(eq => eq.id === targetEquipmentId);
+      const targetFileStillExists = latestTargetEquipment?.attachments.some(file => file.id === targetFileId);
+      if (requestVersion !== snapshotExtractRequestVersionRef.current) return;
+      if (!canManageEquipmentArchiveRef.current || !latestTargetEquipment || !targetFileStillExists) {
+        setIsExtractingSnapshot(false);
+        return;
+      }
+
       const newSnapshot = {
         id: 'snap-' + Date.now(),
-        pageNum: page.pageNum,
+        pageNum: targetPageNum,
         title: page.title,
         imageUrl: page.diagramType, // Stores visual representation type
         extractedAt: getLocalDateTimeString(),
-        sourceFileName: previewFile.name,
-        notes: `从《${previewFile.name}》第 ${page.pageNum} 页中智能提取。已完成高精度 OCR 元数据索引，核心规范包含:「${page.lines[0] || ''}」。已被临床工程师确认为该医学装备的核心技术参考与合规判据。`
+        sourceFileName: targetFileName,
+        notes: `从《${targetFileName}》第 ${targetPageNum} 页中智能提取。已完成高精度 OCR 元数据索引，核心规范包含:「${page.lines[0] || ''}」。已被临床工程师确认为该医学装备的核心技术参考与合规判据。`
       };
 
       // Update equipment list state
       setEquipments(equipments.map(eq => {
-        if (eq.id === selectedEquipment.id) {
+        if (eq.id === targetEquipmentId) {
           const existingSnapshots = eq.extractedSnapshots || [];
           // Avoid duplicating same page snapshot
-          if (existingSnapshots.some(s => s.sourceFileName === previewFile.name && s.pageNum === page.pageNum)) {
+          if (existingSnapshots.some(s => s.sourceFileName === targetFileName && s.pageNum === targetPageNum)) {
             alert('提示：该技术手册页快照已提取过，系统已自动重构其高阶关联指引并置顶！');
             return {
               ...eq,
-              extractedSnapshots: [newSnapshot, ...existingSnapshots.filter(s => !(s.sourceFileName === previewFile.name && s.pageNum === page.pageNum))]
+              extractedSnapshots: [newSnapshot, ...existingSnapshots.filter(s => !(s.sourceFileName === targetFileName && s.pageNum === targetPageNum))]
             };
           }
           return {
@@ -1795,7 +1816,7 @@ Clinical class: Life-saving respiratory device`;
       }));
 
       setIsExtractingSnapshot(false);
-      alert(`🎉 成功从《${previewFile.name}》中提取第 ${page.pageNum} 页作为设备关联快照！此快照已与主技术档案完成高阶可信映射。`);
+      alert(`🎉 成功从《${targetFileName}》中提取第 ${targetPageNum} 页作为设备关联快照！此快照已与主技术档案完成高阶可信映射。`);
     }, 800);
   };
 
