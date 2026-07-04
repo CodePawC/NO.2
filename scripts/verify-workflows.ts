@@ -1112,6 +1112,19 @@ const checks: Check[] = [
           archiveSource.includes('title={`点击穿透查看${assetScopeLabel}“${cat}”装备明细`}'),
         '资产矩阵看板应按当前角色范围展示全院/本科室文案，不能在临床端硬编码全院'
       );
+      const addAttachmentStart = archiveSource.indexOf('const handleAddAttachment = (e: React.FormEvent) => {');
+      const addAttachmentEnd = archiveSource.indexOf('// AI OCR Parser simulation with presets', addAttachmentStart);
+      assert(addAttachmentStart !== -1 && addAttachmentEnd > addAttachmentStart, '应能定位资料附件上传逻辑');
+      const addAttachmentSource = archiveSource.slice(addAttachmentStart, addAttachmentEnd);
+      assert(
+        addAttachmentSource.includes("if (!ensureCanManageEquipmentArchive('上传资料附件')) return;") &&
+          addAttachmentSource.includes('setEquipments(prevEquipments => {') &&
+          addAttachmentSource.includes('const nextEquipments = prevEquipments.map(eq => {') &&
+          addAttachmentSource.includes('if (eq.id !== selectedId) return eq;') &&
+          addAttachmentSource.includes('attachments: [...eq.attachments, attach]') &&
+          addAttachmentSource.includes('localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));'),
+        '资料附件上传应基于最新设备列表追加附件并同步本地存储，避免连续上传覆盖旧附件'
+      );
       const printStart = archiveSource.indexOf('const handlePrintQR = () => {');
       const printEnd = archiveSource.indexOf('const createQuickRepairRecord = (', printStart);
       assert(printStart !== -1 && printEnd > printStart, '应能定位物联二维码打印逻辑');

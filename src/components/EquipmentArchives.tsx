@@ -1403,15 +1403,17 @@ export default function EquipmentArchives({
       uploadDate: getLocalDateString()
     };
 
-    setEquipments(equipments.map(eq => {
-      if (eq.id === selectedId) {
+    setEquipments(prevEquipments => {
+      const nextEquipments = prevEquipments.map(eq => {
+        if (eq.id !== selectedId) return eq;
         return {
           ...eq,
           attachments: [...eq.attachments, attach]
         };
-      }
-      return eq;
-    }));
+      });
+      localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));
+      return nextEquipments;
+    });
 
     setNewAttachName('');
     setIsAttachmentModalOpen(false);
