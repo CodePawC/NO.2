@@ -1522,12 +1522,38 @@ const checks: Check[] = [
         '档案快捷报修单号应基于本地最新档案生成，避免连续报修时单号重复'
       );
       assert(
-        createSource.indexOf('const parentAccepted = onQuickRepairCreated?.({') < createSource.indexOf('setEquipments(prevEquipments => {') &&
-          createSource.includes('const nextEquipments = prevEquipments.map(eq => {') &&
+        createSource.indexOf('const parentAccepted = onQuickRepairCreated?.({') < createSource.indexOf('const nextEquipments = latestEquipments.map(eq => {') &&
+          createSource.includes('const nextEquipments = latestEquipments.map(eq => {') &&
           createSource.includes('if (eq.id !== targetEq.id) return eq;') &&
           createSource.includes('maintenanceLogs: [repairLog, ...(eq.maintenanceLogs || [])]') &&
-          createSource.includes('localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));'),
-        '档案快捷报修必须在父组件接受后再更新资产档案'
+          createSource.includes('localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));') &&
+          createSource.includes('setEquipments(nextEquipments);') &&
+          !createSource.includes('setEquipments(prevEquipments => {'),
+        '档案快捷报修必须在父组件接受后基于最新持久化档案立即写入维修履历，避免切换工作区时丢失档案记录'
+      );
+      assert(
+        archiveSource.includes('id="btn-clinical-open-quick-repair"') &&
+          archiveSource.includes('aria-label="打开本科室故障一键快捷上报"') &&
+          archiveSource.includes('id="btn-archive-instant-repair"') &&
+          archiveSource.includes('aria-label="一键报修当前设备"') &&
+          archiveSource.includes('id="quick-repair-equipment-select"') &&
+          archiveSource.includes('aria-label="选择发生故障的装备"') &&
+          archiveSource.includes('id={`quick-repair-urgency-${opt.value}`}') &&
+          archiveSource.includes('aria-label={`设置报修紧急度：${opt.label}`}') &&
+          archiveSource.includes('id="quick-repair-description"') &&
+          archiveSource.includes('aria-label="故障现象具体描述"') &&
+          archiveSource.includes('id="btn-submit-quick-repair"') &&
+          archiveSource.includes('aria-label="提交快捷报修并分派"'),
+        '资产档案快捷报修控件应提供稳定标识和可访问名称，便于临床人测与自动化回归'
+      );
+      assert(
+        archiveSource.includes('id={`equipment-card-${eq.id}`}') &&
+          archiveSource.includes('role="button"') &&
+          archiveSource.includes('aria-label={`打开设备档案：${eq.deviceName}，${eq.dept}，${eq.status}`}') &&
+          archiveSource.includes("if (e.key === 'Enter' || e.key === ' ')") &&
+          archiveSource.includes('id={`maintenance-log-${log.workOrderNo || log.id}`}') &&
+          archiveSource.includes('aria-label={`打开维保履历：${log.workOrderNo || log.id}，${log.type}，${log.status}`}'),
+        '资产设备卡片与维保履历卡应支持稳定定位和键盘打开，便于精确回看档案联动'
       );
     }
   },

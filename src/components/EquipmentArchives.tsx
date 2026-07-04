@@ -1753,19 +1753,17 @@ Clinical class: Life-saving respiratory device`;
       verifyPerson: currentUser.name
     };
 
-    setEquipments(prevEquipments => {
-      const nextEquipments = prevEquipments.map(eq => {
-        if (eq.id !== targetEq.id) return eq;
+    const nextEquipments = latestEquipments.map(eq => {
+      if (eq.id !== targetEq.id) return eq;
 
-        return {
-          ...eq,
-          status: '故障维修',
-          maintenanceLogs: [repairLog, ...(eq.maintenanceLogs || [])]
-        };
-      });
-      localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));
-      return nextEquipments;
+      return {
+        ...eq,
+        status: '故障维修',
+        maintenanceLogs: [repairLog, ...(eq.maintenanceLogs || [])]
+      };
     });
+    localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));
+    setEquipments(nextEquipments);
 
     return workOrderNo;
   };
@@ -2129,6 +2127,8 @@ Clinical class: Life-saving respiratory device`;
                 </div>
 
                 <button
+                  id="btn-clinical-open-quick-repair"
+                  aria-label="打开本科室故障一键快捷上报"
                   type="button"
                   onClick={() => {
                     const firstDeptEq = visibleEquipments[0];
@@ -2325,10 +2325,22 @@ Clinical class: Life-saving respiratory device`;
                   return (
                     <div 
                       key={eq.id}
+                      id={`equipment-card-${eq.id}`}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`打开设备档案：${eq.deviceName}，${eq.dept}，${eq.status}`}
                       onClick={() => {
                         setSelectedId(eq.id);
                         setMobileView('detail');
                         setViewMode('inventory');
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setSelectedId(eq.id);
+                          setMobileView('detail');
+                          setViewMode('inventory');
+                        }
                       }}
                       className={`p-3 rounded-xl border text-left cursor-pointer transition-all flex gap-3 items-start relative ${
                         isSelected 
@@ -2892,7 +2904,17 @@ Clinical class: Life-saving respiratory device`;
                             </div>
                             
                             <div 
+                              id={`maintenance-log-${log.workOrderNo || log.id}`}
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`打开维保履历：${log.workOrderNo || log.id}，${log.type}，${log.status}`}
                               onClick={() => setViewMaintenanceLog(log)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  setViewMaintenanceLog(log);
+                                }
+                              }}
                               className="bg-white hover:bg-slate-50/75 p-4 rounded-xl border border-slate-200 hover:border-blue-400 cursor-pointer shadow-2xs hover:shadow-xs group transition-all duration-200"
                             >
                               <div className="flex justify-between items-start gap-4">
@@ -3591,6 +3613,8 @@ Clinical class: Life-saving respiratory device`;
                     </>
                   )}
                   <button 
+                    id="btn-archive-scan-repair"
+                    aria-label="扫码报修当前设备"
                     onClick={() => setIsScannerModalOpen(true)}
                     disabled={!canStartQuickRepairForEquipment(selectedEquipment)}
                     className={`px-2.5 py-2 sm:px-4 sm:py-2 rounded-lg text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 transition-all flex-1 sm:flex-initial text-center whitespace-nowrap ${
@@ -3604,6 +3628,8 @@ Clinical class: Life-saving respiratory device`;
                     <span>扫码报修</span>
                   </button>
                   <button 
+                    id="btn-archive-instant-repair"
+                    aria-label="一键报修当前设备"
                     onClick={handleQuickRepair}
                     disabled={!canStartQuickRepairForEquipment(selectedEquipment)}
                     className={`px-2.5 py-2 sm:px-4 sm:py-2 rounded-lg text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 transition-all flex-1 sm:flex-initial text-center whitespace-nowrap ${
@@ -5942,6 +5968,8 @@ Clinical class: Life-saving respiratory device`;
                   1. 选择发生故障的装备
                 </label>
                 <select
+                  id="quick-repair-equipment-select"
+                  aria-label="选择发生故障的装备"
                   value={quickRepairEquipId}
                   onChange={(e) => resetQuickRepairDraft(e.target.value)}
                   className="w-full text-xs font-bold border border-slate-200 rounded-lg p-2.5 bg-slate-50 text-slate-700 focus:ring-2 focus:ring-rose-500 outline-none"
@@ -5968,6 +5996,8 @@ Clinical class: Life-saving respiratory device`;
                     { value: 'high', label: '🔴 高 (紧急到场)', desc: '影响急救生命支持' }
                   ].map(opt => (
                     <button
+                      id={`quick-repair-urgency-${opt.value}`}
+                      aria-label={`设置报修紧急度：${opt.label}`}
                       key={opt.value}
                       type="button"
                       onClick={() => setQuickRepairUrgency(opt.value as 'low' | 'medium' | 'high')}
@@ -5990,6 +6020,8 @@ Clinical class: Life-saving respiratory device`;
                   3. 故障现象具体描述
                 </label>
                 <textarea
+                  id="quick-repair-description"
+                  aria-label="故障现象具体描述"
                   value={quickRepairDesc}
                   onChange={(e) => setQuickRepairDesc(e.target.value)}
                   placeholder="请输入该设备在临床运行中出现的故障代码、异响、黑屏、漏气或报错提示，方便检修技术员携带对应零备件到场..."
@@ -6002,6 +6034,8 @@ Clinical class: Life-saving respiratory device`;
               {/* Footer Buttons */}
               <div className="pt-4 flex justify-end gap-2 border-t border-slate-100 flex-shrink-0">
                 <button
+                  id="btn-cancel-quick-repair"
+                  aria-label="取消快捷报修"
                   type="button"
                   onClick={() => {
                     setIsQuickRepairModalOpen(false);
@@ -6012,6 +6046,8 @@ Clinical class: Life-saving respiratory device`;
                   取消
                 </button>
                 <button
+                  id="btn-submit-quick-repair"
+                  aria-label="提交快捷报修并分派"
                   type="submit"
                   className="px-5 py-2 text-xs bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white font-extrabold rounded-lg shadow-md flex items-center gap-1.5 transition-all cursor-pointer"
                 >
