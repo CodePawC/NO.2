@@ -1388,11 +1388,21 @@ const checks: Check[] = [
       assert(
         appSource.includes('const hasActiveEquipmentRepairTask = (tasks: StructuredTicket[], equipment: MedicalEquipment) => {') &&
           appSource.includes("!['已完成', '已归档', '已关闭'].includes(task.status)") &&
-          callbackSource.includes('if (hasActiveEquipmentRepairTask(tasks, equipment))') &&
+          appSource.includes('const tasksRef = useRef(tasks);') &&
+          appSource.includes('const pendingQuickRepairEquipmentIdsRef = useRef<Set<string>>(new Set());') &&
+          appSource.includes('tasksRef.current = tasks;') &&
+          callbackSource.includes('const latestTasks = tasksRef.current;') &&
+          callbackSource.includes('if (hasActiveEquipmentRepairTask(latestTasks, equipment))') &&
+          callbackSource.includes('if (pendingQuickRepairEquipmentIdsRef.current.has(equipment.id))') &&
+          callbackSource.includes('pendingQuickRepairEquipmentIdsRef.current.add(equipment.id);') &&
+          callbackSource.includes('const newTicketId = createNextTaskId(latestTasks);') &&
+          callbackSource.includes('tasksRef.current = nextTasks;') &&
+          callbackSource.includes('pendingQuickRepairEquipmentIdsRef.current.delete(equipment.id);') &&
           callbackSource.includes('msg-quick-repair-duplicate-blocked') &&
+          callbackSource.includes('msg-quick-repair-pending-blocked') &&
           callbackSource.includes('避免重复派单') &&
           callbackSource.includes('return false;'),
-        '快捷报修同步主工单时应阻断同设备未闭环维修单，避免重复派单'
+        '快捷报修同步主工单时应使用最新任务源并阻断同设备连续点击，避免重复派单'
       );
     }
   },

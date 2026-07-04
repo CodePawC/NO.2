@@ -114,6 +114,8 @@ const getTaskAcceptanceDisplay = (task: StructuredTicket) => {
 
 export default function App() {
   const [tasks, setTasks] = useState<StructuredTicket[]>(loadStoredTasks);
+  const tasksRef = useRef(tasks);
+  const pendingQuickRepairEquipmentIdsRef = useRef<Set<string>>(new Set());
 
   const [currentWorkspace, setCurrentWorkspace] = useState<'tasks' | 'archives'>('tasks');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -183,10 +185,17 @@ export default function App() {
       appendWorkflowNotice(`⚠️ **快捷报修权限提醒**\n当前临床账号只能为本科室设备同步主工单。设备【${equipment.deviceName}】归属【${equipment.dept}】，当前账号归属【${currentSimulatedUser.department || currentSimulatedUser.dept}】。`, 'msg-quick-repair-blocked');
       return false;
     }
-    if (hasActiveEquipmentRepairTask(tasks, equipment)) {
+    const latestTasks = tasksRef.current;
+    if (hasActiveEquipmentRepairTask(latestTasks, equipment)) {
       appendWorkflowNotice(`⚠️ **重复报修提醒**\n设备【${equipment.deviceName}】已有未闭环维修工单，请在现有工单中补充故障信息，避免重复派单。`, 'msg-quick-repair-duplicate-blocked');
       return false;
     }
+    if (pendingQuickRepairEquipmentIdsRef.current.has(equipment.id)) {
+      appendWorkflowNotice(`⚠️ **重复报修提醒**\n设备【${equipment.deviceName}】正在同步快捷报修主工单，请勿重复点击。`, 'msg-quick-repair-pending-blocked');
+      return false;
+    }
+
+    pendingQuickRepairEquipmentIdsRef.current.add(equipment.id);
 
     const urgencyLevel: UrgencyLevel = urgency === 'high'
       ? (equipment.category === '急救生命支持' || equipment.riskLevel === '高' ? '生命支持' : '紧急')
@@ -194,7 +203,7 @@ export default function App() {
         ? '较急'
         : '普通';
     const normalizedDept = normalizeDepartmentName(equipment.dept);
-    const newTicketId = createNextTaskId(tasks);
+    const newTicketId = createNextTaskId(latestTasks);
     const now = new Date();
     const reportContactPerson = isClinicalReporter
       ? currentSimulatedUser.name
@@ -244,7 +253,15 @@ export default function App() {
         : `由资产档案快捷报修生成；档案维修单号：${workOrderNo}。工程师代建，现场联系人需向${normalizedDept || equipment.dept || '使用科室'}确认。`
     };
 
-    setTasks(prev => [newTicket, ...prev]);
+    const nextTasks = [newTicket, ...tasksRef.current];
+    tasksRef.current = nextTasks;
+    setTasks(prev => {
+      if (prev.some(task => task.id === newTicket.id)) return prev;
+      const mergedTasks = [newTicket, ...prev];
+      tasksRef.current = mergedTasks;
+      return mergedTasks;
+    });
+    pendingQuickRepairEquipmentIdsRef.current.delete(equipment.id);
     setSelectedTask(newTicket);
     setCurrentWorkspace('tasks');
     setMobileTab('detail');
@@ -554,6 +571,7 @@ export default function App() {
 
   // Persist tasks & Automatically synchronize status and maintenance logs to Equipment Archives
   useEffect(() => {
+    tasksRef.current = tasks;
     localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(tasks));
 
     // Automatically sync latest tasks status to equipment archives
