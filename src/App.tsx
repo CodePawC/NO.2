@@ -116,6 +116,7 @@ export default function App() {
   const [tasks, setTasks] = useState<StructuredTicket[]>(loadStoredTasks);
   const tasksRef = useRef(tasks);
   const pendingQuickRepairEquipmentIdsRef = useRef<Set<string>>(new Set());
+  const pendingClinicalAcceptanceTaskIdsRef = useRef<Set<string>>(new Set());
 
   const [currentWorkspace, setCurrentWorkspace] = useState<'tasks' | 'archives'>('tasks');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -994,8 +995,18 @@ export default function App() {
 
   // Handle Clinical Closed-loop Sign-off & Rating
   const handleClinicalAcceptTask = (taskId: string) => {
-    const targetTask = tasks.find(t => t.id === taskId);
+    const targetTask = tasksRef.current.find(t => t.id === taskId);
     if (!targetTask) return;
+
+    if (pendingClinicalAcceptanceTaskIdsRef.current.has(taskId)) {
+      setChatMessages(prev => [...prev, {
+        id: `msg-accept-pending-${Date.now()}`,
+        sender: 'assistant',
+        text: `⚠️ **验收签署提醒**\n工单 **${taskId}** 正在同步验收签署，请勿重复点击。`,
+        timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+      }]);
+      return;
+    }
 
     const blockReason = getClinicalAcceptanceBlockReason(targetTask, currentSimulatedUser, currentUserRole);
     if (blockReason) {
@@ -1007,6 +1018,8 @@ export default function App() {
       }]);
       return;
     }
+
+    pendingClinicalAcceptanceTaskIdsRef.current.add(taskId);
 
     const logMessage = `临床科室进行验收。确认评价：【${ratingValue}星】。评价意见：${ratingComment.trim() || '设备运行正常，质量完好，确认验收并结单。'}`;
     const newLog = {
@@ -1033,7 +1046,14 @@ export default function App() {
         : `[科室验收意见] ${ratingValue}星：${ratingComment.trim() || '设备使用一切正常'}`
     };
 
-    setTasks(prev => prev.map(t => t.id === taskId ? updatedTask : t));
+    const nextTasks = tasksRef.current.map(t => t.id === taskId ? updatedTask : t);
+    tasksRef.current = nextTasks;
+    setTasks(prev => {
+      const nextStateTasks = prev.map(t => t.id === taskId ? updatedTask : t);
+      tasksRef.current = nextStateTasks;
+      return nextStateTasks;
+    });
+    pendingClinicalAcceptanceTaskIdsRef.current.delete(taskId);
     setSelectedTask(updatedTask);
     setRatingComment('');
     setRatingValue(5);

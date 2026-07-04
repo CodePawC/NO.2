@@ -241,6 +241,18 @@ const checks: Check[] = [
           acceptSource.indexOf("setRatingComment('');") < acceptSource.indexOf('setRatingValue(5);'),
         '临床验收提交后应同时清空评价文本并把评分恢复为默认 5 星，避免下一张工单继承上次评分'
       );
+      assert(
+        appSource.includes('const tasksRef = useRef(tasks);') &&
+          appSource.includes('const pendingClinicalAcceptanceTaskIdsRef = useRef<Set<string>>(new Set());') &&
+          acceptSource.includes('const targetTask = tasksRef.current.find(t => t.id === taskId);') &&
+          acceptSource.includes('if (pendingClinicalAcceptanceTaskIdsRef.current.has(taskId))') &&
+          acceptSource.includes('msg-accept-pending') &&
+          acceptSource.includes('pendingClinicalAcceptanceTaskIdsRef.current.add(taskId);') &&
+          acceptSource.includes('const nextTasks = tasksRef.current.map(t => t.id === taskId ? updatedTask : t);') &&
+          acceptSource.includes('tasksRef.current = nextTasks;') &&
+          acceptSource.includes('pendingClinicalAcceptanceTaskIdsRef.current.delete(taskId);'),
+        '临床验收提交应基于最新任务列表写入并阻断同一工单连续点击，避免重复验收日志'
+      );
     }
   },
   {
