@@ -1897,6 +1897,12 @@ const checks: Check[] = [
         clinicalDetailSource.includes("selectedTask.status === '已关闭' || selectedTask.status === '已归档'"),
         '临床详情应为已关闭/已归档终态提供明确状态样式'
       );
+      assert(
+        clinicalDetailSource.includes('已完成闭环档案归档或关闭留痕') &&
+          clinicalDetailSource.includes("const isCompleted = ['已完成', '已归档', '已关闭'].includes(selectedTask.status);") &&
+          !clinicalDetailSource.includes("const isCompleted = ['已完成', '已归档'].includes(selectedTask.status);"),
+        '已完成后被工程师关闭留痕的设备维修单，在临床闭环时间线中也应显示为已闭环'
+      );
     }
   },
   {

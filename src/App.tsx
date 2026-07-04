@@ -2609,7 +2609,8 @@ export default function App() {
 
                         {/* Step 5: Finished */}
                         {(() => {
-                          const isCompleted = ['已完成', '已归档'].includes(selectedTask.status);
+                          const requiresClinicalAcceptance = needsClinicalAcceptance(selectedTask);
+                          const isCompleted = ['已完成', '已归档', '已关闭'].includes(selectedTask.status);
                           const isTransferredClosed = !needsClinicalAcceptance(selectedTask) && selectedTask.status === '已关闭';
                           return (
                             <div className="relative">
@@ -2623,8 +2624,8 @@ export default function App() {
                                   5. {needsClinicalAcceptance(selectedTask) ? '工单安全闭环（满意度归档）' : '转派工单闭环'}
                                 </h5>
                                 <p className="text-[11px] text-slate-500 mt-0.5">
-                                  {needsClinicalAcceptance(selectedTask)
-                                    ? (isCompleted ? '全流程完整跟踪，已完成闭环档案归档。' : '等待临床验收完成后自动形成闭环归档。')
+                                  {requiresClinicalAcceptance
+                                    ? (isCompleted ? '全流程完整跟踪，已完成闭环档案归档或关闭留痕。' : '等待临床验收完成后自动形成闭环归档。')
                                     : (isTransferredClosed ? '非设备问题已转派并关闭留痕，不写入医学设备维修档案。' : '等待装备科完成转派协调并关闭留痕。')}
                                 </p>
                               </div>
