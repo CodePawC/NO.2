@@ -1733,7 +1733,7 @@ const checks: Check[] = [
     }
   },
   {
-    name: 'clinical role switch preserves the focused same-department task',
+    name: 'role switch preserves the focused visible task',
     run: () => {
       const appSource = readFileSync('src/App.tsx', 'utf8');
       const switchStart = appSource.indexOf('const handleSwitchUser = (userId: string) => {');
@@ -1752,8 +1752,9 @@ const checks: Check[] = [
       assert(
         appSource.includes('const canUserSeeTask = (task: StructuredTicket, user: UserProfile, userRole = user.role) => {') &&
           switchSource.includes('const deptTasks = getDepartmentTasks(latestTasks, targetUser.department || targetUser.dept);') &&
-          switchSource.includes('setSelectedTask(tasksRef.current[0] || null);'),
-        '角色切换默认选中任务应使用目标用户权限和最新任务列表，而不是旧渲染快照'
+          switchSource.includes('setSelectedTask(latestSelectedTask || latestTasks[0] || null);') &&
+          !switchSource.includes('setSelectedTask(tasksRef.current[0] || null);'),
+        '切回工程师时应优先保留刚刚处理的聚焦工单，避免临床验收后归档动作跳到默认第一张'
       );
     }
   },

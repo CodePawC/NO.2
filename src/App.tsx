@@ -381,6 +381,9 @@ export default function App() {
     showRoleToast(`已切换身份为 【${targetUser.name}】(${targetUser.title})`);
 
     // If clinical user, add an automatic greeting from the AI assistant
+    const latestTasks = tasksRef.current;
+    const latestSelectedTask = selectedTask ? latestTasks.find(task => task.id === selectedTask.id) || null : null;
+
     if (targetUser.role === 'medical_staff') {
       const greetingMsg: ChatMessage = {
         id: `msg-welcome-${Date.now()}`,
@@ -391,8 +394,6 @@ export default function App() {
       setChatMessages([greetingMsg]);
       
       // Keep the current task in focus when switching back to its owning clinical department.
-      const latestTasks = tasksRef.current;
-      const latestSelectedTask = selectedTask ? latestTasks.find(task => task.id === selectedTask.id) || null : null;
       const deptTasks = getDepartmentTasks(latestTasks, targetUser.department || targetUser.dept);
       const currentTaskBelongsToTargetDept = latestSelectedTask && canUserSeeTask(latestSelectedTask, targetUser, targetUser.role);
       if (currentTaskBelongsToTargetDept) {
@@ -411,7 +412,7 @@ export default function App() {
         timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
       };
       setChatMessages([greetingMsg]);
-      setSelectedTask(tasksRef.current[0] || null);
+      setSelectedTask(latestSelectedTask || latestTasks[0] || null);
     }
   };
 
