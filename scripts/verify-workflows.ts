@@ -930,6 +930,30 @@ const checks: Check[] = [
           archiveSource.includes("setQuickRepairEquipId(fallbackEquipment?.id || '');"),
         '快捷报修弹窗中的设备选择应随角色和科室切换重新校验可报修范围'
       );
+      const printStart = archiveSource.indexOf('const handlePrintQR = () => {');
+      const printEnd = archiveSource.indexOf('const createQuickRepairRecord = (', printStart);
+      assert(printStart !== -1 && printEnd > printStart, '应能定位物联二维码打印逻辑');
+      const printSource = archiveSource.slice(printStart, printEnd);
+      assert(
+        printSource.includes("if (!ensureCanManageEquipmentArchive('打印物联二维码标签')) return;"),
+        '二维码标签打印属于档案管理外设指令，应统一走工程师权限拦截'
+      );
+      assert(
+        archiveSource.includes("title={canManageEquipmentArchive ? '点击打印二维码物联标签' : '临床只读：二维码打印由医学装备科工程师执行'}") &&
+          archiveSource.includes("title={canManageEquipmentArchive ? '点击向打印机发送标签打印指令' : '临床只读：二维码打印由医学装备科工程师执行'}") &&
+          archiveSource.includes("{canManageEquipmentArchive ? '打印标签' : '只读查看'}"),
+        '临床档案详情中的二维码应可查看但明确标识为只读，不能暗示可发起打印'
+      );
+      const footerStart = archiveSource.indexOf('<div id="equipment_details_actions"');
+      const footerEnd = archiveSource.indexOf('title={canCurrentUserReportEquipment(selectedEquipment) ? \'调用相机扫描SN码快速填充报修\'', footerStart);
+      assert(footerStart !== -1 && footerEnd > footerStart, '应能定位设备详情底部操作栏');
+      const footerSource = archiveSource.slice(footerStart, footerEnd);
+      assert(
+        footerSource.includes('{canManageEquipmentArchive && (') &&
+          footerSource.includes('title="打印物联二维码"') &&
+          footerSource.indexOf('{canManageEquipmentArchive && (') < footerSource.indexOf('title="打印物联二维码"'),
+        '设备详情底部的打印二维码按钮应只在工程师档案管理权限下渲染'
+      );
     }
   },
   {

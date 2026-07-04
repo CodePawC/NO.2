@@ -1563,6 +1563,7 @@ Clinical class: Life-saving respiratory device`;
 
   // Simulated Instant Actions (e.g. print QR, quick error reporting)
   const handlePrintQR = () => {
+    if (!ensureCanManageEquipmentArchive('打印物联二维码标签')) return;
     alert(`[指令发送成功] 已向科室标签打印机(Zebra ZD888) 发送打印指令。\n设备名：${selectedEquipment.deviceName}\n编号：${selectedEquipment.id}\n规格：${selectedEquipment.model}`);
   };
 
@@ -2316,8 +2317,10 @@ Clinical class: Life-saving respiratory device`;
                     {/* Compact Interactive QR Code Tag inside middle column header */}
                     <div 
                       onClick={handlePrintQR}
-                      className="w-11 h-11 bg-white p-1 border border-slate-200 hover:border-blue-400 rounded-lg flex items-center justify-center shadow-2xs flex-shrink-0 cursor-pointer group relative transition-all"
-                      title="点击打印二维码物联标签"
+                      className={`w-11 h-11 bg-white p-1 border border-slate-200 rounded-lg flex items-center justify-center shadow-2xs flex-shrink-0 group relative transition-all ${
+                        canManageEquipmentArchive ? 'hover:border-blue-400 cursor-pointer' : 'cursor-not-allowed opacity-80'
+                      }`}
+                      title={canManageEquipmentArchive ? '点击打印二维码物联标签' : '临床只读：二维码打印由医学装备科工程师执行'}
                     >
                       <img 
                         src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(
@@ -2328,7 +2331,9 @@ Clinical class: Life-saving respiratory device`;
                       />
                       {/* Hover Indicator overlay */}
                       <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-lg">
-                        <span className="text-[8px] text-white font-bold bg-black/60 px-1 py-0.5 rounded">打印</span>
+                        <span className="text-[8px] text-white font-bold bg-black/60 px-1 py-0.5 rounded">
+                          {canManageEquipmentArchive ? '打印' : '只读'}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -2442,9 +2447,11 @@ Clinical class: Life-saving respiratory device`;
                         {/* QR Code Section */}
                         <div className="flex flex-col items-center justify-center bg-white border border-slate-200 rounded-lg p-3 shadow-xs h-[160px]">
                           <div 
-                            className="w-24 h-24 bg-slate-50 p-1 border border-slate-100 rounded flex items-center justify-center shadow-inner relative group cursor-pointer" 
+                            className={`w-24 h-24 bg-slate-50 p-1 border border-slate-100 rounded flex items-center justify-center shadow-inner relative group ${
+                              canManageEquipmentArchive ? 'cursor-pointer' : 'cursor-not-allowed opacity-85'
+                            }`}
                             onClick={handlePrintQR} 
-                            title="点击向打印机发送标签打印指令"
+                            title={canManageEquipmentArchive ? '点击向打印机发送标签打印指令' : '临床只读：二维码打印由医学装备科工程师执行'}
                           >
                             <img 
                               src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(
@@ -2454,7 +2461,9 @@ Clinical class: Life-saving respiratory device`;
                               className="w-full h-full rounded"
                             />
                             <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded">
-                              <span className="text-[9px] text-white font-bold bg-black/60 px-1.5 py-0.5 rounded">打印标签</span>
+                              <span className="text-[9px] text-white font-bold bg-black/60 px-1.5 py-0.5 rounded">
+                                {canManageEquipmentArchive ? '打印标签' : '只读查看'}
+                              </span>
                             </div>
                           </div>
                           <p className="text-[10px] font-bold text-slate-700 mt-2 truncate max-w-full text-center">{selectedEquipment.id.toUpperCase()}</p>
@@ -3375,16 +3384,16 @@ Clinical class: Life-saving respiratory device`;
                 )}
 
                 <div className="flex items-center gap-1.5 sm:gap-3 flex-1 sm:flex-initial justify-end min-w-0">
-                  <button 
-                    onClick={handlePrintQR}
-                    className="p-2 sm:px-4 sm:py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-600 hover:bg-white bg-slate-50 flex items-center justify-center gap-1.5 transition-all flex-shrink-0"
-                    title="打印物联二维码"
-                  >
-                    <QrCode className="w-4 h-4" />
-                    <span className="hidden md:inline">打印二维码</span>
-                  </button>
                   {canManageEquipmentArchive && (
                     <>
+                      <button 
+                        onClick={handlePrintQR}
+                        className="p-2 sm:px-4 sm:py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-600 hover:bg-white bg-slate-50 flex items-center justify-center gap-1.5 transition-all flex-shrink-0"
+                        title="打印物联二维码"
+                      >
+                        <QrCode className="w-4 h-4" />
+                        <span className="hidden md:inline">打印二维码</span>
+                      </button>
                       <button
                         onClick={() => openEditModal(selectedEquipment)}
                         className="p-2 sm:px-4 sm:py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-600 hover:bg-white bg-slate-50 flex items-center justify-center gap-1.5 transition-all flex-shrink-0"
