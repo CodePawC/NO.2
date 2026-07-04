@@ -331,6 +331,10 @@ const checks: Check[] = [
       assertEqual(vendorRouting.recommendedDept, '医学装备科', '供应商协同应由医学装备科牵头');
       assertEqual(vendorRouting.needVendorCoop, '是', '供应商协同应标记厂家协同');
 
+      const noVendorRouting = getRecommendedRoutingForTask('设备报修', 'DR机房转运监护仪黑屏，暂不需要厂家，麻烦设备科看一下');
+      assertEqual(noVendorRouting.recommendedDept, '医学装备科', '否定厂家协同时仍应归医学装备科');
+      assertEqual(noVendorRouting.needVendorCoop, '否', '出现“暂不需要厂家”这类否定语义时不应误标厂家协同');
+
       const equipmentLeakRouting = getRecommendedRoutingForTask('供应商协同', '奥林巴斯胃镜插入管漏水，需要厂家协同检测');
       assertEqual(equipmentLeakRouting.recommendedDept, '医学装备科', '医学设备漏水不应被误判为后勤水电问题');
     }
@@ -1224,6 +1228,12 @@ const checks: Check[] = [
         createSource.includes("draftTicket.taskType === '非设备类转派任务' ? '设备报修'"),
         '临床端不能通过手动把任务类型改为非设备转派来绕过设备维修闭环'
       );
+      assert(
+        createSource.includes("const effectiveNeedVendorCoop = currentUserRole === 'medical_staff'") &&
+          createSource.includes('? routing.needVendorCoop') &&
+          createSource.includes(": (routing.needVendorCoop === '是' ? '是' : (draftTicket.needVendorCoop || '否'))"),
+        '临床端建单时厂家协同应按故障内容重算，不能采用手动标记值'
+      );
 
       const inlineTaskTypeStart = appSource.indexOf('<label className="text-[10px] font-bold text-slate-500 block mb-1">任务分类</label>');
       const inlineTaskTypeEnd = appSource.indexOf('<label className="text-[10px] font-bold text-slate-500 block mb-1">任务来源</label>', inlineTaskTypeStart);
@@ -1253,6 +1263,15 @@ const checks: Check[] = [
         recommendedDeptSource.includes("disabled={currentUserRole === 'medical_staff'}") &&
           recommendedDeptSource.includes('临床端不可手动改派'),
         '完整草稿弹窗应禁止临床手动修改建议责任部门，并给出自动判定说明'
+      );
+      const vendorCoopStart = appSource.indexOf('{/* 14. 是否需要厂家协同 */}');
+      const vendorCoopEnd = appSource.indexOf('{/* 7. 问题描述 / 故障现象 */}', vendorCoopStart);
+      assert(vendorCoopStart !== -1 && vendorCoopEnd > vendorCoopStart, '应能定位完整草稿中的厂家协同字段');
+      const vendorCoopSource = appSource.slice(vendorCoopStart, vendorCoopEnd);
+      assert(
+        vendorCoopSource.includes("disabled={currentUserRole === 'medical_staff'}") &&
+          vendorCoopSource.includes('厂家协同由系统按故障描述识别，并由医学装备科工程师复核联系'),
+        '完整草稿弹窗应禁止临床手动标记厂家协同，避免绕过系统路由判定'
       );
     }
   },

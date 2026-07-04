@@ -914,7 +914,9 @@ export default function App() {
     const effectiveRecommendedDept = currentUserRole === 'medical_staff'
       ? routing.recommendedDept
       : (forwardDept || draftTicket.recommendedDept || routing.recommendedDept);
-    const effectiveNeedVendorCoop = routing.needVendorCoop === '是' ? '是' : (draftTicket.needVendorCoop || '否');
+    const effectiveNeedVendorCoop = currentUserRole === 'medical_staff'
+      ? routing.needVendorCoop
+      : (routing.needVendorCoop === '是' ? '是' : (draftTicket.needVendorCoop || '否'));
     const routingNote = routing.routingNote && !draftTicket.notes?.includes(routing.routingNote) ? routing.routingNote : '';
     const defaultPerson = currentUserRole === 'medical_staff' ? currentSimulatedUser.name : (draftTicket.contactPerson || '未录入联系人');
     const defaultPhone = currentUserRole === 'medical_staff' ? (currentSimulatedUser.phone || draftTicket.contactPhone || '未录入电话') : (draftTicket.contactPhone || '未录入电话');
@@ -3558,11 +3560,15 @@ export default function App() {
                   <select 
                     value={draftTicket.needVendorCoop || '否'}
                     onChange={(e) => handleUpdateDraftField('needVendorCoop', e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none"
+                    disabled={currentUserRole === 'medical_staff'}
+                    className="w-full bg-slate-50 disabled:bg-slate-100 disabled:text-slate-400 border border-slate-200 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none"
                   >
                     <option value="否">否 (院内自主维修保养)</option>
                     <option value="是">是 (需要通知厂家工程师协助)</option>
                   </select>
+                  {currentUserRole === 'medical_staff' && (
+                    <p className="text-[9px] text-slate-400 mt-1">厂家协同由系统按故障描述识别，并由医学装备科工程师复核联系。</p>
+                  )}
                 </div>
 
                 {/* 7. 问题描述 / 故障现象 */}

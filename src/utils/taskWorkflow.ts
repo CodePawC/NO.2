@@ -133,7 +133,8 @@ export const getRecommendedRoutingForTask = (taskType?: TaskType, text = '') => 
   const isMedicalEquipmentIssue = /呼吸机|除颤仪|麻醉机|监护仪|氧气|负压吸引|胃镜|内镜|dr机|dr房|注射泵|输液泵|超声|胎心|血气|生化|医学装备|医疗设备/i.test(normalizedText);
   const isEquipmentLeakIssue = /漏水/i.test(normalizedText) && /胃镜|内镜|奥林巴斯|插入管|探头|管路|设备|泵|机/i.test(normalizedText);
   const isLogisticsIssue = /后勤|跳闸|照明|插座|强电|水管|空调|门锁|电源插座|漏电|配电/i.test(normalizedText) || (/漏水/i.test(normalizedText) && !isEquipmentLeakIssue);
-  const isVendorIssue = taskType === '供应商协同' || /厂家|供应商|外送|寄修|返厂|奥林巴斯|维保公司|售后/i.test(normalizedText);
+  const explicitlyNoVendorCoop = /暂不需要厂家|不需要厂家|无需厂家|不用厂家|不联系厂家|无需供应商|不需要供应商|院内自主|设备科看一下/i.test(normalizedText);
+  const isVendorIssue = taskType === '供应商协同' || (!explicitlyNoVendorCoop && /厂家|供应商|外送|寄修|返厂|奥林巴斯|维保公司|售后/i.test(normalizedText));
 
   if (isVendorIssue) {
     return {
