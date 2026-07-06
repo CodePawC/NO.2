@@ -2175,9 +2175,18 @@ const checks: Check[] = [
           appSource.includes('const getVisibleFallbackTask = (sourceTasks: StructuredTicket[]) => {') &&
           appSource.includes('return getDepartmentTasks(sourceTasks, currentUserDepartment)[0] || null;') &&
           switchSource.includes('const deptTasks = getDepartmentTasks(latestTasks, targetUser.department || targetUser.dept);') &&
-          switchSource.includes('setSelectedTask(latestSelectedTask || latestTasks[0] || null);') &&
+          switchSource.includes('const engineerFocusedTask = latestSelectedTask || latestTasks[0] || null;') &&
+          switchSource.includes('setSelectedTask(engineerFocusedTask);') &&
           !switchSource.includes('setSelectedTask(tasksRef.current[0] || null);'),
         '切换身份和回退选中工单时应复用当前角色优先级规则，工程师仍优先保留刚刚处理的聚焦工单'
+      );
+      assert(
+        switchSource.includes('setMobileTab(\'detail\');') &&
+          switchSource.includes('setMobileTab(\'list\');') &&
+          switchSource.includes('setMobileTab(\'chat\');') &&
+          switchSource.includes('const engineerFocusedTask = latestSelectedTask || latestTasks[0] || null;') &&
+          switchSource.includes("setMobileTab(engineerFocusedTask ? 'detail' : 'list');"),
+        '切换身份时移动端标签应随新角色上下文归位：有聚焦单看详情、有本科室任务看列表、无任务回到 AI 报修入口'
       );
     }
   },

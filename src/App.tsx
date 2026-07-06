@@ -421,10 +421,13 @@ export default function App() {
       const currentTaskBelongsToTargetDept = latestSelectedTask && canUserSeeTask(latestSelectedTask, targetUser, targetUser.role);
       if (currentTaskBelongsToTargetDept) {
         setSelectedTask(latestSelectedTask);
+        setMobileTab('detail');
       } else if (deptTasks.length > 0) {
         setSelectedTask(deptTasks[0]);
+        setMobileTab('list');
       } else {
         setSelectedTask(null);
+        setMobileTab('chat');
       }
     } else {
       // Engineer greeting
@@ -435,7 +438,9 @@ export default function App() {
         timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
       };
       setChatMessages([greetingMsg]);
-      setSelectedTask(latestSelectedTask || latestTasks[0] || null);
+      const engineerFocusedTask = latestSelectedTask || latestTasks[0] || null;
+      setSelectedTask(engineerFocusedTask);
+      setMobileTab(engineerFocusedTask ? 'detail' : 'list');
     }
   };
 
