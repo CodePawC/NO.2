@@ -546,14 +546,14 @@ export default function MaintenanceCalendar({
       return;
     }
 
-    if (!deployEquipmentId || !submittedDate) {
-      triggerNotification('❌ 请完整选择受托医疗设备及计划日期。');
+    if (!submittedDate) {
+      triggerNotification('❌ 请选择排期计划开展日期。');
       return;
     }
 
-    const selectedEquipment = filteredEquipmentsForDeploy.find(eq => eq.id === deployEquipmentId);
+    const selectedEquipment = selectedDeployEquipment;
     if (!selectedEquipment) {
-      triggerNotification('❌ 当前筛选条件下无法部署到该设备，请重新选择可见设备。');
+      triggerNotification(`❌ ${deploySubmitDisabledReason || '当前筛选条件下无法部署到该设备，请重新选择可见设备。'}`);
       return;
     }
 
@@ -608,17 +608,7 @@ export default function MaintenanceCalendar({
 
   // Pre-fill deploy form from calendar cell click
   const openDeployForDate = (dateStr: string) => {
-    const blockReason = getScheduleManageBlockReason('新工单部署');
-    if (blockReason) {
-      triggerNotification(`⚠️ ${blockReason}`);
-      return;
-    }
-
-    setDeployDate(dateStr);
-    setIsDeployMode(true);
-    setSelectedEvent(null);
-    setActiveDatePopup(null);
-    setDeployEquipmentId(filteredEquipmentsForDeploy[0]?.id || '');
+    openDeployPanel(dateStr);
   };
 
   // Direct dispatch handler (links to existing recording flow)
@@ -684,6 +674,15 @@ export default function MaintenanceCalendar({
              eq.sn.toLowerCase().includes(q);
     });
   }, [equipments, deploySearchQuery]);
+  const selectedDeployEquipment = filteredEquipmentsForDeploy.find(eq => eq.id === deployEquipmentId) || null;
+  const deploySubmitDisabledReason = !deployEquipmentId
+    ? '请先选择受托医疗设备。'
+    : !selectedDeployEquipment
+      ? '当前搜索筛选下无法部署到该设备，请重新选择可见设备。'
+      : !deployDate
+        ? '请选择排期计划开展日期。'
+        : '';
+  const canSubmitDeployWork = !deploySubmitDisabledReason;
   const filteredDeployEquipmentIds = filteredEquipmentsForDeploy.map(eq => eq.id).join('|');
 
   useEffect(() => {
@@ -697,6 +696,21 @@ export default function MaintenanceCalendar({
       setDeployEquipmentId(filteredEquipmentsForDeploy[0]?.id || '');
     }
   }, [isDeployMode, deployEquipmentId, filteredDeployEquipmentIds]);
+
+  const openDeployPanel = (dateStr = getLocalDateString()) => {
+    const blockReason = getScheduleManageBlockReason('新工单部署');
+    if (blockReason) {
+      triggerNotification(`⚠️ ${blockReason}`);
+      return;
+    }
+
+    setDeploySearchQuery('');
+    setDeployDate(dateStr);
+    setIsDeployMode(true);
+    setSelectedEvent(null);
+    setActiveDatePopup(null);
+    setDeployEquipmentId(equipments[0]?.id || '');
+  };
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-slate-50/50">
@@ -1384,7 +1398,8 @@ export default function MaintenanceCalendar({
                 <button
                   id="btn-maintenance-submit-deploy"
                   type="submit"
-                  disabled={!deployEquipmentId || filteredEquipmentsForDeploy.length === 0}
+                  disabled={!canSubmitDeployWork}
+                  title={canSubmitDeployWork ? '立即下发维保工单' : deploySubmitDisabledReason}
                   className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-lg text-xs font-black shadow-sm transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
                 >
                   <Send className="w-3.5 h-3.5" />
@@ -1457,11 +1472,7 @@ export default function MaintenanceCalendar({
                   </p>
                 </div>
                 <button
-                  onClick={() => {
-                    setIsDeployMode(true);
-                    setDeployEquipmentId(filteredEquipmentsForDeploy[0]?.id || '');
-                    setDeployDate(getLocalDateString());
-                  }}
+                  onClick={() => openDeployPanel()}
                   className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-black shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />

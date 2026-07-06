@@ -3065,7 +3065,10 @@ const checks: Check[] = [
         '维保日历详情面板应跟随当前筛选后的事件列表同步，事件被角色/科室/筛选/设备更新移除时应自动关闭'
       );
       assert(
-        calendarSource.includes('const selectedEquipment = filteredEquipmentsForDeploy.find(eq => eq.id === deployEquipmentId);') &&
+        calendarSource.includes('const selectedDeployEquipment = filteredEquipmentsForDeploy.find(eq => eq.id === deployEquipmentId) || null;') &&
+          calendarSource.includes('const deploySubmitDisabledReason = !deployEquipmentId') &&
+          calendarSource.includes('const canSubmitDeployWork = !deploySubmitDisabledReason;') &&
+          calendarSource.includes('const selectedEquipment = selectedDeployEquipment;') &&
           calendarSource.includes('当前筛选条件下无法部署到该设备') &&
           calendarSource.includes("const submittedDate = String(new FormData(form).get('deployDate') || deployDate).trim();") &&
           calendarSource.includes('nextMaintenanceDate: submittedDate') &&
@@ -3075,18 +3078,25 @@ const checks: Check[] = [
           calendarSource.includes('const filteredDeployEquipmentIds = filteredEquipmentsForDeploy.map(eq => eq.id).join') &&
           calendarSource.includes("if (!isDeployMode) return;") &&
           calendarSource.includes('!filteredEquipmentsForDeploy.some(eq => eq.id === deployEquipmentId)') &&
-          calendarSource.includes("setDeployEquipmentId(filteredEquipmentsForDeploy[0]?.id || '');"),
-        '工程师部署表单应读取表单当前日期值、随设备搜索筛选校正选中设备，并阻止向隐藏设备下发工单'
+          calendarSource.includes("setDeployEquipmentId(filteredEquipmentsForDeploy[0]?.id || '');") &&
+          calendarSource.includes('const openDeployPanel = (dateStr = getLocalDateString()) => {') &&
+          calendarSource.includes("setDeploySearchQuery('');") &&
+          calendarSource.includes("setDeployEquipmentId(equipments[0]?.id || '');") &&
+          calendarSource.includes('const openDeployForDate = (dateStr: string) => {') &&
+          calendarSource.includes('openDeployPanel(dateStr);') &&
+          calendarSource.includes('onClick={() => openDeployPanel()}'),
+        '工程师部署表单应读取表单当前日期值、打开时清理旧搜索、随设备搜索筛选校正选中设备，并阻止向隐藏设备下发工单'
       );
       assert(
         calendarSource.includes('<option value="" disabled className="text-slate-400 italic">未找到相匹配的受试设备</option>') &&
-          calendarSource.includes('disabled={!deployEquipmentId || filteredEquipmentsForDeploy.length === 0}') &&
+          calendarSource.includes('disabled={!canSubmitDeployWork}') &&
+          calendarSource.includes("title={canSubmitDeployWork ? '立即下发维保工单' : deploySubmitDisabledReason}") &&
           calendarSource.includes('id="maintenance-deploy-search"') &&
           calendarSource.includes('id="maintenance-deploy-equipment"') &&
           calendarSource.includes('id="maintenance-deploy-date"') &&
           calendarSource.includes('id="maintenance-deploy-notes"') &&
           calendarSource.includes('id="btn-maintenance-submit-deploy"'),
-        '工程师部署表单无可见设备时应显示空值提示、禁用提交按钮，并暴露稳定控件 id 便于回归验证'
+        '工程师部署表单无有效可见设备或日期时应显示空值提示、禁用提交按钮并给出原因，且暴露稳定控件 id 便于回归验证'
       );
       assert(
         calendarSource.includes('const targetEventId = selectedEvent.id;') &&
