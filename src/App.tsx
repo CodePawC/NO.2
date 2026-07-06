@@ -1258,6 +1258,7 @@ export default function App() {
     setTasks(nextTasks);
     localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(nextTasks));
     setSelectedTask(updatedTask);
+    pendingEngineerLogKeysRef.current.delete(pendingLogKey);
     setActiveLogAction('');
   };
 

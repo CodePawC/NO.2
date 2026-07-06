@@ -1186,8 +1186,10 @@ const checks: Check[] = [
           addLogSource.includes('const nextTasks = tasksRef.current.map(t => t.id === latestTask.id ? updatedTask : t);') &&
           addLogSource.includes('tasksRef.current = nextTasks;') &&
           addLogSource.includes('setTasks(nextTasks);') &&
-          addLogSource.includes('localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(nextTasks));'),
-        '工程师追加日志应基于最新任务列表写入、立即持久化，并阻断同一条处置日志连续点击重复提交'
+          addLogSource.includes('localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(nextTasks));') &&
+          addLogSource.includes('pendingEngineerLogKeysRef.current.delete(pendingLogKey);') &&
+          addLogSource.indexOf('pendingEngineerLogKeysRef.current.add(pendingLogKey);') < addLogSource.indexOf('pendingEngineerLogKeysRef.current.delete(pendingLogKey);'),
+        '工程师追加日志应基于最新任务列表写入、立即持久化，阻断连续点击后释放当前日志 key，避免同一句标准处置记录被永久锁定'
       );
       assert(
         appSource.includes("disabled={!activeLogAction.trim() || isTaskTerminal(selectedTask)}") &&
