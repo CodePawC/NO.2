@@ -1958,6 +1958,17 @@ const checks: Check[] = [
           createSource.includes('localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(nextTasks));'),
         '草稿建单应基于最新任务列表生成单号、立即持久化并阻断连续点击，避免重复单号、重复工单或刷新丢失'
       );
+      {
+        const successPersistIndex = createSource.indexOf('localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(nextTasks));');
+        const clearDraftIndex = createSource.indexOf('setDraftTicket(null);', successPersistIndex);
+        const resetCreateLockIndex = createSource.indexOf('isCreatingDraftTicketRef.current = false;', clearDraftIndex);
+        assert(
+          successPersistIndex !== -1 &&
+            clearDraftIndex > successPersistIndex &&
+            resetCreateLockIndex > clearDraftIndex,
+          'AI 草稿成功建单后应立即释放创建锁，保证同一角色可连续提交下一张草稿'
+        );
+      }
       assert(
         createSource.includes('const duplicateRepairTask = shouldLinkEquipmentToTicket && linkedEquipment') &&
           createSource.includes('findActiveEquipmentRepairTask(tasksRef.current, linkedEquipment)') &&

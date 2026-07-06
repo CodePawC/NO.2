@@ -1084,6 +1084,7 @@ export default function App() {
     
     // Clear draft
     setDraftTicket(null);
+    isCreatingDraftTicketRef.current = false;
     setAiSuggestions([]);
     setForwardDept(null);
     setIsClarification(false);
