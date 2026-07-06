@@ -85,6 +85,10 @@ export const getEngineerStatusBlockReason = (task: StructuredTicket, nextStatus:
     return '工程师不能直接结单，请先转为【待科室验收】，由临床科室签署后自动完成。';
   }
 
+  if (nextStatus === '待科室验收' && !needsClinicalAcceptance(task)) {
+    return '非设备转派任务无需临床设备验收，请关闭留痕或继续转派跟进。';
+  }
+
   if (task.status === '待科室验收') {
     return '已发起科室验收的工单需等待临床签署，不能由工程师回退状态。';
   }
