@@ -634,6 +634,33 @@ const checks: Check[] = [
     }
   },
   {
+    name: 'task urgency text styling covers every urgency level',
+    run: () => {
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const helperStart = appSource.indexOf('const getUrgencyTextClass = (urgency?: UrgencyLevel) => {');
+      const helperEnd = appSource.indexOf('export default function App()', helperStart);
+      assert(helperStart !== -1 && helperEnd > helperStart, '应能定位紧急程度文字样式映射函数');
+      const helperSource = appSource.slice(helperStart, helperEnd);
+
+      assert(
+        helperSource.includes("urgency === '生命支持'") &&
+          helperSource.includes('text-red-600 font-extrabold animate-pulse') &&
+          helperSource.includes("urgency === '特急'") &&
+          helperSource.includes("urgency === '紧急'") &&
+          helperSource.includes("urgency === '较急'") &&
+          helperSource.includes("return 'text-slate-700 font-semibold';"),
+        '紧急程度文字样式应覆盖生命支持、特急、紧急、较急、普通完整枚举'
+      );
+
+      assert(
+        appSource.includes('className={`w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none ${getUrgencyTextClass(draftTicket.urgency as UrgencyLevel | undefined)}`}') &&
+          appSource.includes('className={getUrgencyTextClass(selectedTask.urgency)}') &&
+          appSource.includes('className={`w-full bg-slate-50 border border-slate-200 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none ${getUrgencyTextClass(draftTicket.urgency as UrgencyLevel | undefined)}`}'),
+        '草稿侧栏、工程师详情、完整草稿弹窗应复用统一紧急程度文字样式，生命支持不能在详情页显示为普通样式'
+      );
+    }
+  },
+  {
     name: 'engineer task priority only pins active critical work',
     run: () => {
       const activeNormalTask = createTask({
@@ -2233,8 +2260,7 @@ const checks: Check[] = [
           inlineUrgencySource.includes('<option value="紧急">紧急</option>') &&
           inlineUrgencySource.includes('<option value="特急">特急</option>') &&
           inlineUrgencySource.includes('<option value="生命支持">生命支持</option>') &&
-          inlineUrgencySource.includes("draftTicket.urgency === '生命支持'") &&
-          inlineUrgencySource.includes("draftTicket.urgency === '较急'"),
+          inlineUrgencySource.includes('getUrgencyTextClass(draftTicket.urgency as UrgencyLevel | undefined)'),
         '侧边草稿紧急程度下拉应覆盖完整业务枚举，生命支持草稿不能显示成无匹配选项'
       );
       const modalUrgencyStart = appSource.indexOf('<label className="text-slate-600 font-bold block mb-1 text-xs">9. 紧急程度</label>');

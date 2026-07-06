@@ -99,6 +99,14 @@ const getTaskAcceptanceDisplay = (task: StructuredTicket) => {
   };
 };
 
+const getUrgencyTextClass = (urgency?: UrgencyLevel) => {
+  if (urgency === '生命支持') return 'text-red-600 font-extrabold animate-pulse';
+  if (urgency === '特急') return 'text-red-600 font-bold';
+  if (urgency === '紧急') return 'text-orange-500 font-semibold';
+  if (urgency === '较急') return 'text-amber-500 font-semibold';
+  return 'text-slate-700 font-semibold';
+};
+
 export default function App() {
   const [tasks, setTasks] = useState<StructuredTicket[]>(loadStoredTasks);
   const tasksRef = useRef(tasks);
@@ -2954,12 +2962,7 @@ export default function App() {
                       <select 
                         value={draftTicket.urgency || '普通'}
                         onChange={(e) => handleUpdateDraftField('urgency', e.target.value)}
-                        className={`w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none ${
-                          draftTicket.urgency === '生命支持' ? 'text-red-600 font-bold' :
-                          draftTicket.urgency === '特急' ? 'text-red-500 font-bold' :
-                          draftTicket.urgency === '紧急' ? 'text-orange-500 font-semibold' :
-                          draftTicket.urgency === '较急' ? 'text-amber-500 font-semibold' : 'text-slate-700'
-                        }`}
+                        className={`w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none ${getUrgencyTextClass(draftTicket.urgency as UrgencyLevel | undefined)}`}
                       >
                         <option value="普通">普通</option>
                         <option value="较急">较急</option>
@@ -3302,10 +3305,7 @@ export default function App() {
 
                     <div>
                       <span className="text-slate-400 block text-[10px]">紧急程度</span>
-                      <span className={`font-bold ${
-                        selectedTask.urgency === '特急' ? 'text-red-600' :
-                        selectedTask.urgency === '紧急' ? 'text-orange-500' : 'text-slate-700'
-                      }`}>
+                      <span className={getUrgencyTextClass(selectedTask.urgency)}>
                         {selectedTask.urgency}
                       </span>
                     </div>
@@ -3731,11 +3731,7 @@ export default function App() {
                   <select 
                     value={draftTicket.urgency || '普通'}
                     onChange={(e) => handleUpdateDraftField('urgency', e.target.value)}
-                    className={`w-full bg-slate-50 border border-slate-200 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none font-semibold ${
-                      draftTicket.urgency === '生命支持' ? 'text-red-600 font-bold' :
-                      draftTicket.urgency === '特急' ? 'text-red-500' :
-                      draftTicket.urgency === '紧急' ? 'text-orange-500 animate-pulse' : 'text-slate-700'
-                    }`}
+                    className={`w-full bg-slate-50 border border-slate-200 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none ${getUrgencyTextClass(draftTicket.urgency as UrgencyLevel | undefined)}`}
                   >
                     <option value="普通">普通 (24小时内解决)</option>
                     <option value="较急">较急 (4小时内解决)</option>
