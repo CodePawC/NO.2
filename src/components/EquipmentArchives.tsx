@@ -2488,8 +2488,16 @@ Clinical class: Life-saving respiratory device`;
                     <span>返回设备列表</span>
                   </button>
                   <button
+                    id="btn-mobile-archive-scan-repair"
+                    aria-label="移动端扫码报修当前设备"
                     onClick={() => setIsScannerModalOpen(true)}
-                    className="flex items-center gap-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm active:scale-95 transition-all"
+                    disabled={!canStartQuickRepairForEquipment(selectedEquipment)}
+                    title={canStartQuickRepairForEquipment(selectedEquipment) ? '调用相机扫描SN码快速填充报修' : getQuickRepairBlockMessage(selectedEquipment)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm active:scale-95 transition-all ${
+                      canStartQuickRepairForEquipment(selectedEquipment)
+                        ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white'
+                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    }`}
                   >
                     <QrCode className="w-3.5 h-3.5" />
                     <span>📷 扫码报修</span>

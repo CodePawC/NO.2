@@ -1820,6 +1820,14 @@ const checks: Check[] = [
         '临床快捷面板入口应在本科室无可报修设备时直接禁用并提示原因，避免打开空报修弹窗'
       );
       assert(
+        archiveSource.includes('id="btn-mobile-archive-scan-repair"') &&
+          archiveSource.includes('aria-label="移动端扫码报修当前设备"') &&
+          archiveSource.includes('disabled={!canStartQuickRepairForEquipment(selectedEquipment)}') &&
+          archiveSource.includes("title={canStartQuickRepairForEquipment(selectedEquipment) ? '调用相机扫描SN码快速填充报修' : getQuickRepairBlockMessage(selectedEquipment)}") &&
+          archiveSource.includes("canStartQuickRepairForEquipment(selectedEquipment)\n                        ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white'\n                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'"),
+        '移动端详情头部扫码报修入口应与桌面入口共享可报修状态，避免维修中设备仍能打开无效扫码流程'
+      );
+      assert(
         archiveSource.includes('id="main_container" className="flex-1 min-h-0 relative flex flex-col pb-20 md:pb-0"') &&
           archiveSource.includes('id="right_column_panel"') &&
           archiveSource.includes("mobileView === 'ai' ? 'fixed inset-x-3 top-48 bottom-20 z-20 flex' : 'hidden md:flex'") &&
