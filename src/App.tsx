@@ -1174,10 +1174,25 @@ export default function App() {
   };
 
   // Manually update fields in active draft
-  const handleUpdateDraftField = (field: keyof StructuredTicket, value: any) => {
+  const handleUpdateDraftField = (
+    field: keyof StructuredTicket,
+    value: any,
+    options: { allowClinicalAssetId?: boolean } = {}
+  ) => {
+    const isClinicalLockedField = currentUserRole === 'medical_staff' && (
+      field === 'taskType' ||
+      field === 'source' ||
+      field === 'department' ||
+      field === 'contactPerson' ||
+      field === 'contactPhone' ||
+      field === 'recommendedDept' ||
+      field === 'needVendorCoop' ||
+      (field === 'deviceId' && !options.allowClinicalAssetId)
+    );
+
     setDraftTicket(prev => ({
       ...(prev || {}),
-      [field]: value,
+      ...(isClinicalLockedField ? {} : { [field]: value }),
       ...(currentUserRole === 'medical_staff'
         ? {
             source: normalizeClinicalDraftSource(prev?.source),
@@ -2937,7 +2952,7 @@ export default function App() {
                           const selected = visibleEquipments.find(eq => eq.id === e.target.value);
                           if (selected) {
                             handleUpdateDraftField('deviceName', `${selected.manufacturer} ${selected.deviceName} (${selected.model})`);
-                            handleUpdateDraftField('deviceId', selected.id);
+                            handleUpdateDraftField('deviceId', selected.id, { allowClinicalAssetId: true });
                             handleUpdateDraftField('department', selected.dept);
                             if (selected.riskLevel === '高') {
                               handleUpdateDraftField('urgency', '紧急');
@@ -3002,8 +3017,12 @@ export default function App() {
                         value={draftTicket.deviceId || ''} 
                         placeholder="如：EQ-1022"
                         onChange={(e) => handleUpdateDraftField('deviceId', e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 font-mono"
+                        disabled={currentUserRole === 'medical_staff'}
+                        className="w-full bg-white disabled:bg-slate-100 disabled:text-slate-400 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 font-mono"
                       />
+                      {currentUserRole === 'medical_staff' && (
+                        <p className="text-[9px] text-slate-400 mt-1">临床端不可手动改写资产编号；请通过上方本科室在册资产选择同步。</p>
+                      )}
                     </div>
 
                     <div>
@@ -3600,7 +3619,7 @@ export default function App() {
                       const selected = visibleEquipments.find(eq => eq.id === e.target.value);
                       if (selected) {
                         handleUpdateDraftField('deviceName', `${selected.manufacturer} ${selected.deviceName} (${selected.model})`);
-                        handleUpdateDraftField('deviceId', selected.id);
+                        handleUpdateDraftField('deviceId', selected.id, { allowClinicalAssetId: true });
                         handleUpdateDraftField('department', selected.dept);
                         if (selected.riskLevel === '高') {
                           handleUpdateDraftField('urgency', '紧急');
@@ -3640,8 +3659,12 @@ export default function App() {
                     value={draftTicket.deviceId || ''} 
                     onChange={(e) => handleUpdateDraftField('deviceId', e.target.value)}
                     placeholder="如：EQ-10023"
-                    className="w-full bg-slate-50 border border-slate-200 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none font-mono"
+                    disabled={currentUserRole === 'medical_staff'}
+                    className="w-full bg-slate-50 disabled:bg-slate-100 disabled:text-slate-400 border border-slate-200 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none font-mono"
                   />
+                  {currentUserRole === 'medical_staff' && (
+                    <p className="text-[9px] text-slate-400 mt-1">设备编号由在册资产选择或系统识别同步，临床端不可手动改写资产编号。</p>
+                  )}
                 </div>
 
                 {/* 8. 是否影响临床 */}

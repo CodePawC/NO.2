@@ -2019,6 +2019,39 @@ const checks: Check[] = [
           recommendedDeptSource.includes('临床端不可手动改派'),
         '完整草稿弹窗应禁止临床手动修改建议责任部门，并给出自动判定说明'
       );
+
+      const updateDraftStart = appSource.indexOf('const handleUpdateDraftField = (');
+      const updateDraftEnd = appSource.indexOf('// Add custom manual event/log to task', updateDraftStart);
+      assert(updateDraftStart !== -1 && updateDraftEnd > updateDraftStart, '应能定位草稿字段更新逻辑');
+      const updateDraftSource = appSource.slice(updateDraftStart, updateDraftEnd);
+      assert(
+        updateDraftSource.includes("field === 'deviceId' && !options.allowClinicalAssetId") &&
+          updateDraftSource.includes('isClinicalLockedField ? {} : { [field]: value }') &&
+          updateDraftSource.includes('allowClinicalAssetId?: boolean'),
+        '临床端草稿字段更新逻辑应拦截手动改写设备编号，仅允许从本科室在册资产选择同步'
+      );
+
+      const inlineDeviceIdStart = appSource.indexOf('<label className="text-[10px] font-bold text-slate-500 block mb-1">设备资产编号</label>');
+      const inlineDeviceIdEnd = appSource.indexOf('<label className="text-[10px] font-bold text-slate-500 block mb-1">科室联系人</label>', inlineDeviceIdStart);
+      assert(inlineDeviceIdStart !== -1 && inlineDeviceIdEnd > inlineDeviceIdStart, '应能定位侧边草稿中的设备资产编号字段');
+      const inlineDeviceIdSource = appSource.slice(inlineDeviceIdStart, inlineDeviceIdEnd);
+      assert(
+        inlineDeviceIdSource.includes("disabled={currentUserRole === 'medical_staff'}") &&
+          inlineDeviceIdSource.includes('临床端不可手动改写资产编号') &&
+          appSource.includes("handleUpdateDraftField('deviceId', selected.id, { allowClinicalAssetId: true });"),
+        '侧边草稿应禁止临床手动修改设备资产编号，但允许从本科室在册资产下拉选择同步'
+      );
+
+      const modalDeviceIdStart = appSource.indexOf('{/* 6. 设备编号 */}');
+      const modalDeviceIdEnd = appSource.indexOf('{/* 8. 是否影响临床 */}', modalDeviceIdStart);
+      assert(modalDeviceIdStart !== -1 && modalDeviceIdEnd > modalDeviceIdStart, '应能定位完整草稿中的设备编号字段');
+      const modalDeviceIdSource = appSource.slice(modalDeviceIdStart, modalDeviceIdEnd);
+      assert(
+        modalDeviceIdSource.includes("disabled={currentUserRole === 'medical_staff'}") &&
+          modalDeviceIdSource.includes('临床端不可手动改写资产编号'),
+        '完整草稿弹窗应禁止临床手动修改设备编号，避免外科室资产编号被手工带入'
+      );
+
       const vendorCoopStart = appSource.indexOf('{/* 14. 是否需要厂家协同 */}');
       const vendorCoopEnd = appSource.indexOf('{/* 7. 问题描述 / 故障现象 */}', vendorCoopStart);
       assert(vendorCoopStart !== -1 && vendorCoopEnd > vendorCoopStart, '应能定位完整草稿中的厂家协同字段');
