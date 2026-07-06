@@ -3851,15 +3851,15 @@ Clinical class: Life-saving respiratory device`;
               </div>
 
               {/* Action Toolbar Footer in Details Sheet */}
-              <div id="equipment_details_actions" className="p-2.5 sm:p-4 bg-slate-50 border-t border-slate-200/80 flex justify-between items-center gap-2 md:gap-3">
+              <div id="equipment_details_actions" className="p-2.5 sm:p-4 bg-slate-50 border-t border-slate-200/80 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2.5 md:gap-3">
                 {canManageEquipmentArchive ? (
                   <button
                     onClick={() => handleDelete(selectedEquipment.id)}
-                    className="px-2.5 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-rose-200 rounded-lg transition-colors flex items-center justify-center gap-1 flex-shrink-0"
+                    className="w-full sm:w-auto px-2.5 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-rose-200 rounded-lg transition-colors flex items-center justify-center gap-1 flex-shrink-0"
                     title="作废删除档案"
                   >
                     <Trash2 className="w-4 h-4" />
-                    <span className="hidden sm:inline">作废删除</span>
+                    <span>作废删除</span>
                   </button>
                 ) : (
                   <div className="text-[10px] text-slate-400 font-medium hidden sm:block">
@@ -3867,12 +3867,12 @@ Clinical class: Life-saving respiratory device`;
                   </div>
                 )}
 
-                <div className="flex items-center gap-1.5 sm:gap-3 flex-1 sm:flex-initial justify-end min-w-0">
+                <div className="flex flex-col sm:flex-row flex-wrap sm:flex-nowrap items-stretch sm:items-center gap-2 sm:gap-3 flex-1 sm:flex-initial justify-end min-w-0 w-full sm:w-auto">
                   {canManageEquipmentArchive && (
-                    <>
+                    <div className="grid grid-cols-3 sm:flex items-center gap-1.5 sm:gap-3 w-full sm:w-auto">
                       <button 
                         onClick={handlePrintQR}
-                        className="p-2 sm:px-4 sm:py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-600 hover:bg-white bg-slate-50 flex items-center justify-center gap-1.5 transition-all flex-shrink-0"
+                        className="min-h-9 p-2 sm:px-4 sm:py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-600 hover:bg-white bg-slate-50 flex items-center justify-center gap-1.5 transition-all flex-shrink-0"
                         title="打印物联二维码"
                       >
                         <QrCode className="w-4 h-4" />
@@ -3880,7 +3880,7 @@ Clinical class: Life-saving respiratory device`;
                       </button>
                       <button
                         onClick={() => openEditModal(selectedEquipment)}
-                        className="p-2 sm:px-4 sm:py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-600 hover:bg-white bg-slate-50 flex items-center justify-center gap-1.5 transition-all flex-shrink-0"
+                        className="min-h-9 p-2 sm:px-4 sm:py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-600 hover:bg-white bg-slate-50 flex items-center justify-center gap-1.5 transition-all flex-shrink-0"
                         title="修改档案信息"
                       >
                         <Edit2 className="w-4 h-4" />
@@ -3888,44 +3888,46 @@ Clinical class: Life-saving respiratory device`;
                       </button>
                       <button
                         onClick={() => openCloneModal(selectedEquipment)}
-                        className="p-2 sm:px-4 sm:py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-600 hover:bg-white bg-slate-50 flex items-center justify-center gap-1.5 transition-all flex-shrink-0"
+                        className="min-h-9 p-2 sm:px-4 sm:py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-600 hover:bg-white bg-slate-50 flex items-center justify-center gap-1.5 transition-all flex-shrink-0"
                         title="复制当前设备规格建立新档案"
                       >
                         <Copy className="w-4 h-4 text-violet-600" />
                         <span className="hidden md:inline">克隆复制</span>
                       </button>
-                    </>
+                    </div>
                   )}
-                  <button 
-                    id="btn-archive-scan-repair"
-                    aria-label="扫码报修当前设备"
-                    onClick={() => setIsScannerModalOpen(true)}
-                    disabled={!canStartQuickRepairForEquipment(selectedEquipment)}
-                    className={`px-2.5 py-2 sm:px-4 sm:py-2 rounded-lg text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 transition-all flex-1 sm:flex-initial text-center whitespace-nowrap ${
-                      canStartQuickRepairForEquipment(selectedEquipment)
-                        ? 'bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white shadow-indigo-100'
-                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                    }`}
-                    title={canStartQuickRepairForEquipment(selectedEquipment) ? '调用相机扫描SN码快速填充报修' : getQuickRepairBlockMessage(selectedEquipment)}
-                  >
-                    <QrCode className="w-4 h-4 flex-shrink-0 animate-pulse" />
-                    <span>扫码报修</span>
-                  </button>
-                  <button 
-                    id="btn-archive-instant-repair"
-                    aria-label="一键报修当前设备"
-                    onClick={handleQuickRepair}
-                    disabled={!canStartQuickRepairForEquipment(selectedEquipment)}
-                    className={`px-2.5 py-2 sm:px-4 sm:py-2 rounded-lg text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 transition-all flex-1 sm:flex-initial text-center whitespace-nowrap ${
-                      canStartQuickRepairForEquipment(selectedEquipment)
-                        ? 'bg-blue-600 text-white shadow-blue-200 hover:bg-blue-700'
-                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                    }`}
-                    title={canStartQuickRepairForEquipment(selectedEquipment) ? '立即一键报修' : getQuickRepairBlockMessage(selectedEquipment)}
-                  >
-                    <Wrench className="w-4 h-4 flex-shrink-0" />
-                    <span>一键报修</span>
-                  </button>
+                  <div className="grid grid-cols-2 gap-2 w-full sm:w-auto">
+                    <button
+                      id="btn-archive-scan-repair"
+                      aria-label="扫码报修当前设备"
+                      onClick={() => setIsScannerModalOpen(true)}
+                      disabled={!canStartQuickRepairForEquipment(selectedEquipment)}
+                      className={`px-2.5 py-2 sm:px-4 sm:py-2 rounded-lg text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 transition-all flex-1 sm:flex-initial text-center whitespace-nowrap ${
+                        canStartQuickRepairForEquipment(selectedEquipment)
+                          ? 'bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white shadow-indigo-100'
+                          : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                      }`}
+                      title={canStartQuickRepairForEquipment(selectedEquipment) ? '调用相机扫描SN码快速填充报修' : getQuickRepairBlockMessage(selectedEquipment)}
+                    >
+                      <QrCode className="w-4 h-4 flex-shrink-0 animate-pulse" />
+                      <span>扫码报修</span>
+                    </button>
+                    <button
+                      id="btn-archive-instant-repair"
+                      aria-label="一键报修当前设备"
+                      onClick={handleQuickRepair}
+                      disabled={!canStartQuickRepairForEquipment(selectedEquipment)}
+                      className={`px-2.5 py-2 sm:px-4 sm:py-2 rounded-lg text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 transition-all flex-1 sm:flex-initial text-center whitespace-nowrap ${
+                        canStartQuickRepairForEquipment(selectedEquipment)
+                          ? 'bg-blue-600 text-white shadow-blue-200 hover:bg-blue-700'
+                          : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                      }`}
+                      title={canStartQuickRepairForEquipment(selectedEquipment) ? '立即一键报修' : getQuickRepairBlockMessage(selectedEquipment)}
+                    >
+                      <Wrench className="w-4 h-4 flex-shrink-0" />
+                      <span>一键报修</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </>

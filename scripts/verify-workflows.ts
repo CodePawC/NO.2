@@ -1862,6 +1862,14 @@ const checks: Check[] = [
           footerSource.indexOf('{canManageEquipmentArchive && (') < footerSource.indexOf('title="打印物联二维码"'),
         '设备详情底部的打印二维码按钮应只在工程师档案管理权限下渲染'
       );
+      assert(
+        footerSource.includes('flex flex-col sm:flex-row sm:justify-between') &&
+          footerSource.includes('grid grid-cols-3 sm:flex') &&
+          footerSource.includes('grid grid-cols-2 gap-2 w-full sm:w-auto') &&
+          footerSource.includes('w-full sm:w-auto px-2.5 py-2') &&
+          footerSource.includes('min-h-9 p-2 sm:px-4'),
+        '设备详情底部操作栏在移动端应分组换行，避免删除/打印/编辑/克隆/报修按钮重叠误触'
+      );
       const maintenancePrintStart = archiveSource.indexOf('医院设备资产管理系统 - 电子派工单');
       const maintenancePrintEnd = archiveSource.indexOf('onClick={() => setViewMaintenanceLog(null)}', maintenancePrintStart);
       assert(maintenancePrintStart !== -1 && maintenancePrintEnd > maintenancePrintStart, '应能定位维保派工单阅览弹窗头部');
