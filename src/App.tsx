@@ -53,7 +53,7 @@ import { useSpeechRecognition } from './hooks/useSpeechRecognition';
 import { sendAssistantChat } from './services/aiApi';
 import { getDateDiffDaysFromToday } from './utils/dateUtils';
 import { isSameDepartment, normalizeDepartmentName } from './utils/departmentUtils';
-import { findUniqueEquipmentMatchForDraft, syncTasksToEquipmentArchives } from './utils/equipmentSync';
+import { findActiveEquipmentRepairTask, findUniqueEquipmentMatchForDraft, hasActiveEquipmentRepairTask, hasOpenEquipmentRepairWorkOrder, syncTasksToEquipmentArchives } from './utils/equipmentSync';
 import { EQUIPMENT_STORAGE_KEY, getDefaultEquipmentList, parseStoredEquipmentList } from './utils/equipmentStorage';
 import { getDepartmentTasks, sortTasksByOperationalPriority } from './utils/taskOrdering';
 import { loadStoredTasks, TASK_STORAGE_KEY } from './utils/taskStorage';
@@ -78,23 +78,6 @@ const createNextTaskId = (existingTasks: StructuredTicket[]) => {
   }, 0);
 
   return `TKT-${datePart}${String(maxSequence + 1).padStart(2, '0')}`;
-};
-
-const findActiveEquipmentRepairTask = (tasks: StructuredTicket[], equipment: MedicalEquipment) => {
-  return tasks
-    .filter(needsClinicalAcceptance)
-    .find(task => (
-      !['已完成', '已归档', '已关闭'].includes(task.status) &&
-      (
-        task.deviceId === equipment.id ||
-        task.deviceId === equipment.sn ||
-        (task.deviceName === equipment.deviceName && isSameDepartment(task.department, equipment.dept))
-      )
-    ));
-};
-
-const hasActiveEquipmentRepairTask = (tasks: StructuredTicket[], equipment: MedicalEquipment) => {
-  return Boolean(findActiveEquipmentRepairTask(tasks, equipment));
 };
 
 const getTaskAcceptanceDisplay = (task: StructuredTicket) => {
@@ -151,6 +134,10 @@ export default function App() {
       appendWorkflowNotice(`⚠️ **重复报修提醒**\n设备【${equip.deviceName}】已有未闭环维修工单 **${duplicateRepairTask.id}**（当前状态：【${duplicateRepairTask.status}】）。请在现有工单中补充故障信息，避免重复生成报修草稿。`, 'msg-asset-report-duplicate-blocked');
       return;
     }
+    if (hasOpenEquipmentRepairWorkOrder(equip)) {
+      appendWorkflowNotice(`⚠️ **重复报修提醒**\n设备【${equip.deviceName}】档案中已有进行中的维修记录，请先在设备档案维修履历中补充处理进展或完成闭环，避免重复生成报修草稿。`, 'msg-asset-report-archive-duplicate-blocked');
+      return;
+    }
 
     setCurrentWorkspace('tasks');
     const presetText = `【系统一键扫码报修】
@@ -202,6 +189,10 @@ export default function App() {
     const latestTasks = tasksRef.current;
     if (hasActiveEquipmentRepairTask(latestTasks, equipment)) {
       appendWorkflowNotice(`⚠️ **重复报修提醒**\n设备【${equipment.deviceName}】已有未闭环维修工单，请在现有工单中补充故障信息，避免重复派单。`, 'msg-quick-repair-duplicate-blocked');
+      return false;
+    }
+    if (hasOpenEquipmentRepairWorkOrder(equipment)) {
+      appendWorkflowNotice(`⚠️ **重复报修提醒**\n设备【${equipment.deviceName}】档案中已有进行中的维修记录，请先补充现有维修履历或完成闭环，避免重复派单。`, 'msg-quick-repair-archive-duplicate-blocked');
       return false;
     }
     if (pendingQuickRepairEquipmentIdsRef.current.has(equipment.id)) {
@@ -998,12 +989,20 @@ export default function App() {
     const duplicateRepairTask = shouldLinkEquipmentToTicket && linkedEquipment
       ? findActiveEquipmentRepairTask(tasksRef.current, linkedEquipment)
       : null;
+    const hasOpenArchiveRepair = shouldLinkEquipmentToTicket && linkedEquipment
+      ? hasOpenEquipmentRepairWorkOrder(linkedEquipment)
+      : false;
 
     if (duplicateRepairTask && linkedEquipment) {
       isCreatingDraftTicketRef.current = false;
       setSelectedTask(duplicateRepairTask);
       setMobileTab('detail');
       appendWorkflowNotice(`⚠️ **重复报修提醒**\n设备【${linkedEquipment.deviceName}】已有未闭环维修工单 **${duplicateRepairTask.id}**（当前状态：【${duplicateRepairTask.status}】）。请在现有工单中补充故障信息，避免重复派单。`, 'msg-draft-repair-duplicate-blocked');
+      return;
+    }
+    if (hasOpenArchiveRepair && linkedEquipment) {
+      isCreatingDraftTicketRef.current = false;
+      appendWorkflowNotice(`⚠️ **重复报修提醒**\n设备【${linkedEquipment.deviceName}】档案中已有进行中的维修记录，请先在设备档案维修履历中补充处理进展或完成闭环，避免重复派单。`, 'msg-draft-repair-archive-duplicate-blocked');
       return;
     }
 

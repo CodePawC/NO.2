@@ -23,7 +23,7 @@ const isSameOrLaterDateString = (nextDate: string, currentDate?: string) => {
   return nextDate >= currentDate;
 };
 
-const isTaskForEquipment = (task: StructuredTicket, equipment: MedicalEquipment) => {
+export const isTaskForEquipment = (task: StructuredTicket, equipment: MedicalEquipment) => {
   return equipment.id === task.deviceId || equipment.sn === task.deviceId;
 };
 
@@ -51,6 +51,22 @@ const EQUIPMENT_KEYWORDS = [
 const getEquipmentKeywords = (value = '') => {
   const normalizedValue = normalizeEquipmentText(value);
   return EQUIPMENT_KEYWORDS.filter(keyword => normalizedValue.includes(keyword));
+};
+
+export const findActiveEquipmentRepairTask = (tasks: StructuredTicket[], equipment: MedicalEquipment) => {
+  return tasks
+    .filter(task => !canEngineerCloseTransferredTask(task))
+    .find(task => (
+      ACTIVE_TASK_STATUSES.includes(task.status) &&
+      (
+        isTaskForEquipment(task, equipment) ||
+        (task.deviceName === equipment.deviceName && isSameDepartment(task.department, equipment.dept))
+      )
+    ));
+};
+
+export const hasActiveEquipmentRepairTask = (tasks: StructuredTicket[], equipment: MedicalEquipment) => {
+  return Boolean(findActiveEquipmentRepairTask(tasks, equipment));
 };
 
 export const findUniqueEquipmentMatchForDraft = (
@@ -90,8 +106,14 @@ const shouldSyncTaskToEquipmentArchive = (task: StructuredTicket, equipment: Med
   return isTaskForEquipment(task, equipment) && !canEngineerCloseTransferredTask(task);
 };
 
-const isOpenRepairLog = (log: MaintenanceLog) => {
+export const isOpenRepairMaintenanceLog = (log: MaintenanceLog) => {
   return log.type === '维修' && log.status === '进行中';
+};
+
+const isOpenRepairLog = isOpenRepairMaintenanceLog;
+
+export const hasOpenEquipmentRepairWorkOrder = (equipment: MedicalEquipment) => {
+  return equipment.status === '故障维修' || (equipment.maintenanceLogs || []).some(isOpenRepairMaintenanceLog);
 };
 
 const hasArchiveWorkOrderNo = (log: MaintenanceLog) => {

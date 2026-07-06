@@ -11,6 +11,7 @@ import { SIMULATED_USERS } from '../data/appPresets';
 import { analyzeGeminiContent, chatWithGeminiExpert } from '../services/aiApi';
 import { isSameDepartment } from '../utils/departmentUtils';
 import { EQUIPMENT_STORAGE_KEY, parseStoredEquipmentList } from '../utils/equipmentStorage';
+import { hasOpenEquipmentRepairWorkOrder } from '../utils/equipmentSync';
 import { addLocalDays, getDateDiffDaysFromToday, getLocalDateString, getLocalDateTimeString } from '../utils/dateUtils';
 import { needsClinicalAcceptance } from '../utils/taskWorkflow';
 import MaintenanceCalendar from './MaintenanceCalendar';
@@ -656,7 +657,7 @@ export default function EquipmentArchives({
     return currentUser.role !== 'medical_staff' || !currentUserDepartment || isSameDepartment(equipment.dept, currentUserDepartment);
   };
   const hasActiveRepairWorkOrder = (equipment: MedicalEquipment) => {
-    return equipment.status === '故障维修' || equipment.maintenanceLogs.some(log => log.type === '维修' && log.status === '进行中');
+    return hasOpenEquipmentRepairWorkOrder(equipment);
   };
   const canStartQuickRepairForEquipment = (equipment: MedicalEquipment | null) => {
     return !!equipment && canCurrentUserReportEquipment(equipment) && !hasActiveRepairWorkOrder(equipment);
@@ -3534,11 +3535,25 @@ Clinical class: Life-saving respiratory device`;
                         </div>
                         <button 
                           onClick={() => {
+                            const quickRepairBlockMessage = getQuickRepairBlockMessage(selectedEquipment);
+                            if (quickRepairBlockMessage) {
+                              showQuickRepairToast({
+                                type: 'warning',
+                                message: quickRepairBlockMessage
+                              });
+                              return;
+                            }
                             if (onReportRepairFromEquip) {
                               onReportRepairFromEquip(selectedEquipment);
                             }
                           }}
-                          className="px-2.5 py-1.5 text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
+                          disabled={!canStartQuickRepairForEquipment(selectedEquipment)}
+                          title={canStartQuickRepairForEquipment(selectedEquipment) ? '一键发起智能报修' : getQuickRepairBlockMessage(selectedEquipment)}
+                          className={`px-2.5 py-1.5 text-[11px] font-bold rounded-lg flex items-center gap-1.5 shadow-sm transition-all ${
+                            canStartQuickRepairForEquipment(selectedEquipment)
+                              ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer'
+                              : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                          }`}
                         >
                           <PlusCircle className="w-3.5 h-3.5" />
                           <span>一键发起智能报修</span>

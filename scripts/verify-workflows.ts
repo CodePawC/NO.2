@@ -1,7 +1,7 @@
 import { addLocalDays, getDateDiffDaysFromToday, getLocalDateString, getLocalDateTimeString } from '../src/utils/dateUtils.ts';
 import { isSameDepartment } from '../src/utils/departmentUtils.ts';
 import { parseStoredEquipmentList } from '../src/utils/equipmentStorage.ts';
-import { findUniqueEquipmentMatchForDraft, syncTasksToEquipmentArchives } from '../src/utils/equipmentSync.ts';
+import { findActiveEquipmentRepairTask, findUniqueEquipmentMatchForDraft, hasActiveEquipmentRepairTask, hasOpenEquipmentRepairWorkOrder, syncTasksToEquipmentArchives } from '../src/utils/equipmentSync.ts';
 import { repairMisroutedEquipmentTasks } from '../src/utils/taskRepair.ts';
 import { parseStoredTaskList } from '../src/utils/taskStorage.ts';
 import { getDepartmentTasks } from '../src/utils/taskOrdering.ts';
@@ -1416,12 +1416,12 @@ const checks: Check[] = [
         '快捷报修弹窗的设备切换、关闭和取消都应清空旧描述与旧紧急度'
       );
       assert(
-        archiveSource.includes('const hasActiveRepairWorkOrder = (equipment: MedicalEquipment) => {') &&
-          archiveSource.includes("equipment.status === '故障维修'") &&
-          archiveSource.includes("log.type === '维修' && log.status === '进行中'") &&
+        archiveSource.includes("import { hasOpenEquipmentRepairWorkOrder } from '../utils/equipmentSync';") &&
+          archiveSource.includes('const hasActiveRepairWorkOrder = (equipment: MedicalEquipment) => {') &&
+          archiveSource.includes('return hasOpenEquipmentRepairWorkOrder(equipment);') &&
           archiveSource.includes('const canStartQuickRepairForEquipment = (equipment: MedicalEquipment | null) => {') &&
           archiveSource.includes('!hasActiveRepairWorkOrder(equipment)'),
-        '档案快捷报修应识别已有进行中维修，避免重复生成维修记录'
+        '档案快捷报修应复用共享档案维修占用判断，识别已有进行中维修并避免重复生成维修记录'
       );
       const quickRepairToastStart = archiveSource.indexOf("const showQuickRepairToast = (toast: { type: 'success' | 'warning'; message: string }) => {");
       const quickRepairToastEnd = archiveSource.indexOf('useEffect(() => {\n    if (propCurrentUser)', quickRepairToastStart);
@@ -1722,8 +1722,10 @@ const checks: Check[] = [
           assetReportSource.includes('setSelectedTask(duplicateRepairTask);') &&
           assetReportSource.includes('setMobileTab(\'detail\');') &&
           assetReportSource.includes('msg-asset-report-duplicate-blocked') &&
-          assetReportSource.includes('避免重复生成报修草稿'),
-        '档案智能报修草稿入口应先阻断同设备未闭环维修，避免临床生成注定重复的报修草稿'
+          assetReportSource.includes('避免重复生成报修草稿') &&
+          assetReportSource.includes('hasOpenEquipmentRepairWorkOrder(equip)') &&
+          assetReportSource.includes('msg-asset-report-archive-duplicate-blocked'),
+        '档案智能报修草稿入口应先阻断同设备未闭环维修和档案进行中维修，避免临床生成注定重复的报修草稿'
       );
       assert(
         callbackSource.includes("currentUserRole === 'medical_staff'") &&
@@ -1743,14 +1745,13 @@ const checks: Check[] = [
         '快捷报修回调成功同步主工单后应返回确认结果'
       );
       assert(
-        appSource.includes('const hasActiveEquipmentRepairTask = (tasks: StructuredTicket[], equipment: MedicalEquipment) => {') &&
-          appSource.includes('const findActiveEquipmentRepairTask = (tasks: StructuredTicket[], equipment: MedicalEquipment) => {') &&
-          appSource.includes("!['已完成', '已归档', '已关闭'].includes(task.status)") &&
+        appSource.includes("import { findActiveEquipmentRepairTask, findUniqueEquipmentMatchForDraft, hasActiveEquipmentRepairTask, hasOpenEquipmentRepairWorkOrder, syncTasksToEquipmentArchives } from './utils/equipmentSync';") &&
           appSource.includes('const tasksRef = useRef(tasks);') &&
           appSource.includes('const pendingQuickRepairEquipmentIdsRef = useRef<Set<string>>(new Set());') &&
           appSource.includes('tasksRef.current = tasks;') &&
           callbackSource.includes('const latestTasks = tasksRef.current;') &&
           callbackSource.includes('if (hasActiveEquipmentRepairTask(latestTasks, equipment))') &&
+          callbackSource.includes('if (hasOpenEquipmentRepairWorkOrder(equipment))') &&
           callbackSource.includes('if (pendingQuickRepairEquipmentIdsRef.current.has(equipment.id))') &&
           callbackSource.includes('pendingQuickRepairEquipmentIdsRef.current.add(equipment.id);') &&
           callbackSource.includes('const newTicketId = createNextTaskId(latestTasks);') &&
@@ -1759,10 +1760,102 @@ const checks: Check[] = [
           callbackSource.includes('localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(mergedTasks));') &&
           callbackSource.includes('pendingQuickRepairEquipmentIdsRef.current.delete(equipment.id);') &&
           callbackSource.includes('msg-quick-repair-duplicate-blocked') &&
+          callbackSource.includes('msg-quick-repair-archive-duplicate-blocked') &&
           callbackSource.includes('msg-quick-repair-pending-blocked') &&
           callbackSource.includes('避免重复派单') &&
           callbackSource.includes('return false;'),
-        '快捷报修同步主工单时应使用最新任务源、立即持久化并阻断同设备连续点击，避免重复派单或刷新丢失'
+        '快捷报修同步主工单时应使用最新任务源、立即持久化并阻断同设备连续点击和档案进行中维修，避免重复派单或刷新丢失'
+      );
+    }
+  },
+  {
+    name: 'equipment repair occupancy blocks duplicate reports across app and archive paths',
+    run: () => {
+      const equipment = createEquipment({
+        id: 'eq-verify-occupancy',
+        sn: 'SN-VERIFY-OCCUPANCY',
+        deviceName: '验证呼吸机',
+        dept: '呼吸内科',
+        status: '正常运行',
+        maintenanceLogs: [
+          {
+            id: 'm-verify-open',
+            type: '维修',
+            date: '2026-07-06',
+            technician: '未分派',
+            description: '【一键快捷报修】设备无法启动，等待工程师响应。',
+            cost: 0,
+            status: '进行中',
+            workOrderNo: 'WO-20260706-0001',
+            faultPhenomenon: '设备无法启动'
+          }
+        ]
+      });
+      const activeTask = createTask({
+        id: 'TKT-VERIFY-OCCUPANCY',
+        deviceId: equipment.id,
+        deviceName: equipment.deviceName,
+        department: equipment.dept,
+        status: '处理中'
+      });
+      const closedTask = createTask({
+        id: 'TKT-VERIFY-OCCUPANCY-CLOSED',
+        deviceId: equipment.id,
+        deviceName: equipment.deviceName,
+        department: equipment.dept,
+        status: '已关闭'
+      });
+      const archiveSource = readFileSync('src/components/EquipmentArchives.tsx', 'utf8');
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const assetReportStart = appSource.indexOf('const handleReportRepairFromEquip = (equip: any) => {');
+      const assetReportEnd = appSource.indexOf('const handleQuickRepairCreated = ({', assetReportStart);
+      const callbackStart = appSource.indexOf('const handleQuickRepairCreated = ({');
+      const callbackEnd = appSource.indexOf('// Role and Auth Simulation States');
+      const createStart = appSource.indexOf('const handleCreateTicketFromDraft = () => {');
+      const createEnd = appSource.indexOf('// Handle Clinical Closed-loop Sign-off & Rating', createStart);
+      const relatedTaskActionStart = archiveSource.indexOf('全流程任务关联工单履历');
+      const relatedTaskActionEnd = archiveSource.indexOf('{relatedTasks.length === 0 ? (', relatedTaskActionStart);
+
+      assert(hasOpenEquipmentRepairWorkOrder(equipment), '档案中存在进行中维修记录时应判定为维修占用');
+      assertEqual(findActiveEquipmentRepairTask([closedTask], equipment), undefined, '已关闭主工单不应阻断新报修');
+      assertEqual(findActiveEquipmentRepairTask([closedTask, activeTask], equipment)?.id, activeTask.id, '未闭环主工单应被准确定位');
+      assert(hasActiveEquipmentRepairTask([activeTask], equipment), '未闭环主工单应阻断重复报修');
+      assert(!hasActiveEquipmentRepairTask([closedTask], equipment), '已关闭主工单不应继续阻断报修');
+
+      assert(assetReportStart !== -1 && assetReportEnd > assetReportStart, '应能定位档案智能报修草稿入口');
+      const assetReportSource = appSource.slice(assetReportStart, assetReportEnd);
+      assert(callbackStart !== -1 && callbackEnd > callbackStart, '应能定位快捷报修回调入口');
+      const callbackSource = appSource.slice(callbackStart, callbackEnd);
+      assert(createStart !== -1 && createEnd > createStart, '应能定位 AI 草稿建单入口');
+      const createSource = appSource.slice(createStart, createEnd);
+      assert(relatedTaskActionStart !== -1 && relatedTaskActionEnd > relatedTaskActionStart, '应能定位档案关联工单报修按钮');
+      const relatedTaskActionSource = archiveSource.slice(relatedTaskActionStart, relatedTaskActionEnd);
+
+      assert(
+        assetReportSource.includes('hasOpenEquipmentRepairWorkOrder(equip)') &&
+          assetReportSource.includes('msg-asset-report-archive-duplicate-blocked'),
+        '档案智能报修草稿入口应阻断只有档案维修履历占用、暂无主工单的设备'
+      );
+      assert(
+        callbackSource.includes('if (hasOpenEquipmentRepairWorkOrder(equipment))') &&
+          callbackSource.includes('msg-quick-repair-archive-duplicate-blocked') &&
+          callbackSource.includes('return false;'),
+        '快捷报修主工单同步入口应在档案已有进行中维修时拒绝写入新主工单'
+      );
+      assert(
+        createSource.includes('const hasOpenArchiveRepair = shouldLinkEquipmentToTicket && linkedEquipment') &&
+          createSource.includes('hasOpenEquipmentRepairWorkOrder(linkedEquipment)') &&
+          createSource.includes('if (hasOpenArchiveRepair && linkedEquipment)') &&
+          createSource.includes('msg-draft-repair-archive-duplicate-blocked'),
+        'AI 草稿建单入口应阻断档案已有进行中维修但主工单缺失的重复报修'
+      );
+      assert(
+        relatedTaskActionSource.includes('const quickRepairBlockMessage = getQuickRepairBlockMessage(selectedEquipment);') &&
+          relatedTaskActionSource.includes('showQuickRepairToast({') &&
+          relatedTaskActionSource.includes('disabled={!canStartQuickRepairForEquipment(selectedEquipment)}') &&
+          relatedTaskActionSource.includes('title={canStartQuickRepairForEquipment(selectedEquipment) ?') &&
+          relatedTaskActionSource.includes('bg-slate-200 text-slate-400 cursor-not-allowed'),
+        '档案关联工单页的一键智能报修按钮应共享维修占用阻断并向用户展示原因'
       );
     }
   },
