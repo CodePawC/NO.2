@@ -2119,6 +2119,32 @@ const checks: Check[] = [
           !appSource.includes("textLower.includes('急') ? '特急'"),
         '前端本地兜底紧急度不应因“急诊科”的“急”误判为特急，必须匹配明确急迫语义'
       );
+      const inlineUrgencyStart = appSource.indexOf('<label className="text-[10px] font-bold text-slate-500 block mb-1">紧急程度</label>');
+      const inlineUrgencyEnd = appSource.indexOf('<label className="text-[10px] font-bold text-slate-500 block mb-1">影响临床</label>', inlineUrgencyStart);
+      assert(inlineUrgencyStart !== -1 && inlineUrgencyEnd > inlineUrgencyStart, '应能定位侧边草稿中的紧急程度字段');
+      const inlineUrgencySource = appSource.slice(inlineUrgencyStart, inlineUrgencyEnd);
+      assert(
+        inlineUrgencySource.includes('<option value="普通">普通</option>') &&
+          inlineUrgencySource.includes('<option value="较急">较急</option>') &&
+          inlineUrgencySource.includes('<option value="紧急">紧急</option>') &&
+          inlineUrgencySource.includes('<option value="特急">特急</option>') &&
+          inlineUrgencySource.includes('<option value="生命支持">生命支持</option>') &&
+          inlineUrgencySource.includes("draftTicket.urgency === '生命支持'") &&
+          inlineUrgencySource.includes("draftTicket.urgency === '较急'"),
+        '侧边草稿紧急程度下拉应覆盖完整业务枚举，生命支持草稿不能显示成无匹配选项'
+      );
+      const modalUrgencyStart = appSource.indexOf('<label className="text-slate-600 font-bold block mb-1 text-xs">9. 紧急程度</label>');
+      const modalUrgencyEnd = appSource.indexOf('{/* 10. 建议责任部门 */}', modalUrgencyStart);
+      assert(modalUrgencyStart !== -1 && modalUrgencyEnd > modalUrgencyStart, '应能定位完整草稿中的紧急程度字段');
+      const modalUrgencySource = appSource.slice(modalUrgencyStart, modalUrgencyEnd);
+      assert(
+        modalUrgencySource.includes('<option value="普通">普通 (24小时内解决)</option>') &&
+          modalUrgencySource.includes('<option value="较急">较急 (4小时内解决)</option>') &&
+          modalUrgencySource.includes('<option value="紧急">紧急 (2小时内解决)</option>') &&
+          modalUrgencySource.includes('<option value="特急">特急 (立即响应解决)</option>') &&
+          modalUrgencySource.includes('<option value="生命支持">生命支持 (10分钟内到达现场)</option>'),
+        '完整草稿紧急程度下拉应继续覆盖完整业务枚举'
+      );
       assert(
         appSource.includes('const isMedicalEquipmentContext = /呼吸机|除颤仪|麻醉机|监护仪') &&
           appSource.includes('mri') &&

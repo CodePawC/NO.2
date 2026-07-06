@@ -2932,13 +2932,17 @@ export default function App() {
                         value={draftTicket.urgency || '普通'}
                         onChange={(e) => handleUpdateDraftField('urgency', e.target.value)}
                         className={`w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none ${
-                          draftTicket.urgency === '特急' ? 'text-red-600 font-bold' :
-                          draftTicket.urgency === '紧急' ? 'text-orange-500 font-semibold' : 'text-slate-700'
+                          draftTicket.urgency === '生命支持' ? 'text-red-600 font-bold' :
+                          draftTicket.urgency === '特急' ? 'text-red-500 font-bold' :
+                          draftTicket.urgency === '紧急' ? 'text-orange-500 font-semibold' :
+                          draftTicket.urgency === '较急' ? 'text-amber-500 font-semibold' : 'text-slate-700'
                         }`}
                       >
                         <option value="普通">普通</option>
+                        <option value="较急">较急</option>
                         <option value="紧急">紧急</option>
                         <option value="特急">特急</option>
+                        <option value="生命支持">生命支持</option>
                       </select>
                     </div>
 
