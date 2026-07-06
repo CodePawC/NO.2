@@ -2800,8 +2800,12 @@ const checks: Check[] = [
       const serverSource = readFileSync('server.ts', 'utf8');
       const openSettingsStart = appSource.indexOf('const openAiSettings = () => {');
       const openSettingsEnd = appSource.indexOf('useEffect(() => {', openSettingsStart);
+      const switchUserStart = appSource.indexOf('const handleSwitchUser = (userId: string) => {');
+      const switchUserEnd = appSource.indexOf('const [chatMessages, setChatMessages]', switchUserStart);
       assert(openSettingsStart !== -1 && openSettingsEnd > openSettingsStart, '应能定位 AI 配置统一入口');
+      assert(switchUserStart !== -1 && switchUserEnd > switchUserStart, '应能定位模拟用户切换流程');
       const openSettingsSource = appSource.slice(openSettingsStart, openSettingsEnd);
+      const switchUserSource = appSource.slice(switchUserStart, switchUserEnd);
 
       assert(
         openSettingsSource.includes('if (isClinicalUser)') &&
@@ -2823,8 +2827,18 @@ const checks: Check[] = [
         '工程师已打开 AI 设置后切换到临床角色时，应立即关闭配置弹窗，避免工程师配置界面残留给临床端'
       );
       assert(
+        switchUserSource.includes('clearTestResult();'),
+        '切换模拟用户时应清理 AI 测速状态，避免工程师配置测试结果残留到其他角色会话'
+      );
+      assert(
         !appSource.includes('onClick={() => setIsSettingsOpen(true)}'),
         '大模型状态与侧边栏按钮应统一走 openAiSettings 权限入口'
+      );
+      assert(
+        appSource.includes("const canShowRawAiPayload = !isClinicalUser && currentSimulatedUser.role === 'engineer' && showRawPayload;") &&
+          appSource.includes("msg.sender === 'assistant' && canShowRawAiPayload && msg.rawJson") &&
+          !appSource.includes("msg.sender === 'assistant' && showRawPayload && msg.rawJson"),
+        'AI 原始 JSON 调试信息只能在工程师视图显示，不能因全局开关泄露到临床端'
       );
       assert(
         settingsSource.includes('const normalizeProviderConfigs = (rawValue: string) => {') &&

@@ -412,6 +412,7 @@ export default function App() {
     setCurrentSimulatedUserId(userId);
     setCurrentUserRole(targetUser.role);
     setShowSimulatedAuthModal(false);
+    clearTestResult();
     
     // Set a toast to show role switch
     showRoleToast(`已切换身份为 【${targetUser.name}】(${targetUser.title})`);
@@ -580,6 +581,7 @@ export default function App() {
   const notifyAiSettingsManagedByEngineer = () => {
     showRoleToast('AI配置由医学装备科维护，临床端仅可查看当前模型运行状态');
   };
+  const canShowRawAiPayload = !isClinicalUser && currentSimulatedUser.role === 'engineer' && showRawPayload;
 
   const openAiSettings = () => {
     if (isClinicalUser) {
@@ -1991,8 +1993,8 @@ export default function App() {
                     </div>
                   )}
 
-                  {/* Render raw json block if showRawPayload is enabled */}
-                  {msg.sender === 'assistant' && showRawPayload && msg.rawJson && (
+                  {/* Render raw json block only for engineer debugging. */}
+                  {msg.sender === 'assistant' && canShowRawAiPayload && msg.rawJson && (
                     <div className="mt-2.5 pt-2 border-t border-dashed border-slate-200">
                       <details className="cursor-pointer group">
                         <summary className="text-[10px] text-slate-500 hover:text-emerald-600 transition font-mono flex items-center justify-between">
