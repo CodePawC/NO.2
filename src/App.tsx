@@ -107,6 +107,15 @@ const getUrgencyTextClass = (urgency?: UrgencyLevel) => {
   return 'text-slate-700 font-semibold';
 };
 
+type PendingConfirmation = {
+  id: 'delete-task' | 'restore-defaults' | 'reset-ai-presets';
+  title: string;
+  description: string;
+  confirmLabel: string;
+  tone?: 'danger' | 'primary';
+  onConfirm: () => void;
+};
+
 export default function App() {
   const [tasks, setTasks] = useState<StructuredTicket[]>(loadStoredTasks);
   const tasksRef = useRef(tasks);
@@ -311,6 +320,7 @@ export default function App() {
   const [ratingComment, setRatingComment] = useState<string>('');
   const [pendingClinicalAcceptanceTaskIds, setPendingClinicalAcceptanceTaskIds] = useState<Set<string>>(() => new Set());
   const [showRoleSwitchedToast, setShowRoleSwitchedToast] = useState<string | null>(null);
+  const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
   const roleToastTimerRef = useRef<number | null>(null);
   const isIntakeSendingRef = useRef(false);
 
@@ -387,6 +397,20 @@ export default function App() {
     }, 4500);
   };
 
+  const requestConfirmation = (confirmation: PendingConfirmation) => {
+    setPendingConfirmation(confirmation);
+  };
+
+  const handleCancelConfirmation = () => {
+    setPendingConfirmation(null);
+  };
+
+  const handleConfirmPendingAction = () => {
+    const action = pendingConfirmation?.onConfirm;
+    setPendingConfirmation(null);
+    action?.();
+  };
+
   useEffect(() => {
     return () => {
       if (roleToastTimerRef.current !== null) {
@@ -404,6 +428,7 @@ export default function App() {
     setForwardDept(null);
     setIsClarification(false);
     setIsFullDraftOpen(false);
+    setPendingConfirmation(null);
     setShowVoiceMockModal(false);
     setSimulationText('');
     stopVoiceSimulation();
@@ -1370,6 +1395,23 @@ export default function App() {
     setSelectedTask(updatedTask);
   };
 
+  const deleteTaskAfterConfirmation = (id: string) => {
+    const blockReason = getEngineerActionBlockReason('工单删除');
+    if (blockReason) {
+      appendWorkflowNotice(`⚠️ **操作权限提醒**\n${blockReason}`, 'msg-delete-blocked');
+      return;
+    }
+
+    const filtered = tasksRef.current.filter(t => t.id !== id);
+    tasksRef.current = filtered;
+    setTasks(filtered);
+    localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(filtered));
+    syncEquipmentArchivesForTasks(filtered);
+    if (selectedTask?.id === id) {
+      setSelectedTask(getVisibleFallbackTask(filtered));
+    }
+  };
+
   // Delete task with confirmation
   const handleDeleteTask = (id: string) => {
     const blockReason = getEngineerActionBlockReason('工单删除');
@@ -1378,16 +1420,44 @@ export default function App() {
       return;
     }
 
-    if (confirm('确认删除此条任务单？删除后不可恢复。')) {
-      const filtered = tasksRef.current.filter(t => t.id !== id);
-      tasksRef.current = filtered;
-      setTasks(filtered);
-      localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(filtered));
-      syncEquipmentArchivesForTasks(filtered);
-      if (selectedTask?.id === id) {
-        setSelectedTask(getVisibleFallbackTask(filtered));
-      }
+    const taskToDelete = tasksRef.current.find(task => task.id === id);
+    requestConfirmation({
+      id: 'delete-task',
+      title: '删除任务单',
+      description: `确认删除任务单 ${id}${taskToDelete ? `（${taskToDelete.deviceName}）` : ''}？删除后不可恢复，并会同步解除设备档案中的在修占用。`,
+      confirmLabel: '确认删除',
+      tone: 'danger',
+      onConfirm: () => deleteTaskAfterConfirmation(id)
+    });
+  };
+
+  const restoreDefaultsAfterConfirmation = () => {
+    const blockReason = getEngineerActionBlockReason('重置演示数据');
+    if (blockReason) {
+      appendWorkflowNotice(`⚠️ **操作权限提醒**\n${blockReason}`, 'msg-reset-role-blocked');
+      showRoleToast('临床端无权重置全院演示数据');
+      return;
     }
+
+    const defaultEquipments = getDefaultEquipmentList();
+    pendingQuickRepairEquipmentIdsRef.current.clear();
+    pendingClinicalAcceptanceTaskIdsRef.current.clear();
+    tasksRef.current = INITIAL_TASKS;
+    setTasks(INITIAL_TASKS);
+    setAllEquipments(defaultEquipments);
+    localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(INITIAL_TASKS));
+    localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(defaultEquipments));
+    setSelectedTask(INITIAL_TASKS[0]);
+    setChatMessages([
+      {
+        id: 'system-reset',
+        sender: 'assistant',
+        text: '系统已成功恢复至初始化的演示任务与设备档案状态。您可以使用左下角或下方的预设对话模板，快速测试医学装备 AI 的分类、提炼及部门流转功能！',
+        timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+      }
+    ]);
+    setDraftTicket(null);
+    setCurrentWorkspace('tasks');
   };
 
   // Clear all and restore presets
@@ -1399,27 +1469,14 @@ export default function App() {
       return;
     }
 
-    if (confirm('确定要清除所有修改，恢复系统默认内置任务单和设备档案吗？')) {
-      const defaultEquipments = getDefaultEquipmentList();
-      pendingQuickRepairEquipmentIdsRef.current.clear();
-      pendingClinicalAcceptanceTaskIdsRef.current.clear();
-      tasksRef.current = INITIAL_TASKS;
-      setTasks(INITIAL_TASKS);
-      setAllEquipments(defaultEquipments);
-      localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(INITIAL_TASKS));
-      localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(defaultEquipments));
-      setSelectedTask(INITIAL_TASKS[0]);
-      setChatMessages([
-        {
-          id: 'system-reset',
-          sender: 'assistant',
-          text: '系统已成功恢复至初始化的演示任务与设备档案状态。您可以使用左下角或下方的预设对话模板，快速测试医学装备 AI 的分类、提炼及部门流转功能！',
-          timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-        }
-      ]);
-      setDraftTicket(null);
-      setCurrentWorkspace('tasks');
-    }
+    requestConfirmation({
+      id: 'restore-defaults',
+      title: '恢复演示数据',
+      description: '确定要清除所有修改，恢复系统默认内置任务单和设备档案吗？此操作会重置任务、资产档案和未完成的演示状态。',
+      confirmLabel: '恢复默认数据',
+      tone: 'danger',
+      onConfirm: restoreDefaultsAfterConfirmation
+    });
   };
 
   // Filters calculation
@@ -4216,11 +4273,13 @@ export default function App() {
 
                   <button
                     type="button"
-                    onClick={() => {
-                      if (confirm('是否要将所有大模型配置恢复为系统出厂默认值？')) {
-                        resetProviderConfigs();
-                      }
-                    }}
+                    onClick={() => requestConfirmation({
+                      id: 'reset-ai-presets',
+                      title: '恢复大模型预设',
+                      description: '是否要将所有大模型配置恢复为系统出厂默认值？当前自定义供应商、模型名称、密钥和调试选项会被重置。',
+                      confirmLabel: '恢复预设',
+                      onConfirm: resetProviderConfigs
+                    })}
                     className="w-full text-slate-500 border border-slate-200 bg-white hover:bg-slate-50 hover:text-slate-700 py-1.5 rounded-lg text-[10px] transition font-medium cursor-pointer"
                   >
                     恢复出厂大模型预设
@@ -4242,6 +4301,50 @@ export default function App() {
               >
                 保存并关闭
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* App-native confirmation modal */}
+      {pendingConfirmation && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center z-[70] p-4 animate-fade-in" id="app-confirmation-modal">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-sm w-full overflow-hidden">
+            <div className="bg-slate-900 text-white px-5 py-4 flex items-center gap-2.5">
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                pendingConfirmation.tone === 'danger' ? 'bg-rose-500/15 text-rose-300' : 'bg-emerald-500/15 text-emerald-300'
+              }`}>
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-sm font-extrabold leading-tight">{pendingConfirmation.title}</h3>
+                <p className="text-[10px] text-slate-400 mt-0.5">请确认后继续执行此操作</p>
+              </div>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <p className="text-xs text-slate-600 leading-relaxed">{pendingConfirmation.description}</p>
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={handleCancelConfirmation}
+                  className="px-3.5 py-2 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                  id="btn-confirm-cancel"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmPendingAction}
+                  className={`px-3.5 py-2 rounded-lg text-xs font-bold text-white transition cursor-pointer shadow-sm ${
+                    pendingConfirmation.tone === 'danger'
+                      ? 'bg-rose-600 hover:bg-rose-500 active:bg-rose-700'
+                      : 'bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700'
+                  }`}
+                  id="btn-confirm-action"
+                >
+                  {pendingConfirmation.confirmLabel}
+                </button>
+              </div>
             </div>
           </div>
         </div>

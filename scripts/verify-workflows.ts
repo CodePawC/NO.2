@@ -2558,9 +2558,9 @@ const checks: Check[] = [
           !engineerLinkedArchiveSource.includes('truncate max-w-[200px]'),
         '工程师移动端详情中的关联资产名称/型号应允许换行断词，避免窄屏遮挡详情操作'
       );
-      const deleteStart = appSource.indexOf('const handleDeleteTask = (id: string) => {');
-      const deleteEnd = appSource.indexOf('// Clear all and restore presets', deleteStart);
-      assert(deleteStart !== -1 && deleteEnd > deleteStart, '应能定位工程师删除工单逻辑');
+      const deleteStart = appSource.indexOf('const deleteTaskAfterConfirmation = (id: string) => {');
+      const deleteEnd = appSource.indexOf('// Delete task with confirmation', deleteStart);
+      assert(deleteStart !== -1 && deleteEnd > deleteStart, '应能定位工程师确认后的删除工单逻辑');
       const deleteSource = appSource.slice(deleteStart, deleteEnd);
       assert(
         deleteSource.includes('const filtered = tasksRef.current.filter(t => t.id !== id);') &&
@@ -2570,6 +2570,16 @@ const checks: Check[] = [
           deleteSource.includes('syncEquipmentArchivesForTasks(filtered);') &&
           deleteSource.includes('setSelectedTask(getVisibleFallbackTask(filtered));'),
         '工程师删除工单应基于最新任务列表过滤、立即持久化、同步解除档案在修占用，并把详情切到当前角色优先级最高的可见任务'
+      );
+      const deleteRequestStart = appSource.indexOf('const handleDeleteTask = (id: string) => {');
+      const deleteRequestEnd = appSource.indexOf('const restoreDefaultsAfterConfirmation = () => {', deleteRequestStart);
+      assert(deleteRequestStart !== -1 && deleteRequestEnd > deleteRequestStart, '应能定位删除工单确认入口');
+      const deleteRequestSource = appSource.slice(deleteRequestStart, deleteRequestEnd);
+      assert(
+        deleteRequestSource.includes("id: 'delete-task'") &&
+          deleteRequestSource.includes("onConfirm: () => deleteTaskAfterConfirmation(id)") &&
+          deleteRequestSource.includes("getEngineerActionBlockReason('工单删除')"),
+        '工程师删除工单入口应先做权限校验，再通过应用内确认弹层触发实际删除'
       );
       assert(
         appSource.includes('const syncEquipmentArchivesForTasks = (sourceTasks: StructuredTicket[]) => {') &&
@@ -2696,9 +2706,31 @@ const checks: Check[] = [
       assert(
         switchSource.includes('setShowVoiceMockModal(false);') &&
           switchSource.includes("setSimulationText('');") &&
+          switchSource.includes('setPendingConfirmation(null);') &&
           switchSource.includes('stopVoiceSimulation();') &&
           switchSource.includes('stopListening();'),
-        '切换身份时应关闭语音仿真弹窗、清空仿真文本并停止上一身份的听写计时器和真实麦克风识别'
+        '切换身份时应关闭确认弹层、语音仿真弹窗、清空仿真文本并停止上一身份的听写计时器和真实麦克风识别'
+      );
+      const confirmationTypeStart = appSource.indexOf('type PendingConfirmation = {');
+      const confirmationTypeEnd = appSource.indexOf('export default function App()', confirmationTypeStart);
+      assert(confirmationTypeStart !== -1 && confirmationTypeEnd > confirmationTypeStart, '应能定位应用内确认弹层类型');
+      const confirmationTypeSource = appSource.slice(confirmationTypeStart, confirmationTypeEnd);
+      const confirmationModalStart = appSource.indexOf('{/* App-native confirmation modal */}');
+      const confirmationModalEnd = appSource.indexOf('{/* Voice Repair Fallback / Simulation Modal */}', confirmationModalStart);
+      assert(confirmationModalStart !== -1 && confirmationModalEnd > confirmationModalStart, '应能定位应用内确认弹层');
+      const confirmationModalSource = appSource.slice(confirmationModalStart, confirmationModalEnd);
+      assert(
+        confirmationTypeSource.includes("id: 'delete-task' | 'restore-defaults' | 'reset-ai-presets';") &&
+          appSource.includes('const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);') &&
+          appSource.includes('const requestConfirmation = (confirmation: PendingConfirmation) => {') &&
+          appSource.includes('const handleCancelConfirmation = () => {') &&
+          appSource.includes('const handleConfirmPendingAction = () => {') &&
+          confirmationModalSource.includes('id="app-confirmation-modal"') &&
+          confirmationModalSource.includes('id="btn-confirm-cancel"') &&
+          confirmationModalSource.includes('id="btn-confirm-action"') &&
+          !appSource.includes('confirm(') &&
+          !appSource.includes('window.confirm('),
+        '主任务工作台危险操作应使用应用内确认弹层，避免原生 confirm 卡住移动端或自动化测试'
       );
       const roleToastStart = appSource.indexOf('const showRoleToast = (message: string) => {');
       const roleToastEnd = appSource.indexOf('const handleSwitchUser = (userId: string) => {', roleToastStart);
@@ -2725,6 +2757,10 @@ const checks: Check[] = [
           appSource.includes("showRoleToast('临床端无权重置全院演示数据');"),
         '角色切换、跨科室拦截、临床 AI 配置提醒和重置数据拦截都应走统一顶部 toast 入口'
       );
+      const restoreActionStart = appSource.indexOf('const restoreDefaultsAfterConfirmation = () => {');
+      const restoreActionEnd = appSource.indexOf('// Clear all and restore presets', restoreActionStart);
+      assert(restoreActionStart !== -1 && restoreActionEnd > restoreActionStart, '应能定位确认后的恢复演示数据逻辑');
+      const restoreActionSource = appSource.slice(restoreActionStart, restoreActionEnd);
       const restoreStart = appSource.indexOf('const handleRestoreDefaults = () => {');
       const restoreEnd = appSource.indexOf('// Filters calculation', restoreStart);
       assert(restoreStart !== -1 && restoreEnd > restoreStart, '应能定位恢复演示数据逻辑');
@@ -2732,17 +2768,19 @@ const checks: Check[] = [
       assert(
         appSource.includes("import { EQUIPMENT_STORAGE_KEY, getDefaultEquipmentList, parseStoredEquipmentList } from './utils/equipmentStorage';") &&
           restoreSource.includes("getEngineerActionBlockReason('重置演示数据')") &&
-          restoreSource.includes("confirm('确定要清除所有修改，恢复系统默认内置任务单和设备档案吗？')") &&
-          restoreSource.includes('const defaultEquipments = getDefaultEquipmentList();') &&
-          restoreSource.includes('pendingQuickRepairEquipmentIdsRef.current.clear();') &&
-          restoreSource.includes('pendingClinicalAcceptanceTaskIdsRef.current.clear();') &&
-          restoreSource.includes('tasksRef.current = INITIAL_TASKS;') &&
-          restoreSource.includes('setTasks(INITIAL_TASKS);') &&
-          restoreSource.includes('setAllEquipments(defaultEquipments);') &&
-          restoreSource.includes('localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(INITIAL_TASKS));') &&
-          restoreSource.includes('localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(defaultEquipments));') &&
-          restoreSource.includes('初始化的演示任务与设备档案状态') &&
-          restoreSource.includes("setCurrentWorkspace('tasks');"),
+          restoreSource.includes("id: 'restore-defaults'") &&
+          restoreSource.includes('onConfirm: restoreDefaultsAfterConfirmation') &&
+          restoreActionSource.includes("getEngineerActionBlockReason('重置演示数据')") &&
+          restoreActionSource.includes('const defaultEquipments = getDefaultEquipmentList();') &&
+          restoreActionSource.includes('pendingQuickRepairEquipmentIdsRef.current.clear();') &&
+          restoreActionSource.includes('pendingClinicalAcceptanceTaskIdsRef.current.clear();') &&
+          restoreActionSource.includes('tasksRef.current = INITIAL_TASKS;') &&
+          restoreActionSource.includes('setTasks(INITIAL_TASKS);') &&
+          restoreActionSource.includes('setAllEquipments(defaultEquipments);') &&
+          restoreActionSource.includes('localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(INITIAL_TASKS));') &&
+          restoreActionSource.includes('localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(defaultEquipments));') &&
+          restoreActionSource.includes('初始化的演示任务与设备档案状态') &&
+          restoreActionSource.includes("setCurrentWorkspace('tasks');"),
         '工程师重置演示数据应同时恢复任务、设备档案、内存统计和防重复 pending 状态，避免任务与资产档案不同步'
       );
       const speechSource = readFileSync('src/hooks/useSpeechRecognition.ts', 'utf8');
@@ -2946,6 +2984,12 @@ const checks: Check[] = [
           appSource.includes('onClick={() => handleTestConfig(activeConfig)}') &&
           appSource.includes('disabled={isTesting}'),
         'AI 设置字段变更、供应商切换和重置配置应清理旧测速状态，并在测速中禁用按钮'
+      );
+      assert(
+        appSource.includes("id: 'reset-ai-presets'") &&
+          appSource.includes('恢复大模型预设') &&
+          appSource.includes('onConfirm: resetProviderConfigs'),
+        'AI 设置恢复出厂预设也应走应用内确认弹层，避免工程师配置弹窗触发原生 confirm'
       );
       assert(
         serverSource.includes("const normalizedEndpoint = typeof configToUse.endpoint === 'string' ? configToUse.endpoint.trim() : '';") &&
