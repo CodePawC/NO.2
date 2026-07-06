@@ -664,7 +664,7 @@ export default function App() {
 
   useEffect(() => {
     pendingEngineerLogKeysRef.current.clear();
-  }, [activeLogAction, activeLogOperator, selectedTask?.id]);
+  }, [selectedTask?.id, currentSimulatedUserId, currentUserRole]);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -1293,7 +1293,6 @@ export default function App() {
     setTasks(nextTasks);
     localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(nextTasks));
     setSelectedTask(updatedTask);
-    pendingEngineerLogKeysRef.current.delete(pendingLogKey);
     setActiveLogAction('');
   };
 
@@ -3459,7 +3458,10 @@ export default function App() {
                       type="text" 
                       placeholder="操作人" 
                       value={activeLogOperator}
-                      onChange={(e) => setActiveLogOperator(e.target.value)}
+                      onChange={(e) => {
+                        pendingEngineerLogKeysRef.current.clear();
+                        setActiveLogOperator(e.target.value);
+                      }}
                       disabled={isTaskTerminal(selectedTask)}
                       className="w-1/3 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-slate-400"
                       id="log-operator-input"
@@ -3468,7 +3470,10 @@ export default function App() {
                       type="text" 
                       placeholder={isTaskTerminal(selectedTask) ? '已归档或已关闭，不能再追加日志' : '录入进度日志...'} 
                       value={activeLogAction}
-                      onChange={(e) => setActiveLogAction(e.target.value)}
+                      onChange={(e) => {
+                        pendingEngineerLogKeysRef.current.clear();
+                        setActiveLogAction(e.target.value);
+                      }}
                       disabled={isTaskTerminal(selectedTask)}
                       className="flex-1 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-slate-400"
                       id="log-action-input"

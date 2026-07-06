@@ -1266,8 +1266,12 @@ const checks: Check[] = [
       const appSource = readFileSync('src/App.tsx', 'utf8');
       const addLogStart = appSource.indexOf('const handleAddLog = (e: React.FormEvent) => {');
       const addLogEnd = appSource.indexOf('// Update status of selected task', addLogStart);
+      const resetKeysStart = appSource.indexOf('useEffect(() => {\n    pendingEngineerLogKeysRef.current.clear();');
+      const resetKeysEnd = appSource.indexOf('const chatEndRef = useRef<HTMLDivElement>(null);', resetKeysStart);
       assert(addLogStart !== -1 && addLogEnd > addLogStart, '应能定位工程师日志追加逻辑');
+      assert(resetKeysStart !== -1 && resetKeysEnd > resetKeysStart, '应能定位工程师日志重复提交 key 释放逻辑');
       const addLogSource = appSource.slice(addLogStart, addLogEnd);
+      const resetKeysSource = appSource.slice(resetKeysStart, resetKeysEnd);
 
       assert(
         appSource.includes('const isTaskTerminal = (task: StructuredTicket | null) => {') &&
@@ -1290,9 +1294,14 @@ const checks: Check[] = [
           addLogSource.includes('tasksRef.current = nextTasks;') &&
           addLogSource.includes('setTasks(nextTasks);') &&
           addLogSource.includes('localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(nextTasks));') &&
-          addLogSource.includes('pendingEngineerLogKeysRef.current.delete(pendingLogKey);') &&
-          addLogSource.indexOf('pendingEngineerLogKeysRef.current.add(pendingLogKey);') < addLogSource.indexOf('pendingEngineerLogKeysRef.current.delete(pendingLogKey);'),
-        '工程师追加日志应基于最新任务列表写入、立即持久化，阻断连续点击后释放当前日志 key，避免同一句标准处置记录被永久锁定'
+          addLogSource.includes("setActiveLogAction('');") &&
+          !addLogSource.includes('pendingEngineerLogKeysRef.current.delete(pendingLogKey);') &&
+          resetKeysSource.includes('pendingEngineerLogKeysRef.current.clear();') &&
+          resetKeysSource.includes('}, [selectedTask?.id, currentSimulatedUserId, currentUserRole]);') &&
+          !resetKeysSource.includes('activeLogAction, activeLogOperator') &&
+          appSource.includes("onChange={(e) => {\n                        pendingEngineerLogKeysRef.current.clear();\n                        setActiveLogOperator(e.target.value);\n                      }}") &&
+          appSource.includes("onChange={(e) => {\n                        pendingEngineerLogKeysRef.current.clear();\n                        setActiveLogAction(e.target.value);\n                      }}"),
+        '工程师追加日志应基于最新任务列表写入、立即持久化，并保留当前日志 key 到输入或任务变化，避免双击记录写入重复处置日志'
       );
       assert(
         appSource.includes("disabled={!activeLogAction.trim() || isTaskTerminal(selectedTask)}") &&
