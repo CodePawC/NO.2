@@ -413,6 +413,7 @@ export default function EquipmentArchives({
   onBackToTasks,
   onReportRepairFromEquip,
   onQuickRepairCreated,
+  equipmentRecords,
   tasks = [],
   currentUser: propCurrentUser,
   onUserChange
@@ -420,6 +421,7 @@ export default function EquipmentArchives({
   onBackToTasks?: () => void;
   onReportRepairFromEquip?: (equip: MedicalEquipment) => void;
   onQuickRepairCreated?: (request: QuickRepairRequest) => boolean | void;
+  equipmentRecords?: MedicalEquipment[];
   tasks?: StructuredTicket[];
   currentUser?: UserProfile;
   onUserChange?: (user: UserProfile) => void;
@@ -507,8 +509,16 @@ export default function EquipmentArchives({
 
   // 1. Data States
   const [equipments, setEquipments] = useState<MedicalEquipment[]>(() => (
-    parseStoredEquipmentList(localStorage.getItem(EQUIPMENT_STORAGE_KEY)).equipments
+    equipmentRecords || parseStoredEquipmentList(localStorage.getItem(EQUIPMENT_STORAGE_KEY)).equipments
   ));
+  const isApplyingExternalEquipmentRecordsRef = useRef(false);
+
+  useEffect(() => {
+    if (equipmentRecords) {
+      isApplyingExternalEquipmentRecordsRef.current = true;
+      setEquipments(equipmentRecords);
+    }
+  }, [equipmentRecords]);
 
   // Selected Equipment Focus state
   const [selectedId, setSelectedId] = useState<string>(() => {
@@ -892,8 +902,14 @@ export default function EquipmentArchives({
 
   // Save to local storage whenever equipment state changes
   useEffect(() => {
+    if (equipmentRecords && isApplyingExternalEquipmentRecordsRef.current) {
+      if (equipments === equipmentRecords) {
+        isApplyingExternalEquipmentRecordsRef.current = false;
+      }
+      return;
+    }
     localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(equipments));
-  }, [equipments]);
+  }, [equipments, equipmentRecords]);
 
   // Listen to deep linking events to select equipment
   useEffect(() => {

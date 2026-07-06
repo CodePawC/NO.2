@@ -1748,6 +1748,7 @@ export default function App() {
             onBackToTasks={() => setCurrentWorkspace('tasks')}
             onReportRepairFromEquip={handleReportRepairFromEquip}
             onQuickRepairCreated={handleQuickRepairCreated}
+            equipmentRecords={allEquipments}
             tasks={tasks}
             currentUser={currentSimulatedUser}
             onUserChange={(user) => handleSwitchUser(user.id)}

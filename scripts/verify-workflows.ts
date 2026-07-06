@@ -1418,6 +1418,18 @@ const checks: Check[] = [
         '资产档案嵌入 App 时应以父组件当前用户为权威来源，避免子组件旧用户状态反向覆盖角色切换'
       );
       assert(
+        archiveSource.includes('equipmentRecords?: MedicalEquipment[];') &&
+          archiveSource.includes('equipmentRecords || parseStoredEquipmentList(localStorage.getItem(EQUIPMENT_STORAGE_KEY)).equipments') &&
+          archiveSource.includes('const isApplyingExternalEquipmentRecordsRef = useRef(false);') &&
+          archiveSource.includes('if (equipmentRecords) {\n      isApplyingExternalEquipmentRecordsRef.current = true;') &&
+          archiveSource.includes('setEquipments(equipmentRecords);') &&
+          archiveSource.includes('isApplyingExternalEquipmentRecordsRef.current = true;') &&
+          archiveSource.includes('if (equipmentRecords && isApplyingExternalEquipmentRecordsRef.current)') &&
+          archiveSource.includes('isApplyingExternalEquipmentRecordsRef.current = false;') &&
+          archiveSource.includes('}, [equipments, equipmentRecords]);'),
+        '资产档案页嵌入 App 时应跟随父组件最新设备档案状态，避免任务验收/删除同步后仍展示旧设备状态'
+      );
+      assert(
         archiveSource.includes('2xl:flex-row') &&
           archiveSource.includes('2xl:w-auto 2xl:flex-shrink-0') &&
           archiveSource.includes('overflow-x-auto max-w-full'),
@@ -2535,8 +2547,9 @@ const checks: Check[] = [
         appSource.includes('const syncEquipmentArchivesForTasks = (sourceTasks: StructuredTicket[]) => {') &&
           appSource.includes('const { equipments: equipmentSource, shouldPersist } = parseStoredEquipmentList(localStorage.getItem(EQUIPMENT_STORAGE_KEY));') &&
           appSource.includes('const { equipments: equipmentsList, changed } = syncTasksToEquipmentArchives(sourceTasks, equipmentSource);') &&
-          appSource.includes('syncEquipmentArchivesForTasks(tasks);'),
-        '任务变更和删除后应复用同一档案同步函数，避免快捷报修主工单删除后资产档案仍显示故障维修'
+          appSource.includes('syncEquipmentArchivesForTasks(tasks);') &&
+          appSource.includes('equipmentRecords={allEquipments}'),
+        '任务变更和删除后应复用同一档案同步函数，并把 App 最新档案状态传入资产档案页，避免快捷报修主工单删除后资产档案仍显示故障维修'
       );
     }
   },
