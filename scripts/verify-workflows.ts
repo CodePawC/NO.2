@@ -2072,10 +2072,14 @@ const checks: Check[] = [
           archiveSource.includes('aria-label="故障现象具体描述"') &&
           archiveSource.includes('id="btn-submit-quick-repair"') &&
           archiveSource.includes('aria-label="提交快捷报修并分派"') &&
-          archiveSource.includes('const canSubmitQuickRepair = Boolean(quickRepairEquipId && quickRepairDesc.trim());') &&
+          archiveSource.includes('const quickRepairEquipment = equipments.find(eq => eq.id === quickRepairEquipId) || null;') &&
+          archiveSource.includes('const quickRepairSubmitBlockMessage = getQuickRepairBlockMessage(quickRepairEquipment);') &&
+          archiveSource.includes("const quickRepairSubmitDisabledReason = quickRepairSubmitBlockMessage || (!quickRepairDesc.trim() ? '请填写故障现象描述。' : '');") &&
+          archiveSource.includes('const canSubmitQuickRepair = !quickRepairSubmitDisabledReason;') &&
           archiveSource.includes('disabled={!canSubmitQuickRepair}') &&
+          archiveSource.includes("title={canSubmitQuickRepair ? '提交快捷报修并同步主工单' : quickRepairSubmitDisabledReason}") &&
           archiveSource.includes('disabled:cursor-not-allowed'),
-        '资产档案快捷报修控件应提供稳定标识和可访问名称，便于临床人测与自动化回归'
+        '资产档案快捷报修控件应提供稳定标识、可访问名称，并让提交按钮状态与可报修业务规则保持一致'
       );
       assert(
         archiveSource.includes('quickRepairableEquipments') &&

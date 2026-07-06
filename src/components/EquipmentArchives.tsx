@@ -955,7 +955,10 @@ export default function EquipmentArchives({
 
   const selectedEquipment = filteredEquipments.find(eq => eq.id === selectedId) || filteredEquipments[0] || null;
   const currentDiagnosticSessionKey = getDiagnosticSessionKey(selectedEquipment, currentUser);
-  const canSubmitQuickRepair = Boolean(quickRepairEquipId && quickRepairDesc.trim());
+  const quickRepairEquipment = equipments.find(eq => eq.id === quickRepairEquipId) || null;
+  const quickRepairSubmitBlockMessage = getQuickRepairBlockMessage(quickRepairEquipment);
+  const quickRepairSubmitDisabledReason = quickRepairSubmitBlockMessage || (!quickRepairDesc.trim() ? '请填写故障现象描述。' : '');
+  const canSubmitQuickRepair = !quickRepairSubmitDisabledReason;
 
   const previewFileBelongsToSelectedEquipment = Boolean(
     selectedEquipment && previewFile && selectedEquipment.attachments.some(file => file.id === previewFile.id)
@@ -6116,6 +6119,7 @@ Clinical class: Life-saving respiratory device`;
                   aria-label="提交快捷报修并分派"
                   type="submit"
                   disabled={!canSubmitQuickRepair}
+                  title={canSubmitQuickRepair ? '提交快捷报修并同步主工单' : quickRepairSubmitDisabledReason}
                   className="px-5 py-2 text-xs bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white font-extrabold rounded-lg shadow-md flex items-center gap-1.5 transition-all cursor-pointer disabled:from-slate-300 disabled:to-slate-400 disabled:shadow-none disabled:cursor-not-allowed disabled:text-white/80"
                 >
                   <Send className="w-3.5 h-3.5" />
