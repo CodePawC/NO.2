@@ -987,6 +987,12 @@ export default function App() {
     const draftDept = normalizeDepartmentName(draftTicket.department) || draftTicket.department;
     const routingBasisText = `${draftTicket.faultPhenomenon || ''} ${draftTicket.deviceName || ''} ${draftTicket.notes || ''}`;
     const routing = getRecommendedRoutingForTask(draftTicket.taskType as TaskType, routingBasisText);
+    const { equipments: latestEquipmentArchives, shouldPersist: shouldPersistLatestEquipmentArchives } = parseStoredEquipmentList(localStorage.getItem(EQUIPMENT_STORAGE_KEY));
+    if (shouldPersistLatestEquipmentArchives) {
+      localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(latestEquipmentArchives));
+    }
+    setAllEquipments(latestEquipmentArchives);
+    const latestVisibleEquipments = latestEquipmentArchives.filter(canCurrentUserUseEquipment);
     const normalizedTaskType = currentUserRole === 'medical_staff'
       ? (routing.recommendedDept !== '医学装备科'
         ? '非设备类转派任务'
@@ -995,12 +1001,12 @@ export default function App() {
           : ((draftTicket.taskType as TaskType) || '设备报修')))
       : ((draftTicket.taskType as TaskType) || '设备报修');
     const autoMatchedEquipment = currentUserRole === 'medical_staff' && normalizedTaskType !== '非设备类转派任务'
-      ? findUniqueEquipmentMatchForDraft(visibleEquipments, {
+      ? findUniqueEquipmentMatchForDraft(latestVisibleEquipments, {
           department: currentDept || draftDept,
           deviceName: draftTicket.deviceName
         })
       : null;
-    const selectedEquipment = allEquipments.find(eq => eq.id === draftTicket.deviceId || eq.sn === draftTicket.deviceId);
+    const selectedEquipment = latestEquipmentArchives.find(eq => eq.id === draftTicket.deviceId || eq.sn === draftTicket.deviceId);
     const canUseSelectedEquipment = !!selectedEquipment && canCurrentUserUseEquipment(selectedEquipment);
     const canUseDraftDeviceId = currentUserRole !== 'medical_staff' && !!draftTicket.deviceId && !selectedEquipment;
     const shouldUseAutoMatchedEquipment = currentUserRole === 'medical_staff' && !canUseSelectedEquipment && !!autoMatchedEquipment && canCurrentUserUseEquipment(autoMatchedEquipment);

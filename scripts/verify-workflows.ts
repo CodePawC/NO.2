@@ -1975,6 +1975,15 @@ const checks: Check[] = [
         'AI 草稿建单入口应阻断档案已有进行中维修但主工单缺失的重复报修'
       );
       assert(
+        createSource.includes('const { equipments: latestEquipmentArchives, shouldPersist: shouldPersistLatestEquipmentArchives } = parseStoredEquipmentList(localStorage.getItem(EQUIPMENT_STORAGE_KEY));') &&
+          createSource.includes('setAllEquipments(latestEquipmentArchives);') &&
+          createSource.includes('const latestVisibleEquipments = latestEquipmentArchives.filter(canCurrentUserUseEquipment);') &&
+          createSource.includes('findUniqueEquipmentMatchForDraft(latestVisibleEquipments') &&
+          createSource.includes('const selectedEquipment = latestEquipmentArchives.find') &&
+          !createSource.includes('const selectedEquipment = allEquipments.find'),
+        'AI 草稿建单入口应提交瞬间读取最新资产档案，避免档案页刚新增的在修履历被旧 allEquipments 快照绕过'
+      );
+      assert(
         relatedTaskActionSource.includes('const quickRepairBlockMessage = getQuickRepairBlockMessage(selectedEquipment);') &&
           relatedTaskActionSource.includes('showQuickRepairToast({') &&
           relatedTaskActionSource.includes('disabled={!canStartQuickRepairForEquipment(selectedEquipment)}') &&
