@@ -57,6 +57,8 @@ export default function MaintenanceCalendar({
   // Simulated logged-in engineer workspace state
   const [currentEngineer, setCurrentEngineer] = useState<string>('all'); // 'all' or specific engineer name
   const canManageSchedule = currentUser.role === 'engineer';
+  const canManageScheduleRef = useRef(canManageSchedule);
+  canManageScheduleRef.current = canManageSchedule;
   const scheduleScopeLabel = currentUser.role === 'medical_staff' ? '本科室' : '全院';
 
   const getScheduleManageBlockReason = (actionName: string) => {
@@ -108,10 +110,18 @@ export default function MaintenanceCalendar({
   // Custom temporary success notifications
   const [notification, setNotification] = useState<string | null>(null);
   const notificationTimerRef = useRef<number | null>(null);
+  const rescheduleTimerRef = useRef<number | null>(null);
+  const scheduleMutationVersionRef = useRef(0);
 
   useEffect(() => {
     if (canManageSchedule) return;
 
+    scheduleMutationVersionRef.current += 1;
+    if (rescheduleTimerRef.current !== null) {
+      window.clearTimeout(rescheduleTimerRef.current);
+      rescheduleTimerRef.current = null;
+    }
+    setIsRescheduling(false);
     setIsDeployMode(false);
     setActiveDatePopup(null);
     setSelectedEvent(prev => {
@@ -119,6 +129,15 @@ export default function MaintenanceCalendar({
       return isSameDepartment(prev.equipment.dept, currentUser.department || currentUser.dept) ? prev : null;
     });
   }, [canManageSchedule, currentUser.department, currentUser.dept]);
+
+  useEffect(() => {
+    scheduleMutationVersionRef.current += 1;
+    if (rescheduleTimerRef.current !== null) {
+      window.clearTimeout(rescheduleTimerRef.current);
+      rescheduleTimerRef.current = null;
+    }
+    setIsRescheduling(false);
+  }, [currentUser.id, currentUser.role]);
 
   // Predefined engineers list & dynamic extraction
   const availableEngineers = useMemo(() => {
@@ -174,6 +193,11 @@ export default function MaintenanceCalendar({
     return () => {
       if (notificationTimerRef.current !== null) {
         window.clearTimeout(notificationTimerRef.current);
+      }
+      scheduleMutationVersionRef.current += 1;
+      if (rescheduleTimerRef.current !== null) {
+        window.clearTimeout(rescheduleTimerRef.current);
+        rescheduleTimerRef.current = null;
       }
     };
   }, []);
@@ -459,6 +483,11 @@ export default function MaintenanceCalendar({
     }
 
     setIsRescheduling(true);
+    scheduleMutationVersionRef.current += 1;
+    const requestVersion = scheduleMutationVersionRef.current;
+    if (rescheduleTimerRef.current !== null) {
+      window.clearTimeout(rescheduleTimerRef.current);
+    }
     const targetEventId = selectedEvent.id;
     const targetEqId = selectedEvent.equipment.id;
     const taskType = selectedEvent.type;
@@ -467,7 +496,13 @@ export default function MaintenanceCalendar({
     const targetDate = submittedDate;
     setNewScheduleDate(submittedDate);
 
-    setTimeout(() => {
+    rescheduleTimerRef.current = window.setTimeout(() => {
+      rescheduleTimerRef.current = null;
+      if (requestVersion !== scheduleMutationVersionRef.current || !canManageScheduleRef.current) {
+        setIsRescheduling(false);
+        return;
+      }
+
       setEquipments(prev => prev.map(eq => {
         if (eq.id === targetEqId) {
           if (taskType === 'maintenance') {

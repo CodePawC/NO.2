@@ -3089,8 +3089,11 @@ const checks: Check[] = [
       assert(
         calendarSource.includes('setIsDeployMode(false);') &&
           calendarSource.includes('setActiveDatePopup(null);') &&
+          calendarSource.includes('scheduleMutationVersionRef.current += 1;') &&
+          calendarSource.includes('window.clearTimeout(rescheduleTimerRef.current);') &&
+          calendarSource.includes('setIsRescheduling(false);') &&
           calendarSource.includes('isSameDepartment(prev.equipment.dept, currentUser.department || currentUser.dept)'),
-        '角色切换到临床日历时应清理工程师部署态和跨科室选中事件'
+        '角色切换到临床日历时应清理工程师部署态、跨科室选中事件并取消未完成调期'
       );
       assert(
         calendarSource.includes('currentUser.role, currentUser.department, currentUser.dept') &&
@@ -3143,6 +3146,14 @@ const checks: Check[] = [
       );
       assert(
         calendarSource.includes('const targetEventId = selectedEvent.id;') &&
+          calendarSource.includes('const canManageScheduleRef = useRef(canManageSchedule);') &&
+          calendarSource.includes('canManageScheduleRef.current = canManageSchedule;') &&
+          calendarSource.includes('const rescheduleTimerRef = useRef<number | null>(null);') &&
+          calendarSource.includes('const scheduleMutationVersionRef = useRef(0);') &&
+          calendarSource.includes('const requestVersion = scheduleMutationVersionRef.current;') &&
+          calendarSource.includes('rescheduleTimerRef.current = window.setTimeout(() => {') &&
+          calendarSource.includes('if (requestVersion !== scheduleMutationVersionRef.current || !canManageScheduleRef.current)') &&
+          calendarSource.includes('return;\n      }\n\n      setEquipments(prev => prev.map(eq => {') &&
           calendarSource.includes("const submittedDate = String(new FormData(form).get('newScheduleDate') || newScheduleDate).trim();") &&
           calendarSource.includes('const targetDate = submittedDate;') &&
           calendarSource.includes('setNewScheduleDate(submittedDate);') &&
@@ -3150,7 +3161,7 @@ const checks: Check[] = [
           calendarSource.includes('id="btn-maintenance-confirm-reschedule"') &&
           calendarSource.includes('if (prev.id !== targetEventId) return prev;') &&
           calendarSource.includes('date: targetDate'),
-        '维保调期应读取表单当前日期值，并且异步完成回写只能更新原始选中的日程，避免用户切换日程后误改右侧详情面板'
+        '维保调期应读取表单当前日期值，异步完成回写前复核调度权限和请求版本，避免切换身份或日程后误写入'
       );
     }
   }
