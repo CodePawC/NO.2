@@ -310,6 +310,13 @@ export default function App() {
   const canUserSeeTask = (task: StructuredTicket, user: UserProfile, userRole = user.role) => {
     return userRole !== 'medical_staff' || isSameDepartment(task.department, user.department || user.dept);
   };
+  const getVisibleFallbackTask = (sourceTasks: StructuredTicket[]) => {
+    if (isClinicalUser) {
+      return getDepartmentTasks(sourceTasks, currentUserDepartment)[0] || null;
+    }
+
+    return sourceTasks.find(canCurrentUserSeeTask) || null;
+  };
   const canCurrentUserUseEquipment = (equipment: MedicalEquipment) => {
     return !isClinicalUser || isSameDepartment(equipment.dept, currentUserDepartment);
   };
@@ -481,7 +488,7 @@ export default function App() {
       if (!found) return;
 
       if (!canCurrentUserSeeTask(found)) {
-        const fallbackTask = latestTasks.find(canCurrentUserSeeTask) || null;
+        const fallbackTask = getVisibleFallbackTask(latestTasks);
         const scopeLabel = currentUserDepartment || '本科室';
         setSelectedTask(fallbackTask);
         setCurrentWorkspace('tasks');
@@ -517,7 +524,7 @@ export default function App() {
     }
 
     if (!latestSelectedTask) {
-      const fallbackTask = tasksRef.current.find(canCurrentUserSeeTask) || null;
+      const fallbackTask = getVisibleFallbackTask(tasksRef.current);
       setSelectedTask(fallbackTask);
       if (!fallbackTask && mobileTab === 'detail') {
         setMobileTab(isClinicalUser ? 'chat' : 'list');
@@ -530,7 +537,7 @@ export default function App() {
       return;
     }
 
-    const fallbackTask = tasksRef.current.find(canCurrentUserSeeTask) || null;
+    const fallbackTask = getVisibleFallbackTask(tasksRef.current);
     setSelectedTask(fallbackTask);
     setMobileTab(fallbackTask ? 'list' : 'chat');
     showRoleToast(`已阻止跨科室工单访问，仅显示【${currentUserDepartment || '本科室'}】任务`);
@@ -1305,7 +1312,7 @@ export default function App() {
       setTasks(filtered);
       localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(filtered));
       if (selectedTask?.id === id) {
-        setSelectedTask(filtered.find(canCurrentUserSeeTask) || null);
+        setSelectedTask(getVisibleFallbackTask(filtered));
       }
     }
   };

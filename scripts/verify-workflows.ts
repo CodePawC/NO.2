@@ -2115,8 +2115,8 @@ const checks: Check[] = [
           deleteSource.includes('tasksRef.current = filtered;') &&
           deleteSource.includes('setTasks(filtered);') &&
           deleteSource.includes('localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(filtered));') &&
-          deleteSource.includes('setSelectedTask(filtered.find(canCurrentUserSeeTask) || null);'),
-        '工程师删除工单应基于最新任务列表过滤、立即持久化，并把详情切到仍可见任务'
+          deleteSource.includes('setSelectedTask(getVisibleFallbackTask(filtered));'),
+        '工程师删除工单应基于最新任务列表过滤、立即持久化，并把详情切到当前角色优先级最高的可见任务'
       );
     }
   },
@@ -2139,10 +2139,12 @@ const checks: Check[] = [
       );
       assert(
         appSource.includes('const canUserSeeTask = (task: StructuredTicket, user: UserProfile, userRole = user.role) => {') &&
+          appSource.includes('const getVisibleFallbackTask = (sourceTasks: StructuredTicket[]) => {') &&
+          appSource.includes('return getDepartmentTasks(sourceTasks, currentUserDepartment)[0] || null;') &&
           switchSource.includes('const deptTasks = getDepartmentTasks(latestTasks, targetUser.department || targetUser.dept);') &&
           switchSource.includes('setSelectedTask(latestSelectedTask || latestTasks[0] || null);') &&
           !switchSource.includes('setSelectedTask(tasksRef.current[0] || null);'),
-        '切回工程师时应优先保留刚刚处理的聚焦工单，避免临床验收后归档动作跳到默认第一张'
+        '切换身份和回退选中工单时应复用当前角色优先级规则，工程师仍优先保留刚刚处理的聚焦工单'
       );
     }
   },
@@ -2158,8 +2160,8 @@ const checks: Check[] = [
       assert(
         deepLinkSource.includes('const latestTasks = tasksRef.current;') &&
           deepLinkSource.includes('const found = latestTasks.find(t => t.id === ticketId);') &&
-          deepLinkSource.includes('const fallbackTask = latestTasks.find(canCurrentUserSeeTask) || null;'),
-        '工单深链打开和跨科室拦截回退应使用最新任务列表，避免打开已被更新或删除的旧工单'
+          deepLinkSource.includes('const fallbackTask = getVisibleFallbackTask(latestTasks);'),
+        '工单深链打开和跨科室拦截回退应使用最新任务列表与当前角色优先级，避免打开已被更新或删除的旧工单'
       );
 
       const selectedSyncStart = appSource.indexOf('useEffect(() => {\n    if (!selectedTask) return;');
@@ -2170,9 +2172,9 @@ const checks: Check[] = [
         selectedSyncSource.includes('const latestSelectedTask = tasksRef.current.find(task => task.id === selectedTask.id);') &&
           selectedSyncSource.includes('setSelectedTask(latestSelectedTask);') &&
           selectedSyncSource.includes('if (!latestSelectedTask)') &&
-          selectedSyncSource.includes('const fallbackTask = tasksRef.current.find(canCurrentUserSeeTask) || null;') &&
+          selectedSyncSource.includes('const fallbackTask = getVisibleFallbackTask(tasksRef.current);') &&
           selectedSyncSource.includes("setMobileTab(isClinicalUser ? 'chat' : 'list');"),
-        '选中工单详情应从最新任务列表刷新；若工单已删除或重置消失，应回退到当前角色可见任务，避免右侧详情停留在旧对象'
+        '选中工单详情应从最新任务列表刷新；若工单已删除或重置消失，应回退到当前角色优先级最高的可见任务，避免右侧详情停留在旧对象'
       );
 
       const clinicalFallbackStart = selectedSyncEnd;
@@ -2180,9 +2182,9 @@ const checks: Check[] = [
       assert(clinicalFallbackEnd > clinicalFallbackStart, '应能定位临床跨科室回退逻辑');
       const clinicalFallbackSource = appSource.slice(clinicalFallbackStart, clinicalFallbackEnd);
       assert(
-        clinicalFallbackSource.includes('const fallbackTask = tasksRef.current.find(canCurrentUserSeeTask) || null;') &&
+        clinicalFallbackSource.includes('const fallbackTask = getVisibleFallbackTask(tasksRef.current);') &&
           clinicalFallbackSource.includes('setSelectedTask(fallbackTask);'),
-        '临床身份发现当前详情跨科室时，应从最新任务列表选择可见回退任务'
+        '临床身份发现当前详情跨科室时，应从最新任务列表选择临床优先级最高的可见回退任务'
       );
     }
   },
