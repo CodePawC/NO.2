@@ -3288,6 +3288,10 @@ const checks: Check[] = [
         '日期弹窗应仅向工程师显示部署入口，临床端显示只读提示'
       );
       assert(
+        calendarSource.includes("? '本天暂无安排的PM自检或周期强检记录。点击下方按钮，可立刻在此日期为工程师部署受试任务。'\n                        : '本天本科室暂无安排的PM自检或周期强检记录。临床端可查看当天排程；如需新增任务，请联系医学装备科工程师统一部署。'"),
+        '临床打开空日期弹窗时不应提示点击下方按钮部署工程师任务'
+      );
+      assert(
         calendarSource.includes('setIsDeployMode(false);') &&
           calendarSource.includes('setActiveDatePopup(null);') &&
           calendarSource.includes('scheduleMutationVersionRef.current += 1;') &&

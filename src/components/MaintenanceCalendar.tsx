@@ -1617,7 +1617,9 @@ export default function MaintenanceCalendar({
                   <div>
                     <p className="text-xs font-bold text-slate-500 font-sans">该日期暂无任何任务或记录</p>
                     <p className="text-[10px] text-slate-400 mt-1 max-w-[280px] mx-auto leading-relaxed">
-                      本天暂无安排的PM自检或周期强检记录。点击下方按钮，可立刻在此日期为工程师部署受试任务。
+                      {canManageSchedule
+                        ? '本天暂无安排的PM自检或周期强检记录。点击下方按钮，可立刻在此日期为工程师部署受试任务。'
+                        : '本天本科室暂无安排的PM自检或周期强检记录。临床端可查看当天排程；如需新增任务，请联系医学装备科工程师统一部署。'}
                     </p>
                   </div>
                 </div>
