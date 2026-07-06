@@ -613,6 +613,27 @@ const checks: Check[] = [
     }
   },
   {
+    name: 'engineer task urgency filter covers every urgency level',
+    run: () => {
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const urgencyFilterStart = appSource.indexOf('value={urgencyFilter}');
+      const urgencyFilterEnd = appSource.indexOf('</select>', urgencyFilterStart);
+      assert(urgencyFilterStart !== -1 && urgencyFilterEnd > urgencyFilterStart, '应能定位工程师任务库紧急程度筛选器');
+      const urgencyFilterSource = appSource.slice(urgencyFilterStart, urgencyFilterEnd);
+
+      ['普通', '较急', '紧急', '特急', '生命支持'].forEach(level => {
+        assert(
+          urgencyFilterSource.includes(`<option value="${level}">${level}</option>`),
+          `工程师任务库紧急程度筛选器应包含【${level}】选项`
+        );
+      });
+      assert(
+        appSource.includes('const matchesUrgency = urgencyFilter === \'All\' || t.urgency === urgencyFilter;'),
+        '工程师任务库紧急程度筛选应继续按任务 urgency 字段精确过滤'
+      );
+    }
+  },
+  {
     name: 'engineer task priority only pins active critical work',
     run: () => {
       const activeNormalTask = createTask({

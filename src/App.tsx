@@ -2201,8 +2201,10 @@ export default function App() {
                 >
                   <option value="All">全部</option>
                   <option value="普通">普通</option>
+                  <option value="较急">较急</option>
                   <option value="紧急">紧急</option>
                   <option value="特急">特急</option>
+                  <option value="生命支持">生命支持</option>
                 </select>
               </div>
 
