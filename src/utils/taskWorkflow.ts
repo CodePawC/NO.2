@@ -73,6 +73,14 @@ export const getEngineerStatusBlockReason = (task: StructuredTicket, nextStatus:
     return '';
   }
 
+  if (canEngineerCloseTransferredTask(task) && nextStatus === '已完成') {
+    return '非设备转派任务无需临床设备验收，装备科应在完成转派协调后选择【已关闭】留痕。';
+  }
+
+  if (canEngineerCloseTransferredTask(task) && nextStatus === '已归档' && task.status !== '已关闭') {
+    return '非设备转派任务请先选择【已关闭】完成转派留痕，无需进入临床验收或维修归档流程。';
+  }
+
   if (TERMINAL_STATUSES.includes(nextStatus) && task.status !== '已完成') {
     return '工单必须先完成临床验收签署，才能归档或关闭。';
   }

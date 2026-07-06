@@ -341,6 +341,16 @@ const checks: Check[] = [
       assertEqual(getEngineerStatusBlockReason(transferTask, '已关闭'), '', '非设备转派任务应允许关闭');
       assertEqual(getEngineerStatusBlockReason(transferTask, '待派工'), '', '非设备转派任务仍可继续常规流转');
       assertIncludes(
+        getEngineerStatusBlockReason(transferTask, '已完成'),
+        '选择【已关闭】留痕',
+        '非设备转派任务的已完成禁用提示应引导关闭留痕，不能误提示临床验收'
+      );
+      assertIncludes(
+        getEngineerStatusBlockReason(transferTask, '已归档'),
+        '先选择【已关闭】完成转派留痕',
+        '非设备转派任务的已归档禁用提示应说明先关闭留痕，不能套用设备维修归档文案'
+      );
+      assertIncludes(
         getEngineerStatusBlockReason({ ...transferTask, status: '处理中' }, '待科室验收'),
         '无需临床设备验收',
         '非设备转派任务不能进入待科室验收这种无验收入口的半状态'
