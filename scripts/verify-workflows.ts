@@ -2620,6 +2620,15 @@ const checks: Check[] = [
         '日历事件列表与已选事件应随当前登录角色和科室变化重新计算，避免临床切换后残留旧科室日程'
       );
       assert(
+        calendarSource.includes("const selectedEventId = selectedEvent?.id || '';") &&
+          calendarSource.includes('const latestSelectedEvent = allEvents.find(evt => evt.id === selectedEventId);') &&
+          calendarSource.includes('if (!prev || prev.id !== selectedEventId) return prev;') &&
+          calendarSource.includes('if (!latestSelectedEvent) return null;') &&
+          calendarSource.includes('return latestSelectedEvent;') &&
+          calendarSource.includes('}, [allEvents, selectedEventId]);'),
+        '维保日历详情面板应跟随当前筛选后的事件列表同步，事件被角色/科室/筛选/设备更新移除时应自动关闭'
+      );
+      assert(
         calendarSource.includes('const selectedEquipment = filteredEquipmentsForDeploy.find(eq => eq.id === deployEquipmentId);') &&
           calendarSource.includes('当前筛选条件下无法部署到该设备') &&
           calendarSource.includes("const submittedDate = String(new FormData(form).get('deployDate') || deployDate).trim();") &&

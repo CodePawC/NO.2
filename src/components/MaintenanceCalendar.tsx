@@ -283,6 +283,34 @@ export default function MaintenanceCalendar({
     return events;
   }, [equipments, showMaintenance, showCalibration, showHistMaintenance, showHistRepair, showHistCalibration, currentEngineer, currentUser.role, currentUser.department, currentUser.dept]);
 
+  const selectedEventId = selectedEvent?.id || '';
+
+  useEffect(() => {
+    if (!selectedEventId) return;
+
+    const latestSelectedEvent = allEvents.find(evt => evt.id === selectedEventId);
+    setSelectedEvent(prev => {
+      if (!prev || prev.id !== selectedEventId) return prev;
+      if (!latestSelectedEvent) return null;
+
+      if (
+        prev.equipment === latestSelectedEvent.equipment &&
+        prev.date === latestSelectedEvent.date &&
+        prev.technician === latestSelectedEvent.technician &&
+        prev.title === latestSelectedEvent.title &&
+        prev.status === latestSelectedEvent.status &&
+        prev.description === latestSelectedEvent.description &&
+        prev.cost === latestSelectedEvent.cost &&
+        prev.result === latestSelectedEvent.result &&
+        prev.logId === latestSelectedEvent.logId
+      ) {
+        return prev;
+      }
+
+      return latestSelectedEvent;
+    });
+  }, [allEvents, selectedEventId]);
+
   // Group events by day string (YYYY-MM-DD)
   const eventsByDay = useMemo(() => {
     const map: Record<string, CalendarEvent[]> = {};
