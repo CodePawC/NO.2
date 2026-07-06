@@ -1531,11 +1531,15 @@ export default function App() {
       <header className="md:hidden bg-slate-900 text-white border-b border-slate-800 px-4 py-2 flex items-center justify-between shrink-0 z-40">
         <div className="flex items-center gap-2">
           <button 
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            aria-label={isSidebarOpen ? '关闭侧边导航' : '打开侧边导航'}
+            onClick={() => setIsSidebarOpen(true)}
+            aria-label="打开侧边导航"
             aria-expanded={isSidebarOpen}
             aria-controls="sidebar-navigation"
-            className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-300 cursor-pointer"
+            disabled={isSidebarOpen}
+            tabIndex={isSidebarOpen ? -1 : 0}
+            className={`p-1.5 rounded-lg text-slate-300 transition ${
+              isSidebarOpen ? 'opacity-40 pointer-events-none' : 'hover:bg-slate-800 cursor-pointer'
+            }`}
           >
             <Menu className="w-5 h-5" />
           </button>
@@ -1560,12 +1564,20 @@ export default function App() {
       {/* Left Sidebar Navigation Menu */}
       <aside className={`
         fixed inset-y-0 left-0 z-40 w-64 bg-slate-900 border-r border-slate-800 flex flex-col h-full shrink-0 transition-transform duration-300 transform 
-        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} 
-        md:relative md:translate-x-0 md:flex
+        ${isSidebarOpen ? 'translate-x-0 visible pointer-events-auto' : '-translate-x-full invisible pointer-events-none'}
+        md:relative md:translate-x-0 md:flex md:visible md:pointer-events-auto
       `} id="sidebar-navigation">
         {/* Sidebar Brand Header */}
-        <div className="p-4 border-b border-slate-800 flex flex-col gap-1 shrink-0 bg-slate-950/20">
-          <div className="flex items-center gap-2.5">
+        <div className="relative p-4 border-b border-slate-800 flex flex-col gap-1 shrink-0 bg-slate-950/20">
+          <button
+            type="button"
+            onClick={() => setIsSidebarOpen(false)}
+            aria-label="关闭侧边导航"
+            className="md:hidden absolute right-3 top-3 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+          <div className="flex items-center gap-2.5 pr-8 md:pr-0">
             <div className="bg-gradient-to-tr from-emerald-500 to-teal-400 p-2 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/10 shrink-0">
               <Wrench className="w-5 h-5 text-slate-950" />
             </div>
@@ -2545,13 +2557,15 @@ export default function App() {
                       if (t.status === '已关闭' || t.status === '已归档') statusStyle = 'bg-slate-100 text-slate-500 border-slate-200';
 
                       return (
-                        <div
+                        <button
+                          type="button"
                           key={t.id}
+                          aria-label={`查看工单详情 ${t.id} ${t.deviceName}`}
                           onClick={() => {
                             setSelectedTask(t);
                             setMobileTab('detail');
                           }}
-                          className={`p-3 rounded-xl border text-left transition cursor-pointer relative ${
+                          className={`w-full p-3 rounded-xl border text-left transition cursor-pointer relative ${
                             isSelected 
                               ? 'bg-slate-900 border-slate-900 text-white shadow-md' 
                               : 'bg-white hover:bg-slate-50 border-slate-200/80 text-slate-800'
@@ -2567,7 +2581,7 @@ export default function App() {
                             <span className="text-slate-400">{new Date(t.createdAt).toLocaleDateString('zh-CN', {month: 'numeric', day: 'numeric'})}</span>
                             <span className={t.urgency === '生命支持' ? 'text-rose-500 font-extrabold animate-pulse' : 'text-slate-400'}>{t.urgency}</span>
                           </div>
-                        </div>
+                        </button>
                       );
                     })
                   )}
@@ -2604,6 +2618,13 @@ export default function App() {
                         </span>
                         <div className="text-[10px] text-slate-400 mt-1.5">更新时间: {new Date(selectedTask.updatedAt).toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'})}</div>
                       </div>
+                    </div>
+
+                    <div className="bg-amber-50/70 border border-amber-200/70 p-3.5 rounded-xl shadow-xs">
+                      <div className="text-[10px] font-bold text-amber-800 uppercase tracking-wide mb-1">申报故障现象</div>
+                      <p className="text-xs text-slate-800 leading-relaxed break-words">
+                        {selectedTask.faultPhenomenon || '未录入具体故障描述，请联系医学装备科补充核实。'}
+                      </p>
                     </div>
 
                     {/* 双向数据穿透：关联医学装备数字档案卡 */}

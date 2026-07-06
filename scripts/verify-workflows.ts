@@ -122,6 +122,30 @@ const createUser = (overrides: Partial<UserProfile> = {}): UserProfile => ({
 
 const checks: Check[] = [
   {
+    name: 'mobile collapsed sidebar is hidden from interaction',
+    run: () => {
+      const appSource = readSource('src/App.tsx');
+      const sidebarStart = appSource.indexOf('id="sidebar-navigation"');
+      const sidebarClassStart = appSource.lastIndexOf('fixed inset-y-0 left-0', sidebarStart);
+      const sidebarClassSource = appSource.slice(sidebarClassStart, sidebarStart);
+      const headerStart = appSource.indexOf('{/* Mobile Top Header */}');
+      const headerEnd = appSource.indexOf('{/* Left Sidebar Navigation Menu */}', headerStart);
+      const mobileHeaderSource = appSource.slice(headerStart, headerEnd);
+      const sidebarHeaderEnd = appSource.indexOf('{/* Integrated User Persona Selector', sidebarStart);
+      const sidebarHeaderSource = appSource.slice(sidebarStart, sidebarHeaderEnd);
+
+      assert(sidebarStart !== -1 && sidebarClassStart !== -1, '应能定位移动端侧边栏 className');
+      assertIncludes(sidebarClassSource, '-translate-x-full invisible pointer-events-none', '移动端侧边栏关闭时应同时取消可见性和指针交互');
+      assertIncludes(sidebarClassSource, 'translate-x-0 visible pointer-events-auto', '移动端侧边栏打开时应恢复可见性和交互');
+      assertIncludes(sidebarClassSource, 'md:visible md:pointer-events-auto', '桌面常驻侧边栏应保持可见并可交互');
+      assertIncludes(mobileHeaderSource, 'onClick={() => setIsSidebarOpen(true)}', '移动端顶部菜单按钮应只负责打开侧边栏');
+      assertIncludes(mobileHeaderSource, 'disabled={isSidebarOpen}', '侧边栏打开时顶部菜单按钮应禁用，避免被抽屉遮挡后仍宣称可关闭');
+      assertIncludes(sidebarHeaderSource, 'aria-label="关闭侧边导航"', '移动端抽屉内部应提供真实可点击的关闭按钮');
+      assertIncludes(sidebarHeaderSource, 'onClick={() => setIsSidebarOpen(false)}', '抽屉内部关闭按钮应收起侧边栏');
+      assertIncludes(sidebarHeaderSource, 'md:hidden', '抽屉内部关闭按钮应只在移动端显示');
+    }
+  },
+  {
     name: 'engineer equipment task status flow stays sequential',
     run: () => {
       const task = createTask();
@@ -731,16 +755,18 @@ const checks: Check[] = [
       const sidebarSource = appSource.slice(sidebarStart, sidebarEnd);
 
       assert(
-        mobileHeaderSource.includes("aria-label={isSidebarOpen ? '关闭侧边导航' : '打开侧边导航'}") &&
+        mobileHeaderSource.includes('aria-label="打开侧边导航"') &&
           mobileHeaderSource.includes('aria-expanded={isSidebarOpen}') &&
-          mobileHeaderSource.includes('aria-controls="sidebar-navigation"'),
-        '移动端侧边栏图标按钮应有可读名称、展开状态和受控区域，方便真实用户与自动化测试定位'
+          mobileHeaderSource.includes('aria-controls="sidebar-navigation"') &&
+          mobileHeaderSource.includes('disabled={isSidebarOpen}'),
+        '移动端侧边栏顶部图标按钮应有可读名称、展开状态和受控区域，打开后应交给抽屉内部关闭按钮'
       );
       assert(
         sidebarSource.includes('id="sidebar-navigation"') &&
+          sidebarSource.includes('aria-label="关闭侧边导航"') &&
           sidebarSource.includes("setCurrentWorkspace('archives')") &&
           sidebarSource.includes('setIsSidebarOpen(false);'),
-        '移动端侧边栏应提供稳定受控区域，并在进入资产档案后自动收起'
+        '移动端侧边栏应提供稳定受控区域、真实关闭按钮，并在进入资产档案后自动收起'
       );
     }
   },
@@ -2590,6 +2616,20 @@ const checks: Check[] = [
       assert(
         clinicalDetailSource.includes("needsClinicalAcceptance(selectedTask) ? '故障报修追踪' : '转派事项追踪'"),
         '临床端非设备转派单标题应区别于设备故障报修'
+      );
+      assert(
+        clinicalDetailSource.includes('申报故障现象') &&
+          clinicalDetailSource.includes('selectedTask.faultPhenomenon') &&
+          clinicalDetailSource.includes('break-words') &&
+          clinicalDetailSource.includes('未录入具体故障描述，请联系医学装备科补充核实'),
+        '临床任务详情应直接展示申报故障现象，并在移动端允许长描述换行'
+      );
+      assert(
+        clinicalDetailSource.includes('<button') &&
+          clinicalDetailSource.includes('aria-label={`查看工单详情 ${t.id} ${t.deviceName}`}') &&
+          clinicalDetailSource.includes("setMobileTab('detail');") &&
+          clinicalDetailSource.includes('className={`w-full p-3 rounded-xl border text-left'),
+        '临床移动端任务卡应使用原生按钮语义，并可直接打开详情页'
       );
       assert(
         clinicalDetailSource.includes("selectedTask.status === '已关闭' || selectedTask.status === '已归档'"),
