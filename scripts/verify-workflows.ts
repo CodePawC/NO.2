@@ -885,8 +885,15 @@ const checks: Check[] = [
       );
       const demoMaintenanceLog = completedDemoSync.equipments[0].maintenanceLogs.find(log => log.workOrderNo === 'TKT-2026062805');
       assertEqual(completedDemoSync.equipments[0].status, '正常运行', '验收完成后呼吸机档案应恢复正常运行');
+      assertEqual(completedDemoSync.equipments[0].lastMaintenanceDate, '2026-07-03', '验收完成后应将演示呼吸机最近维保日期更新为验收日');
+      assertEqual(completedDemoSync.equipments[0].nextMaintenanceDate, '2026-10-01', '验收完成后应按 90 天 PM 周期重排演示呼吸机下次维保日期');
       assertEqual(demoMaintenanceLog?.status, '已完成', '验收完成后应写入已完成维修档案日志');
       assertEqual(demoMaintenanceLog?.verifyPerson, '赵晓东', '维修档案日志应保留临床验收人');
+      assertIncludes(
+        demoMaintenanceLog?.description || '',
+        '临床验收5星：设备使用一切正常（赵晓东）',
+        '演示呼吸机闭环档案履历应保留临床验收摘要，便于临床和装备科复盘'
+      );
 
       const completedTask = createTask({
         id: 'TKT-COMPLETE',
