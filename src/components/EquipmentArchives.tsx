@@ -4123,17 +4123,34 @@ Clinical class: Life-saving respiratory device`;
                   {canManageEquipmentArchive ? (
                     <button
                       onClick={() => {
-                        const csvContent = "data:text/csv;charset=utf-8,\uFEFF" // Include BOM for Chinese encoding support in Excel
-                          + ["设备编号,设备名称,科室,品类,品牌/厂商,型号,出厂SN,购置金额,运行状态,下期维保时间,是否强检"]
-                            .concat(matrixFilteredEquipments.map(e => `"${e.id}","${e.deviceName}","${e.dept}","${e.category}","${e.manufacturer}","${e.model}","${e.sn}",${e.purchaseCost},"${e.status}","${e.nextMaintenanceDate || ''}","${e.calibrationRequired ? '是' : '否'}"`))
-                            .join("\n");
-                        const encodedUri = encodeURI(csvContent);
+                        const escapeCsvValue = (value: string | number | boolean | null | undefined) =>
+                          `"${String(value ?? '').replace(/"/g, '""')}"`;
+                        const csvRows = [
+                          ["设备编号", "设备名称", "科室", "品类", "品牌/厂商", "型号", "出厂SN", "购置金额", "运行状态", "下期维保时间", "是否强检"],
+                          ...matrixFilteredEquipments.map(e => [
+                            e.id,
+                            e.deviceName,
+                            e.dept,
+                            e.category,
+                            e.manufacturer,
+                            e.model,
+                            e.sn,
+                            e.purchaseCost,
+                            e.status,
+                            e.nextMaintenanceDate || '',
+                            e.calibrationRequired ? '是' : '否',
+                          ]),
+                        ];
+                        const csvContent = `\uFEFF${csvRows.map(row => row.map(escapeCsvValue).join(",")).join("\n")}`;
+                        const csvBlob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+                        const downloadUrl = URL.createObjectURL(csvBlob);
                         const link = document.createElement("a");
-                        link.setAttribute("href", encodedUri);
+                        link.setAttribute("href", downloadUrl);
                         link.setAttribute("download", `医学装备资产台账明细_${assetScopeLabel}_${getLocalDateString()}.csv`);
                         document.body.appendChild(link);
                         link.click();
                         document.body.removeChild(link);
+                        window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 0);
                       }}
                       className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-xs transition-all cursor-pointer"
                       title={`导出当前${assetScopeLabel}可见设备资产报表为 CSV 格式`}

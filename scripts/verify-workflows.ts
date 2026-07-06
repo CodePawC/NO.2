@@ -1898,10 +1898,15 @@ const checks: Check[] = [
       const matrixExportSource = archiveSource.slice(matrixExportStart, matrixExportEnd);
       assert(
         matrixExportSource.includes('{canManageEquipmentArchive ? (') &&
+          matrixExportSource.includes('const escapeCsvValue = (value: string | number | boolean | null | undefined) =>') &&
+          matrixExportSource.includes('replace(/"/g, \'""\')') &&
+          matrixExportSource.includes('const csvBlob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });') &&
+          matrixExportSource.includes('const downloadUrl = URL.createObjectURL(csvBlob);') &&
           matrixExportSource.includes('link.setAttribute("download", `医学装备资产台账明细_${assetScopeLabel}_${getLocalDateString()}.csv`);') &&
+          matrixExportSource.includes('URL.revokeObjectURL(downloadUrl)') &&
           matrixExportSource.includes('导出当前表 (CSV)') &&
           matrixExportSource.includes('临床只读台账'),
-        '资产台账 CSV 导出应只允许工程师执行，临床端保留本科室台账只读查看'
+        '资产台账 CSV 导出应只允许工程师执行，并使用 Blob、BOM 与 CSV 转义保护中文和特殊字符'
       );
       const attachmentPreviewStart = archiveSource.indexOf('SMART ATTACHMENT PREVIEW & AI SNAPSHOT EXTRACTOR');
       const attachmentPreviewEnd = archiveSource.indexOf('{/* Document Split Grid Container */}', attachmentPreviewStart);
