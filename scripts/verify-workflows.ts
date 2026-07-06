@@ -1735,7 +1735,19 @@ const checks: Check[] = [
         '快捷报修回调应识别临床账号'
       );
       assert(
-        callbackSource.includes('!isSameDepartment(equipment.dept, currentSimulatedUser.department || currentSimulatedUser.dept)'),
+        callbackSource.includes('const latestEquipment = parseStoredEquipmentList(localStorage.getItem(EQUIPMENT_STORAGE_KEY)).equipments.find(eq => eq.id === equipment.id);') &&
+          callbackSource.includes('if (!latestEquipment)') &&
+          callbackSource.includes('msg-quick-repair-equipment-missing') &&
+          callbackSource.includes('hasActiveEquipmentRepairTask(latestTasks, latestEquipment)') &&
+          callbackSource.includes('hasOpenEquipmentRepairWorkOrder(latestEquipment)') &&
+          callbackSource.includes('pendingQuickRepairEquipmentIdsRef.current.has(latestEquipment.id)') &&
+          callbackSource.includes('deviceName: latestEquipment.deviceName') &&
+          callbackSource.includes('deviceId: latestEquipment.id') &&
+          callbackSource.includes('pendingQuickRepairEquipmentIdsRef.current.delete(latestEquipment.id);'),
+        '快捷报修回调应以最新设备档案对象为准同步主工单，避免旧子组件设备对象绕过删除、转科或在修占用'
+      );
+      assert(
+        callbackSource.includes('!isSameDepartment(latestEquipment.dept, currentSimulatedUser.department || currentSimulatedUser.dept)'),
         '快捷报修回调应校验设备归属科室'
       );
       assert(
@@ -1752,15 +1764,15 @@ const checks: Check[] = [
           appSource.includes('const pendingQuickRepairEquipmentIdsRef = useRef<Set<string>>(new Set());') &&
           appSource.includes('tasksRef.current = tasks;') &&
           callbackSource.includes('const latestTasks = tasksRef.current;') &&
-          callbackSource.includes('if (hasActiveEquipmentRepairTask(latestTasks, equipment))') &&
-          callbackSource.includes('if (hasOpenEquipmentRepairWorkOrder(equipment))') &&
-          callbackSource.includes('if (pendingQuickRepairEquipmentIdsRef.current.has(equipment.id))') &&
-          callbackSource.includes('pendingQuickRepairEquipmentIdsRef.current.add(equipment.id);') &&
+          callbackSource.includes('if (hasActiveEquipmentRepairTask(latestTasks, latestEquipment))') &&
+          callbackSource.includes('if (hasOpenEquipmentRepairWorkOrder(latestEquipment))') &&
+          callbackSource.includes('if (pendingQuickRepairEquipmentIdsRef.current.has(latestEquipment.id))') &&
+          callbackSource.includes('pendingQuickRepairEquipmentIdsRef.current.add(latestEquipment.id);') &&
           callbackSource.includes('const newTicketId = createNextTaskId(latestTasks);') &&
           callbackSource.includes('tasksRef.current = nextTasks;') &&
           callbackSource.includes('localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(nextTasks));') &&
           callbackSource.includes('localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(mergedTasks));') &&
-          callbackSource.includes('pendingQuickRepairEquipmentIdsRef.current.delete(equipment.id);') &&
+          callbackSource.includes('pendingQuickRepairEquipmentIdsRef.current.delete(latestEquipment.id);') &&
           callbackSource.includes('msg-quick-repair-duplicate-blocked') &&
           callbackSource.includes('msg-quick-repair-archive-duplicate-blocked') &&
           callbackSource.includes('msg-quick-repair-pending-blocked') &&
@@ -1839,7 +1851,7 @@ const checks: Check[] = [
         '档案智能报修草稿入口应阻断只有档案维修履历占用、暂无主工单的设备'
       );
       assert(
-        callbackSource.includes('if (hasOpenEquipmentRepairWorkOrder(equipment))') &&
+        callbackSource.includes('if (hasOpenEquipmentRepairWorkOrder(latestEquipment))') &&
           callbackSource.includes('msg-quick-repair-archive-duplicate-blocked') &&
           callbackSource.includes('return false;'),
         '快捷报修主工单同步入口应在档案已有进行中维修时拒绝写入新主工单'
@@ -1873,7 +1885,7 @@ const checks: Check[] = [
       assert(
         callbackSource.includes('const isClinicalReporter =') &&
           callbackSource.includes('const reportContactPerson = isClinicalReporter') &&
-          callbackSource.includes("`${normalizedDept || equipment.dept || '设备使用科室'}值班人员`") &&
+          callbackSource.includes("`${normalizedDept || latestEquipment.dept || '设备使用科室'}值班人员`") &&
           callbackSource.includes('const reportContactPhone = isClinicalReporter') &&
           callbackSource.includes("'待科室确认'"),
         '工程师从资产档案代建快捷报修时，主工单联系人应保留为设备所在科室待确认，而不是工程师本人'
@@ -1915,14 +1927,20 @@ const checks: Check[] = [
         '档案快捷报修单号应基于本地最新档案生成，避免连续报修时单号重复'
       );
       assert(
-        createSource.indexOf('const parentAccepted = onQuickRepairCreated?.({') < createSource.indexOf('const nextEquipments = latestEquipments.map(eq => {') &&
-          createSource.includes('const nextEquipments = latestEquipments.map(eq => {') &&
-          createSource.includes('if (eq.id !== targetEq.id) return eq;') &&
+        createSource.indexOf('const parentAccepted = onQuickRepairCreated?.({') < createSource.indexOf('const postParentEquipments = parseStoredEquipmentList(localStorage.getItem(EQUIPMENT_STORAGE_KEY)).equipments;') &&
+          createSource.indexOf('const postParentEquipments = parseStoredEquipmentList(localStorage.getItem(EQUIPMENT_STORAGE_KEY)).equipments;') < createSource.indexOf('const nextEquipments = postParentEquipments.map(eq => {') &&
+          createSource.includes('const postParentEquipments = parseStoredEquipmentList(localStorage.getItem(EQUIPMENT_STORAGE_KEY)).equipments;') &&
+          createSource.includes('const freshTargetEq = postParentEquipments.find(eq => eq.id === targetEq.id);') &&
+          createSource.includes('const freshQuickRepairBlockMessage = getQuickRepairBlockMessage(freshTargetEq || null);') &&
+          createSource.includes('if (!freshTargetEq || freshQuickRepairBlockMessage)') &&
+          createSource.includes('设备【${targetEq.deviceName}】已不在当前可报修范围，请刷新档案后重试。') &&
+          createSource.includes('const nextEquipments = postParentEquipments.map(eq => {') &&
+          createSource.includes('if (eq.id !== freshTargetEq.id) return eq;') &&
           createSource.includes('maintenanceLogs: [repairLog, ...(eq.maintenanceLogs || [])]') &&
           createSource.includes('localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));') &&
           createSource.includes('setEquipments(nextEquipments);') &&
           !createSource.includes('setEquipments(prevEquipments => {'),
-        '档案快捷报修必须在父组件接受后基于最新持久化档案立即写入维修履历，避免切换工作区时丢失档案记录'
+        '档案快捷报修必须在父组件接受后基于最新持久化档案重新校验并立即写入维修履历，避免切换工作区时丢失档案记录或并发重复写入'
       );
       assert(
         archiveSource.includes('id="btn-clinical-open-quick-repair"') &&

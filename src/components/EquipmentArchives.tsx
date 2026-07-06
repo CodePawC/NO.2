@@ -1760,6 +1760,17 @@ Clinical class: Life-saving respiratory device`;
       return '';
     }
 
+    const postParentEquipments = parseStoredEquipmentList(localStorage.getItem(EQUIPMENT_STORAGE_KEY)).equipments;
+    const freshTargetEq = postParentEquipments.find(eq => eq.id === targetEq.id);
+    const freshQuickRepairBlockMessage = getQuickRepairBlockMessage(freshTargetEq || null);
+    if (!freshTargetEq || freshQuickRepairBlockMessage) {
+      showQuickRepairToast({
+        type: 'warning',
+        message: freshQuickRepairBlockMessage || `设备【${targetEq.deviceName}】已不在当前可报修范围，请刷新档案后重试。`
+      });
+      return '';
+    }
+
     const repairLog: MaintenanceLog = {
       id: 'm-log-' + Date.now(),
       type: '维修',
@@ -1774,8 +1785,8 @@ Clinical class: Life-saving respiratory device`;
       verifyPerson: currentUser.name
     };
 
-    const nextEquipments = latestEquipments.map(eq => {
-      if (eq.id !== targetEq.id) return eq;
+    const nextEquipments = postParentEquipments.map(eq => {
+      if (eq.id !== freshTargetEq.id) return eq;
 
       return {
         ...eq,

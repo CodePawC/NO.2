@@ -179,40 +179,45 @@ export default function App() {
     workOrderNo: string;
   }): boolean => {
     const isClinicalReporter = currentUserRole === 'medical_staff' && currentSimulatedUser.role === 'medical_staff';
+    const latestEquipment = parseStoredEquipmentList(localStorage.getItem(EQUIPMENT_STORAGE_KEY)).equipments.find(eq => eq.id === equipment.id);
+    if (!latestEquipment) {
+      appendWorkflowNotice(`⚠️ **快捷报修权限提醒**\n设备【${equipment.deviceName}】已不在最新设备档案中，请刷新资产档案后重试。`, 'msg-quick-repair-equipment-missing');
+      return false;
+    }
     if (
       isClinicalReporter &&
-      !isSameDepartment(equipment.dept, currentSimulatedUser.department || currentSimulatedUser.dept)
+      !isSameDepartment(latestEquipment.dept, currentSimulatedUser.department || currentSimulatedUser.dept)
     ) {
-      appendWorkflowNotice(`⚠️ **快捷报修权限提醒**\n当前临床账号只能为本科室设备同步主工单。设备【${equipment.deviceName}】归属【${equipment.dept}】，当前账号归属【${currentSimulatedUser.department || currentSimulatedUser.dept}】。`, 'msg-quick-repair-blocked');
+      appendWorkflowNotice(`⚠️ **快捷报修权限提醒**\n当前临床账号只能为本科室设备同步主工单。设备【${latestEquipment.deviceName}】归属【${latestEquipment.dept}】，当前账号归属【${currentSimulatedUser.department || currentSimulatedUser.dept}】。`, 'msg-quick-repair-blocked');
       return false;
     }
     const latestTasks = tasksRef.current;
-    if (hasActiveEquipmentRepairTask(latestTasks, equipment)) {
-      appendWorkflowNotice(`⚠️ **重复报修提醒**\n设备【${equipment.deviceName}】已有未闭环维修工单，请在现有工单中补充故障信息，避免重复派单。`, 'msg-quick-repair-duplicate-blocked');
+    if (hasActiveEquipmentRepairTask(latestTasks, latestEquipment)) {
+      appendWorkflowNotice(`⚠️ **重复报修提醒**\n设备【${latestEquipment.deviceName}】已有未闭环维修工单，请在现有工单中补充故障信息，避免重复派单。`, 'msg-quick-repair-duplicate-blocked');
       return false;
     }
-    if (hasOpenEquipmentRepairWorkOrder(equipment)) {
-      appendWorkflowNotice(`⚠️ **重复报修提醒**\n设备【${equipment.deviceName}】档案中已有进行中的维修记录，请先补充现有维修履历或完成闭环，避免重复派单。`, 'msg-quick-repair-archive-duplicate-blocked');
+    if (hasOpenEquipmentRepairWorkOrder(latestEquipment)) {
+      appendWorkflowNotice(`⚠️ **重复报修提醒**\n设备【${latestEquipment.deviceName}】档案中已有进行中的维修记录，请先补充现有维修履历或完成闭环，避免重复派单。`, 'msg-quick-repair-archive-duplicate-blocked');
       return false;
     }
-    if (pendingQuickRepairEquipmentIdsRef.current.has(equipment.id)) {
-      appendWorkflowNotice(`⚠️ **重复报修提醒**\n设备【${equipment.deviceName}】正在同步快捷报修主工单，请勿重复点击。`, 'msg-quick-repair-pending-blocked');
+    if (pendingQuickRepairEquipmentIdsRef.current.has(latestEquipment.id)) {
+      appendWorkflowNotice(`⚠️ **重复报修提醒**\n设备【${latestEquipment.deviceName}】正在同步快捷报修主工单，请勿重复点击。`, 'msg-quick-repair-pending-blocked');
       return false;
     }
 
-    pendingQuickRepairEquipmentIdsRef.current.add(equipment.id);
+    pendingQuickRepairEquipmentIdsRef.current.add(latestEquipment.id);
 
     const urgencyLevel: UrgencyLevel = urgency === 'high'
-      ? (equipment.category === '急救生命支持' || equipment.riskLevel === '高' ? '生命支持' : '紧急')
+      ? (latestEquipment.category === '急救生命支持' || latestEquipment.riskLevel === '高' ? '生命支持' : '紧急')
       : urgency === 'medium'
         ? '较急'
         : '普通';
-    const normalizedDept = normalizeDepartmentName(equipment.dept);
+    const normalizedDept = normalizeDepartmentName(latestEquipment.dept);
     const newTicketId = createNextTaskId(latestTasks);
     const now = new Date();
     const reportContactPerson = isClinicalReporter
       ? currentSimulatedUser.name
-      : `${normalizedDept || equipment.dept || '设备使用科室'}值班人员`;
+      : `${normalizedDept || latestEquipment.dept || '设备使用科室'}值班人员`;
     const reportContactPhone = isClinicalReporter
       ? (currentSimulatedUser.phone || '未录入电话')
       : '待科室确认';
@@ -224,15 +229,15 @@ export default function App() {
       id: newTicketId,
       taskType: urgencyLevel === '生命支持' ? '生命支持设备应急' : '设备报修',
       source: reportSource,
-      department: normalizedDept || equipment.dept || '未录入科室',
-      location: `${normalizedDept || equipment.dept || '未录入科室'}设备点位`,
-      deviceName: equipment.deviceName,
-      deviceId: equipment.id,
+      department: normalizedDept || latestEquipment.dept || '未录入科室',
+      location: `${normalizedDept || latestEquipment.dept || '未录入科室'}设备点位`,
+      deviceName: latestEquipment.deviceName,
+      deviceId: latestEquipment.id,
       faultPhenomenon: description,
       contactPerson: reportContactPerson,
       contactPhone: reportContactPhone,
       urgency: urgencyLevel,
-      affectClinical: urgency === 'high' || equipment.category === '急救生命支持' ? '是' : '否',
+      affectClinical: urgency === 'high' || latestEquipment.category === '急救生命支持' ? '是' : '否',
       status: '待确认',
       aiStatus: '已分析',
       needBackupDevice: urgencyLevel === '生命支持' ? '是' : '否',
@@ -255,7 +260,7 @@ export default function App() {
       rawText: description,
       notes: isClinicalReporter
         ? `由资产档案快捷报修生成；档案维修单号：${workOrderNo}。`
-        : `由资产档案快捷报修生成；档案维修单号：${workOrderNo}。工程师代建，现场联系人需向${normalizedDept || equipment.dept || '使用科室'}确认。`
+        : `由资产档案快捷报修生成；档案维修单号：${workOrderNo}。工程师代建，现场联系人需向${normalizedDept || latestEquipment.dept || '使用科室'}确认。`
     };
 
     const nextTasks = [newTicket, ...tasksRef.current];
@@ -268,14 +273,14 @@ export default function App() {
       localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(mergedTasks));
       return mergedTasks;
     });
-    pendingQuickRepairEquipmentIdsRef.current.delete(equipment.id);
+    pendingQuickRepairEquipmentIdsRef.current.delete(latestEquipment.id);
     setSelectedTask(newTicket);
     setCurrentWorkspace('tasks');
     setMobileTab('detail');
     setChatMessages(prev => [...prev, {
       id: `msg-quick-repair-${Date.now()}`,
       sender: 'assistant',
-      text: `🚑 **资产档案快捷报修已同步主工单**\n设备：**${equipment.deviceName}**\n主工单：**${newTicketId}**\n档案维修单：**${workOrderNo}**\n\n工程师现在可以在任务流转助手中接单处理，后续仍需临床科室验收闭环。`,
+      text: `🚑 **资产档案快捷报修已同步主工单**\n设备：**${latestEquipment.deviceName}**\n主工单：**${newTicketId}**\n档案维修单：**${workOrderNo}**\n\n工程师现在可以在任务流转助手中接单处理，后续仍需临床科室验收闭环。`,
       timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
     }]);
     return true;
