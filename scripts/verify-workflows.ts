@@ -2562,6 +2562,10 @@ const checks: Check[] = [
         '临床日历视图应显示只读说明'
       );
       assert(
+        calendarSource.includes("canManageSchedule\n                      ? '本月无计划安排。可以点击下方“工作部署”下达维保、强检任务，或在左侧列表设定计划周期。'\n                      : '本月本科室暂无待执行计划。临床端可查看历史记录和后续排期；如需新增维保、强检或维修安排，请联系医学装备科工程师统一部署。'"),
+        '临床日历无计划时不应提示点击工程师工作部署入口'
+      );
+      assert(
         calendarSource.includes('canManageSchedule ? (') &&
           calendarSource.includes('部署{scheduleScopeLabel}新工作指令') &&
           calendarSource.includes('handleDeployWorkSubmit'),

@@ -1433,7 +1433,9 @@ export default function MaintenanceCalendar({
                 </div>
                 <p className="text-[11px] text-slate-500 leading-relaxed font-sans font-medium">
                   {monthStats.totalScheduled === 0 ? (
-                    '本月无计划安排。可以点击下方“工作部署”下达维保、强检任务，或在左侧列表设定计划周期。'
+                    canManageSchedule
+                      ? '本月无计划安排。可以点击下方“工作部署”下达维保、强检任务，或在左侧列表设定计划周期。'
+                      : '本月本科室暂无待执行计划。临床端可查看历史记录和后续排期；如需新增维保、强检或维修安排，请联系医学装备科工程师统一部署。'
                   ) : monthStats.totalScheduled > 4 ? (
                     `诊断结果：本月排期密度偏高（共计${monthStats.totalScheduled}台精密设备待执行）。目前现场待岗工程师负荷较满，建议点击日历天数标签对高风险设备执行错峰调度。`
                   ) : (
