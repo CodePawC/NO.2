@@ -308,6 +308,7 @@ export default function App() {
   const [pendingClinicalAcceptanceTaskIds, setPendingClinicalAcceptanceTaskIds] = useState<Set<string>>(() => new Set());
   const [showRoleSwitchedToast, setShowRoleSwitchedToast] = useState<string | null>(null);
   const roleToastTimerRef = useRef<number | null>(null);
+  const isIntakeSendingRef = useRef(false);
 
   const currentSimulatedUser = SIMULATED_USERS.find(u => u.id === currentSimulatedUserId) || SIMULATED_USERS[0];
   const isClinicalUser = currentUserRole === 'medical_staff';
@@ -403,6 +404,7 @@ export default function App() {
     setSimulationText('');
     stopVoiceSimulation();
     stopListening();
+    isIntakeSendingRef.current = false;
     setIsLoading(false);
     setSearchQuery('');
     setTypeFilter('All');
@@ -824,7 +826,8 @@ export default function App() {
   };
 
   const handleSendMessage = async (textToSend: string) => {
-    if (!textToSend.trim()) return;
+    if (!textToSend.trim() || isIntakeSendingRef.current) return;
+    isIntakeSendingRef.current = true;
     const activeRoleSessionVersion = roleSessionVersionRef.current;
 
     const userMsg: ChatMessage = {
@@ -882,6 +885,7 @@ export default function App() {
           extractedInfo: mockTestDraft,
           isClarification: false
         }]);
+        isIntakeSendingRef.current = false;
         setIsLoading(false);
       }, 600);
       return;
@@ -970,6 +974,7 @@ export default function App() {
       }]);
     } finally {
       if (activeRoleSessionVersion === roleSessionVersionRef.current) {
+        isIntakeSendingRef.current = false;
         setIsLoading(false);
       }
     }

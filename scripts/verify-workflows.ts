@@ -2633,13 +2633,14 @@ const checks: Check[] = [
           switchSource.includes('setForwardDept(null);') &&
           switchSource.includes('setIsClarification(false);') &&
           switchSource.includes('setIsFullDraftOpen(false);') &&
+          switchSource.includes('isIntakeSendingRef.current = false;') &&
           switchSource.includes('setIsLoading(false);') &&
           switchSource.includes("setSearchQuery('');") &&
           switchSource.includes("setTypeFilter('All');") &&
           switchSource.includes("setUrgencyFilter('All');") &&
           switchSource.includes("setStatusFilter('All');") &&
           switchSource.includes("setSourceFilter('All');"),
-        '切换身份时应清空未提交草稿、展开确认窗口、AI 建议、加载状态与工单筛选，避免上一身份上下文串入新身份'
+        '切换身份时应清空未提交草稿、展开确认窗口、AI 建议、加载/发送状态与工单筛选，避免上一身份上下文串入新身份'
       );
       assert(
         appSource.includes('const stopVoiceSimulation = (resetState = true) => {') &&
@@ -2716,11 +2717,22 @@ const checks: Check[] = [
           speechSource.includes('stopListening,'),
         '真实麦克风语音识别应使用会话版本隔离旧回调，停止录音时作废旧识别结果'
       );
+      const sendMessageStart = appSource.indexOf('const handleSendMessage = async (textToSend: string) => {');
+      const sendMessageEnd = appSource.indexOf('// Build ticket from current draft', sendMessageStart);
+      assert(sendMessageStart !== -1 && sendMessageEnd > sendMessageStart, '应能定位主 AI 报修发送逻辑');
+      const sendMessageSource = appSource.slice(sendMessageStart, sendMessageEnd);
+      const intakeSendingReleaseCount = (sendMessageSource.match(/isIntakeSendingRef\.current = false;/g) || []).length;
       assert(
-        appSource.includes('const activeRoleSessionVersion = roleSessionVersionRef.current;') &&
-          appSource.includes('if (activeRoleSessionVersion !== roleSessionVersionRef.current) return;') &&
-          appSource.includes('if (activeRoleSessionVersion === roleSessionVersionRef.current)'),
-        'AI 异步返回应校验角色会话版本，丢弃切换身份前的旧响应'
+        appSource.includes('const isIntakeSendingRef = useRef(false);') &&
+          sendMessageSource.includes('if (!textToSend.trim() || isIntakeSendingRef.current) return;') &&
+          sendMessageSource.includes('isIntakeSendingRef.current = true;') &&
+          sendMessageSource.includes('setIsLoading(true);') &&
+          sendMessageSource.includes('const activeRoleSessionVersion = roleSessionVersionRef.current;') &&
+          sendMessageSource.includes('if (activeRoleSessionVersion !== roleSessionVersionRef.current) return;') &&
+          sendMessageSource.includes('if (activeRoleSessionVersion === roleSessionVersionRef.current)') &&
+          sendMessageSource.includes('sendAssistantChat({') &&
+          intakeSendingReleaseCount >= 2,
+        '主 AI 报修发送应同步拦截连续提交，mock 与真实 AI 返回都应释放发送闸门，并丢弃切换身份前的旧响应'
       );
       const openArchiveStart = appSource.indexOf('const openLinkedEquipmentArchive = (equipmentId: string) => {');
       const openArchiveEnd = appSource.indexOf('useEffect(() => {\n    const handleDeepLinkTicket', openArchiveStart);
