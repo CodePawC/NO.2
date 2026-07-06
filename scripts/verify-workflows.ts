@@ -2172,8 +2172,16 @@ const checks: Check[] = [
           deleteSource.includes('tasksRef.current = filtered;') &&
           deleteSource.includes('setTasks(filtered);') &&
           deleteSource.includes('localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(filtered));') &&
+          deleteSource.includes('syncEquipmentArchivesForTasks(filtered);') &&
           deleteSource.includes('setSelectedTask(getVisibleFallbackTask(filtered));'),
-        '工程师删除工单应基于最新任务列表过滤、立即持久化，并把详情切到当前角色优先级最高的可见任务'
+        '工程师删除工单应基于最新任务列表过滤、立即持久化、同步解除档案在修占用，并把详情切到当前角色优先级最高的可见任务'
+      );
+      assert(
+        appSource.includes('const syncEquipmentArchivesForTasks = (sourceTasks: StructuredTicket[]) => {') &&
+          appSource.includes('const { equipments: equipmentSource, shouldPersist } = parseStoredEquipmentList(localStorage.getItem(EQUIPMENT_STORAGE_KEY));') &&
+          appSource.includes('const { equipments: equipmentsList, changed } = syncTasksToEquipmentArchives(sourceTasks, equipmentSource);') &&
+          appSource.includes('syncEquipmentArchivesForTasks(tasks);'),
+        '任务变更和删除后应复用同一档案同步函数，避免快捷报修主工单删除后资产档案仍显示故障维修'
       );
     }
   },

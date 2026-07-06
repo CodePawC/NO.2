@@ -654,19 +654,23 @@ export default function App() {
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // Persist tasks & Automatically synchronize status and maintenance logs to Equipment Archives
+  const syncEquipmentArchivesForTasks = (sourceTasks: StructuredTicket[]) => {
+    const { equipments: equipmentSource, shouldPersist } = parseStoredEquipmentList(localStorage.getItem(EQUIPMENT_STORAGE_KEY));
+    const { equipments: equipmentsList, changed } = syncTasksToEquipmentArchives(sourceTasks, equipmentSource);
+
+    if (changed || shouldPersist) {
+      localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(equipmentsList));
+      setAllEquipments(equipmentsList);
+    }
+  };
+
   useEffect(() => {
     tasksRef.current = tasks;
     localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(tasks));
 
     // Automatically sync latest tasks status to equipment archives
     try {
-      const { equipments: equipmentSource, shouldPersist } = parseStoredEquipmentList(localStorage.getItem(EQUIPMENT_STORAGE_KEY));
-      const { equipments: equipmentsList, changed } = syncTasksToEquipmentArchives(tasks, equipmentSource);
-
-      if (changed || shouldPersist) {
-        localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(equipmentsList));
-        setAllEquipments(equipmentsList);
-      }
+      syncEquipmentArchivesForTasks(tasks);
     } catch (err) {
       console.error("Auto-sync tasks to equipments error:", err);
     }
@@ -1332,6 +1336,7 @@ export default function App() {
       tasksRef.current = filtered;
       setTasks(filtered);
       localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(filtered));
+      syncEquipmentArchivesForTasks(filtered);
       if (selectedTask?.id === id) {
         setSelectedTask(getVisibleFallbackTask(filtered));
       }
