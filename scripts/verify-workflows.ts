@@ -2427,6 +2427,12 @@ const checks: Check[] = [
         '临床详情应根据任务类型判断是否需要设备维修验收'
       );
       assert(
+        clinicalDetailSource.includes('const matchedEquip = requiresClinicalAcceptance') &&
+          clinicalDetailSource.includes('? visibleEquipments.find(eq => eq.id === selectedTask.deviceId') &&
+          !clinicalDetailSource.includes('? allEquipments.find(eq => eq.id === selectedTask.deviceId'),
+        '临床详情关联资产卡应只从当前临床账号可见设备中匹配，避免历史异常工单先泄露外科室资产信息'
+      );
+      assert(
         clinicalDetailSource.includes('跨部门转派关闭留痕') &&
           clinicalDetailSource.includes('无需临床设备验收') &&
           clinicalDetailSource.includes('非设备问题已转派并关闭留痕'),
@@ -2458,6 +2464,11 @@ const checks: Check[] = [
         '设备维修单归档或关闭留痕后，临床端仍应展示已闭环验收评分与意见'
       );
       const engineerDetailSource = appSource.slice(engineerStart);
+      assert(
+        engineerDetailSource.includes('? allEquipments.find(eq => eq.id === selectedTask.deviceId') &&
+          !engineerDetailSource.includes('? visibleEquipments.find(eq => eq.id === selectedTask.deviceId'),
+        '工程师详情仍应从全院设备中匹配关联资产，保留装备科全院处置视角'
+      );
       assert(
         engineerDetailSource.includes("needsClinicalAcceptance(selectedTask) && ['已完成', '已归档', '已关闭'].includes(selectedTask.status)") &&
           engineerDetailSource.includes('const acceptance = getTaskAcceptanceDisplay(selectedTask);') &&

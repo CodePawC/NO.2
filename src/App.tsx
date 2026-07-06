@@ -2529,7 +2529,7 @@ export default function App() {
                     {(() => {
                       const requiresClinicalAcceptance = needsClinicalAcceptance(selectedTask);
                       const matchedEquip = requiresClinicalAcceptance
-                        ? allEquipments.find(eq => eq.id === selectedTask.deviceId || eq.sn === selectedTask.deviceId || (eq.deviceName === selectedTask.deviceName && isSameDepartment(eq.dept, selectedTask.department)))
+                        ? visibleEquipments.find(eq => eq.id === selectedTask.deviceId || eq.sn === selectedTask.deviceId || (eq.deviceName === selectedTask.deviceName && isSameDepartment(eq.dept, selectedTask.department)))
                         : null;
                       if (matchedEquip) {
                         return (
