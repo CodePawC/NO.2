@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { DEFAULT_LLM_PRESETS } from '../data/appPresets';
 import { testAssistantConfig } from '../services/aiApi';
 import { LLMConfig } from '../types';
@@ -81,8 +81,12 @@ export function useAiSettings() {
   );
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<AiTestResult | null>(null);
+  const testRequestVersionRef = useRef(0);
 
   const handleFieldChange = (providerId: string, field: keyof LLMConfig, value: unknown) => {
+    testRequestVersionRef.current += 1;
+    setIsTesting(false);
+    setTestResult(null);
     setProviderConfigs(prev => prev.map(cfg => {
       if (cfg.id === providerId) {
         const fallback = DEFAULT_LLM_PRESETS.find(preset => preset.id === cfg.id) || cfg;
@@ -93,28 +97,38 @@ export function useAiSettings() {
   };
 
   const handleTestConfig = async (config: LLMConfig) => {
+    const requestVersion = testRequestVersionRef.current + 1;
+    testRequestVersionRef.current = requestVersion;
     setIsTesting(true);
     setTestResult(null);
     try {
       const data = await testAssistantConfig(config);
+      if (requestVersion !== testRequestVersionRef.current) return;
       setTestResult(data);
     } catch (err: any) {
+      if (requestVersion !== testRequestVersionRef.current) return;
       setTestResult({
         success: false,
         error: err.message || '网络连接测试异常'
       });
     } finally {
-      setIsTesting(false);
+      if (requestVersion === testRequestVersionRef.current) {
+        setIsTesting(false);
+      }
     }
   };
 
   const resetProviderConfigs = () => {
+    testRequestVersionRef.current += 1;
     setProviderConfigs(DEFAULT_LLM_PRESETS);
     setActiveProviderId('gemini-default');
+    setIsTesting(false);
     setTestResult(null);
   };
 
   const clearTestResult = () => {
+    testRequestVersionRef.current += 1;
+    setIsTesting(false);
     setTestResult(null);
   };
 

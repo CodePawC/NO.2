@@ -2624,6 +2624,28 @@ const checks: Check[] = [
         'AI 设置应在活跃供应商 ID 不存在时回退默认 Gemini，避免选择器处于悬空状态'
       );
       assert(
+        settingsSource.includes("import { useRef, useState } from 'react';") &&
+          settingsSource.includes('const testRequestVersionRef = useRef(0);') &&
+          settingsSource.includes('testRequestVersionRef.current += 1;') &&
+          settingsSource.includes('const requestVersion = testRequestVersionRef.current + 1;') &&
+          settingsSource.includes('testRequestVersionRef.current = requestVersion;') &&
+          settingsSource.includes('if (requestVersion !== testRequestVersionRef.current) return;') &&
+          settingsSource.includes('if (requestVersion === testRequestVersionRef.current)') &&
+          settingsSource.includes('setIsTesting(false);'),
+        'AI 配置测速应使用请求版本隔离旧异步结果，避免切换供应商或编辑配置后旧测速结果覆盖当前面板'
+      );
+      assert(
+        settingsSource.includes('const handleFieldChange = (providerId: string, field: keyof LLMConfig, value: unknown) => {') &&
+          settingsSource.includes('setProviderConfigs(prev => prev.map(cfg => {') &&
+          settingsSource.includes('const clearTestResult = () => {') &&
+          settingsSource.includes('const resetProviderConfigs = () => {') &&
+          settingsSource.includes('setIsTesting(false);') &&
+          appSource.includes('clearTestResult();') &&
+          appSource.includes('onClick={() => handleTestConfig(activeConfig)}') &&
+          appSource.includes('disabled={isTesting}'),
+        'AI 设置字段变更、供应商切换和重置配置应清理旧测速状态，并在测速中禁用按钮'
+      );
+      assert(
         serverSource.includes("const normalizedEndpoint = typeof configToUse.endpoint === 'string' ? configToUse.endpoint.trim() : '';") &&
           serverSource.includes("const isGeminiNative = configToUse.id === 'gemini-default' || normalizedEndpoint.includes('googleapis.com') || normalizedEndpoint.includes('gemini');") &&
           serverSource.includes('Custom provider endpoint missing. Falling back to local heuristics.'),
