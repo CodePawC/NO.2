@@ -1036,6 +1036,11 @@ export default function App() {
     const finalSource = currentUserRole === 'medical_staff'
       ? normalizeClinicalDraftSource(draftTicket.source)
       : (draftTicket.source || 'AI 对话生成');
+    const isEngineerManualDraft = currentUserRole === 'engineer' && finalSource === '工程师手工录入';
+    const createLogPrefix = isEngineerManualDraft ? '工程师手工建单' : 'AI 智能建单';
+    const createLogOperator = isEngineerManualDraft
+      ? `${currentSimulatedUser.name} (${currentSimulatedUser.title})`
+      : 'AI 智能助手';
     const finalContactPerson = currentUserRole === 'medical_staff'
       ? currentSimulatedUser.name
       : (draftTicket.contactPerson && draftTicket.contactPerson !== '科室医护人员' && draftTicket.contactPerson !== '未录入联系人' ? draftTicket.contactPerson : defaultPerson);
@@ -1048,7 +1053,7 @@ export default function App() {
     const defaultLoc = draftTicket.location && draftTicket.location !== '未录入位置' ? draftTicket.location : (currentUserRole === 'medical_staff' ? `${currentDept || currentSimulatedUser.department}病房` : '未录入位置');
     const deptNormalizationNote = draftTicket.notes?.includes('AI原始识别科室为') ? draftTicket.notes : '';
     const createLogAction = [
-      `AI 智能建单。任务分类：${draftTicket.taskType || '未分类'}，来源：${finalSource}，紧急度判定：${draftTicket.urgency || '普通'}`,
+      `${createLogPrefix}。任务分类：${draftTicket.taskType || '未分类'}，来源：${finalSource}，紧急度判定：${draftTicket.urgency || '普通'}`,
       effectiveRecommendedDept && effectiveRecommendedDept !== '医学装备科' ? `自动提示转派至【${effectiveRecommendedDept}】` : '',
       effectiveNeedVendorCoop === '是' ? '需要厂家/供应商协同' : '',
       deptNormalizationNote
@@ -1082,7 +1087,7 @@ export default function App() {
         {
           time: new Date().toLocaleString('zh-CN', { hour12: false }).slice(0, 16),
           action: createLogAction.endsWith('。') ? createLogAction : `${createLogAction}。`,
-          operator: 'AI 智能助手'
+          operator: createLogOperator
         }
       ],
       rawText: chatMessages.filter(m => m.sender === 'user').map(m => m.text).join(' | '),
@@ -2139,6 +2144,7 @@ export default function App() {
                 onClick={() => {
                   const newTemp: Partial<StructuredTicket> = {
                     taskType: '设备报修',
+                    source: '工程师手工录入',
                     department: '急诊科',
                     location: '急诊楼 1楼',
                     deviceName: '手动录入设备',

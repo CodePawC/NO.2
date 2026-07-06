@@ -2352,6 +2352,38 @@ const checks: Check[] = [
     }
   },
   {
+    name: 'engineer manual draft keeps manual source and operator audit trail',
+    run: () => {
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const manualStart = appSource.indexOf('id="btn-manual-add"');
+      const manualBlockStart = appSource.lastIndexOf('const newTemp: Partial<StructuredTicket> = {', manualStart);
+      const manualBlockEnd = appSource.indexOf('setDraftTicket(newTemp);', manualBlockStart);
+      assert(manualStart !== -1 && manualBlockStart !== -1 && manualBlockEnd > manualBlockStart, '应能定位工程师手动建单草稿入口');
+      const manualDraftSource = appSource.slice(manualBlockStart, manualBlockEnd);
+
+      assert(
+        manualDraftSource.includes("source: '工程师手工录入'"),
+        '工程师手动建单草稿应明确标记为工程师手工录入，不能默认归为 AI 对话生成'
+      );
+
+      const createStart = appSource.indexOf('const handleCreateTicketFromDraft = () => {');
+      const createEnd = appSource.indexOf('// Handle Clinical Closed-loop Sign-off & Rating', createStart);
+      assert(createStart !== -1 && createEnd > createStart, '应能定位草稿提交逻辑');
+      const createSource = appSource.slice(createStart, createEnd);
+
+      assert(
+        createSource.includes("const finalSource = currentUserRole === 'medical_staff'") &&
+          createSource.includes(": (draftTicket.source || 'AI 对话生成');") &&
+          createSource.includes("const isEngineerManualDraft = currentUserRole === 'engineer' && finalSource === '工程师手工录入';") &&
+          createSource.includes("const createLogPrefix = isEngineerManualDraft ? '工程师手工建单' : 'AI 智能建单';") &&
+          createSource.includes("const createLogOperator = isEngineerManualDraft") &&
+          createSource.includes('`${currentSimulatedUser.name} (${currentSimulatedUser.title})`') &&
+          createSource.includes("operator: createLogOperator"),
+        '草稿提交应根据最终来源写入工程师手工建单日志和当前工程师操作人，避免手动建单被审计为 AI 建单'
+      );
+    }
+  },
+  {
     name: 'clinical transfer timeline uses handoff wording instead of repair acceptance',
     run: () => {
       const appSource = readFileSync('src/App.tsx', 'utf8');
