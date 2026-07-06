@@ -1483,6 +1483,17 @@ const checks: Check[] = [
         '资产档案页头部搜索区不能覆盖视图切换按钮，维保日历/看板入口必须可点击'
       );
       assert(
+        archiveSource.includes('id="main_container"') &&
+          archiveSource.includes('const mainContainerRef = useRef<HTMLElement | null>(null);') &&
+          archiveSource.includes('ref={mainContainerRef}') &&
+          archiveSource.includes("viewMode === 'list' || viewMode === 'matrix'") &&
+          archiveSource.includes('overflow-y-auto overflow-x-hidden pr-1 custom-scrollbar') &&
+          archiveSource.includes(": 'overflow-hidden'") &&
+          archiveSource.includes('mainContainerRef.current?.scrollTo({ top: 0, left: 0 });') &&
+          archiveSource.includes('}, [viewMode]);'),
+        '台账明细表和科室资产看板应在固定工作台内开放纵向滚动，并在切换视图时回到顶部，避免 720px 桌面窗口裁掉下方内容'
+      );
+      assert(
         archiveSource.includes('setIsFormModalOpen(false);') &&
           archiveSource.includes('setIsAiParserOpen(false);') &&
           archiveSource.includes('setIsLogModalOpen(false);') &&
@@ -2312,7 +2323,8 @@ const checks: Check[] = [
         '移动端详情头部扫码报修入口应与桌面入口共享可报修状态，避免维修中设备仍能打开无效扫码流程'
       );
       assert(
-        archiveSource.includes('id="main_container" className="flex-1 min-h-0 relative flex flex-col pb-20 md:pb-0"') &&
+        archiveSource.includes('id="main_container"') &&
+          archiveSource.includes('className={`flex-1 min-h-0 relative flex flex-col pb-20 md:pb-0 ${') &&
           archiveSource.includes('id="right_column_panel"') &&
           archiveSource.includes("mobileView === 'ai' ? 'fixed inset-x-3 top-48 bottom-20 z-20 flex' : 'hidden md:flex'") &&
           archiveSource.includes('md:static md:inset-auto md:z-auto'),

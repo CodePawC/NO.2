@@ -569,6 +569,7 @@ export default function EquipmentArchives({
 
   // Top-level View Mode: 'inventory' (Standard 3-column list/dossier) | 'calendar' (Unified scheduling calendar) | 'matrix' (Department & type equipment matrix dashboard) | 'list' (Detailed list grid)
   const [viewMode, setViewMode] = useState<'inventory' | 'calendar' | 'matrix' | 'list'>('inventory');
+  const mainContainerRef = useRef<HTMLElement | null>(null);
 
   // Matrix and Category All Equipment Tab Filters
   const [matrixSelectedDept, setMatrixSelectedDept] = useState('全部科室');
@@ -679,6 +680,10 @@ export default function EquipmentArchives({
   const [chatMessages, setChatMessages] = useState<Array<{role: 'user' | 'model', text: string}>>([
     { role: 'model', text: createDiagnosticWelcome() }
   ]);
+
+  useEffect(() => {
+    mainContainerRef.current?.scrollTo({ top: 0, left: 0 });
+  }, [viewMode]);
   const isChatSendingRef = useRef(false);
   const chatRequestVersionRef = useRef(0);
   const diagnosticChatSessionKeyRef = useRef('');
@@ -2297,7 +2302,15 @@ Clinical class: Life-saving respiratory device`;
       </header>
 
       {/* Main Grid Content Container */}
-      <main id="main_container" className="flex-1 min-h-0 relative flex flex-col pb-20 md:pb-0">
+      <main
+        id="main_container"
+        ref={mainContainerRef}
+        className={`flex-1 min-h-0 relative flex flex-col pb-20 md:pb-0 ${
+          viewMode === 'list' || viewMode === 'matrix'
+            ? 'overflow-y-auto overflow-x-hidden pr-1 custom-scrollbar'
+            : 'overflow-hidden'
+        }`}
+      >
         {viewMode === 'inventory' ? (
           <div className="grid grid-cols-12 gap-3 md:gap-6 flex-1 min-h-0 w-full">
         
