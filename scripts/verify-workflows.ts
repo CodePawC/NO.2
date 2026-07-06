@@ -253,9 +253,10 @@ const checks: Check[] = [
           acceptSource.includes('setPendingClinicalAcceptanceTaskIds(prev => new Set(prev).add(taskId));') &&
           acceptSource.includes('const nextTasks = tasksRef.current.map(t => t.id === taskId ? updatedTask : t);') &&
           acceptSource.includes('tasksRef.current = nextTasks;') &&
+          acceptSource.includes('localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(nextStateTasks));') &&
           acceptSource.includes('pendingClinicalAcceptanceTaskIdsRef.current.delete(taskId);') &&
           acceptSource.includes('next.delete(taskId);'),
-        '临床验收提交应基于最新任务列表写入并阻断同一工单连续点击，避免重复验收日志'
+        '临床验收提交应基于最新任务列表写入、立即持久化并阻断同一工单连续点击，避免重复验收日志或刷新丢失'
       );
       assert(
         appSource.includes('id={`clinical-rating-star-${star}`}') &&
@@ -1162,8 +1163,9 @@ const checks: Check[] = [
           addLogSource.includes('pendingEngineerLogKeysRef.current.add(pendingLogKey);') &&
           addLogSource.includes('const nextTasks = tasksRef.current.map(t => t.id === latestTask.id ? updatedTask : t);') &&
           addLogSource.includes('tasksRef.current = nextTasks;') &&
-          addLogSource.includes('setTasks(nextTasks);'),
-        '工程师追加日志应基于最新任务列表写入，并阻断同一条处置日志连续点击重复提交'
+          addLogSource.includes('setTasks(nextTasks);') &&
+          addLogSource.includes('localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(nextTasks));'),
+        '工程师追加日志应基于最新任务列表写入、立即持久化，并阻断同一条处置日志连续点击重复提交'
       );
       assert(
         appSource.includes("disabled={!activeLogAction.trim() || isTaskTerminal(selectedTask)}") &&
@@ -1202,8 +1204,9 @@ const checks: Check[] = [
           statusSource.includes('action: `状态变更被系统拦截：尝试从【${latestTask.status}】改为【${newStatus}】。原因：${blockReason}`') &&
           statusSource.includes('const nextTasks = tasksRef.current.map(t => t.id === latestTask.id ? updatedTask : t);') &&
           statusSource.includes('tasksRef.current = nextTasks;') &&
-          statusSource.includes('setTasks(nextTasks);'),
-        '工程师状态流转应基于最新任务对象写入，避免覆盖刚追加的日志或验收状态'
+          statusSource.includes('setTasks(nextTasks);') &&
+          statusSource.includes('localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(nextTasks));'),
+        '工程师状态流转应基于最新任务对象写入并立即持久化，避免覆盖刚追加的日志或验收状态'
       );
     }
   },
@@ -1710,12 +1713,14 @@ const checks: Check[] = [
           callbackSource.includes('pendingQuickRepairEquipmentIdsRef.current.add(equipment.id);') &&
           callbackSource.includes('const newTicketId = createNextTaskId(latestTasks);') &&
           callbackSource.includes('tasksRef.current = nextTasks;') &&
+          callbackSource.includes('localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(nextTasks));') &&
+          callbackSource.includes('localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(mergedTasks));') &&
           callbackSource.includes('pendingQuickRepairEquipmentIdsRef.current.delete(equipment.id);') &&
           callbackSource.includes('msg-quick-repair-duplicate-blocked') &&
           callbackSource.includes('msg-quick-repair-pending-blocked') &&
           callbackSource.includes('避免重复派单') &&
           callbackSource.includes('return false;'),
-        '快捷报修同步主工单时应使用最新任务源并阻断同设备连续点击，避免重复派单'
+        '快捷报修同步主工单时应使用最新任务源、立即持久化并阻断同设备连续点击，避免重复派单或刷新丢失'
       );
     }
   },
@@ -1928,8 +1933,9 @@ const checks: Check[] = [
           createSource.includes('const newTicketId = createNextTaskId(tasksRef.current);') &&
           createSource.includes('const nextTasks = [newTicket, ...tasksRef.current];') &&
           createSource.includes('tasksRef.current = nextTasks;') &&
-          createSource.includes('setTasks(nextTasks);'),
-        '草稿建单应基于最新任务列表生成单号并阻断连续点击，避免重复单号或重复工单'
+          createSource.includes('setTasks(nextTasks);') &&
+          createSource.includes('localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(nextTasks));'),
+        '草稿建单应基于最新任务列表生成单号、立即持久化并阻断连续点击，避免重复单号、重复工单或刷新丢失'
       );
       assert(
         createSource.includes('const duplicateRepairTask = shouldLinkEquipmentToTicket && linkedEquipment') &&

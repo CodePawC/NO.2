@@ -269,10 +269,12 @@ export default function App() {
 
     const nextTasks = [newTicket, ...tasksRef.current];
     tasksRef.current = nextTasks;
+    localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(nextTasks));
     setTasks(prev => {
       if (prev.some(task => task.id === newTicket.id)) return prev;
       const mergedTasks = [newTicket, ...prev];
       tasksRef.current = mergedTasks;
+      localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(mergedTasks));
       return mergedTasks;
     });
     pendingQuickRepairEquipmentIdsRef.current.delete(equipment.id);
@@ -1064,6 +1066,7 @@ export default function App() {
     const nextTasks = [newTicket, ...tasksRef.current];
     tasksRef.current = nextTasks;
     setTasks(nextTasks);
+    localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(nextTasks));
     setSelectedTask(newTicket);
     setMobileTab('list');
     
@@ -1141,6 +1144,7 @@ export default function App() {
     setTasks(prev => {
       const nextStateTasks = prev.map(t => t.id === taskId ? updatedTask : t);
       tasksRef.current = nextStateTasks;
+      localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(nextStateTasks));
       return nextStateTasks;
     });
     pendingClinicalAcceptanceTaskIdsRef.current.delete(taskId);
@@ -1217,6 +1221,7 @@ export default function App() {
     const nextTasks = tasksRef.current.map(t => t.id === latestTask.id ? updatedTask : t);
     tasksRef.current = nextTasks;
     setTasks(nextTasks);
+    localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(nextTasks));
     setSelectedTask(updatedTask);
     setActiveLogAction('');
   };
@@ -1254,6 +1259,7 @@ export default function App() {
       const nextTasks = tasksRef.current.map(t => t.id === latestTask.id ? updatedTask : t);
       tasksRef.current = nextTasks;
       setTasks(nextTasks);
+      localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(nextTasks));
       setSelectedTask(updatedTask);
       setChatMessages(prev => [...prev, {
         id: `msg-status-blocked-${Date.now()}`,
@@ -1281,6 +1287,7 @@ export default function App() {
     const nextTasks = tasksRef.current.map(t => t.id === latestTask.id ? updatedTask : t);
     tasksRef.current = nextTasks;
     setTasks(nextTasks);
+    localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(nextTasks));
     setSelectedTask(updatedTask);
   };
 
