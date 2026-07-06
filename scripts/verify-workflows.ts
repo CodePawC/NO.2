@@ -1156,8 +1156,12 @@ const checks: Check[] = [
         '当前状态按钮应禁用，避免工程师误以为可重复点击'
       );
       assert(
-        appSource.includes("title={isCurrentStatus ? '当前状态' : (blockReason || `切换至${st}`)}"),
-        '当前状态按钮应给出明确提示'
+        appSource.includes("const statusControlTitle = isTaskTerminal(selectedTask)") &&
+          appSource.includes("? '该工单已归档或关闭，状态已锁定'") &&
+          appSource.includes(": (isCurrentStatus ? '当前状态' : (blockReason || `切换至${st}`));") &&
+          appSource.includes('title={statusControlTitle}') &&
+          appSource.includes('aria-label={`${st}：${statusControlTitle}`}'),
+        '当前状态按钮应给出明确提示，已归档或已关闭终态应直接暴露锁定原因和可访问名称'
       );
     }
   },

@@ -3181,12 +3181,16 @@ export default function App() {
                     const isCurrentStatus = selectedTask.status === st;
                     const isBlocked = !!blockReason;
                     const isNextStatus = st === getEngineerNextStatus(selectedTask);
+                    const statusControlTitle = isTaskTerminal(selectedTask)
+                      ? '该工单已归档或关闭，状态已锁定'
+                      : (isCurrentStatus ? '当前状态' : (blockReason || `切换至${st}`));
                     return (
                       <button
                         key={st}
                         onClick={() => handleUpdateStatus(st)}
                         disabled={isCurrentStatus || isBlocked}
-                        title={isCurrentStatus ? '当前状态' : (blockReason || `切换至${st}`)}
+                        title={statusControlTitle}
+                        aria-label={`${st}：${statusControlTitle}`}
                         className={`text-[11px] px-2.5 py-1 rounded-lg font-semibold border transition ${
                           isCurrentStatus
                             ? 'bg-slate-900 border-slate-900 text-white shadow-xs cursor-default'
