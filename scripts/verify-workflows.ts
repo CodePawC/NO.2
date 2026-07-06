@@ -1728,14 +1728,22 @@ const checks: Check[] = [
       const callbackSource = appSource.slice(callbackStart, callbackEnd);
 
       assert(
-        assetReportSource.includes('findActiveEquipmentRepairTask(tasksRef.current, equip)') &&
+        assetReportSource.includes('const latestEquipment = parseStoredEquipmentList(localStorage.getItem(EQUIPMENT_STORAGE_KEY)).equipments.find(eq => eq.id === equip.id);') &&
+          assetReportSource.includes('if (!latestEquipment)') &&
+          assetReportSource.includes('msg-asset-report-equipment-missing') &&
+          assetReportSource.includes('findActiveEquipmentRepairTask(tasksRef.current, latestEquipment)') &&
           assetReportSource.includes('setSelectedTask(duplicateRepairTask);') &&
           assetReportSource.includes('setMobileTab(\'detail\');') &&
           assetReportSource.includes('msg-asset-report-duplicate-blocked') &&
           assetReportSource.includes('避免重复生成报修草稿') &&
-          assetReportSource.includes('hasOpenEquipmentRepairWorkOrder(equip)') &&
-          assetReportSource.includes('msg-asset-report-archive-duplicate-blocked'),
-        '档案智能报修草稿入口应先阻断同设备未闭环维修和档案进行中维修，避免临床生成注定重复的报修草稿'
+          assetReportSource.includes('hasOpenEquipmentRepairWorkOrder(latestEquipment)') &&
+          assetReportSource.includes('msg-asset-report-archive-duplicate-blocked') &&
+          assetReportSource.includes('department: normalizeDepartmentName(latestEquipment.dept)') &&
+          assetReportSource.includes('deviceName: latestEquipment.deviceName') &&
+          assetReportSource.includes('deviceId: latestEquipment.id') &&
+          assetReportSource.includes("urgency: latestEquipment.riskLevel === '高' ? '紧急' : '普通'") &&
+          assetReportSource.includes("affectClinical: latestEquipment.category === '急救生命支持' ? '是' : '否'"),
+        '档案智能报修草稿入口应以最新设备档案阻断缺失、跨科室、同设备未闭环维修和档案进行中维修，避免旧档案快照生成错误草稿'
       );
       assert(
         callbackSource.includes("currentUserRole === 'medical_staff'") &&
@@ -1854,7 +1862,7 @@ const checks: Check[] = [
       const relatedTaskActionSource = archiveSource.slice(relatedTaskActionStart, relatedTaskActionEnd);
 
       assert(
-        assetReportSource.includes('hasOpenEquipmentRepairWorkOrder(equip)') &&
+        assetReportSource.includes('hasOpenEquipmentRepairWorkOrder(latestEquipment)') &&
           assetReportSource.includes('msg-asset-report-archive-duplicate-blocked'),
         '档案智能报修草稿入口应阻断只有档案维修履历占用、暂无主工单的设备'
       );

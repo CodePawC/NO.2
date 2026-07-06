@@ -121,31 +121,36 @@ export default function App() {
   }, [currentWorkspace]);
 
   const handleReportRepairFromEquip = (equip: any) => {
-    if (currentUserRole === 'medical_staff' && currentSimulatedUser.role === 'medical_staff' && !isSameDepartment(equip.dept, currentSimulatedUser.department || currentSimulatedUser.dept)) {
-      appendWorkflowNotice(`⚠️ **报修权限提醒**\n当前临床账号只能为本科室设备发起报修。设备【${equip.deviceName}】归属【${equip.dept}】，当前账号归属【${currentSimulatedUser.department || currentSimulatedUser.dept}】。`, 'msg-asset-report-blocked');
+    const latestEquipment = parseStoredEquipmentList(localStorage.getItem(EQUIPMENT_STORAGE_KEY)).equipments.find(eq => eq.id === equip.id);
+    if (!latestEquipment) {
+      appendWorkflowNotice(`⚠️ **报修权限提醒**\n设备【${equip.deviceName || equip.id}】已不在最新设备档案中，请刷新资产档案后重试。`, 'msg-asset-report-equipment-missing');
+      return;
+    }
+    if (currentUserRole === 'medical_staff' && currentSimulatedUser.role === 'medical_staff' && !isSameDepartment(latestEquipment.dept, currentSimulatedUser.department || currentSimulatedUser.dept)) {
+      appendWorkflowNotice(`⚠️ **报修权限提醒**\n当前临床账号只能为本科室设备发起报修。设备【${latestEquipment.deviceName}】归属【${latestEquipment.dept}】，当前账号归属【${currentSimulatedUser.department || currentSimulatedUser.dept}】。`, 'msg-asset-report-blocked');
       return;
     }
 
-    const duplicateRepairTask = findActiveEquipmentRepairTask(tasksRef.current, equip);
+    const duplicateRepairTask = findActiveEquipmentRepairTask(tasksRef.current, latestEquipment);
     if (duplicateRepairTask) {
       setCurrentWorkspace('tasks');
       setSelectedTask(duplicateRepairTask);
       setMobileTab('detail');
-      appendWorkflowNotice(`⚠️ **重复报修提醒**\n设备【${equip.deviceName}】已有未闭环维修工单 **${duplicateRepairTask.id}**（当前状态：【${duplicateRepairTask.status}】）。请在现有工单中补充故障信息，避免重复生成报修草稿。`, 'msg-asset-report-duplicate-blocked');
+      appendWorkflowNotice(`⚠️ **重复报修提醒**\n设备【${latestEquipment.deviceName}】已有未闭环维修工单 **${duplicateRepairTask.id}**（当前状态：【${duplicateRepairTask.status}】）。请在现有工单中补充故障信息，避免重复生成报修草稿。`, 'msg-asset-report-duplicate-blocked');
       return;
     }
-    if (hasOpenEquipmentRepairWorkOrder(equip)) {
-      appendWorkflowNotice(`⚠️ **重复报修提醒**\n设备【${equip.deviceName}】档案中已有进行中的维修记录，请先在设备档案维修履历中补充处理进展或完成闭环，避免重复生成报修草稿。`, 'msg-asset-report-archive-duplicate-blocked');
+    if (hasOpenEquipmentRepairWorkOrder(latestEquipment)) {
+      appendWorkflowNotice(`⚠️ **重复报修提醒**\n设备【${latestEquipment.deviceName}】档案中已有进行中的维修记录，请先在设备档案维修履历中补充处理进展或完成闭环，避免重复生成报修草稿。`, 'msg-asset-report-archive-duplicate-blocked');
       return;
     }
 
     setCurrentWorkspace('tasks');
     const presetText = `【系统一键扫码报修】
-设备名称: ${equip.deviceName}
-规格型号: ${equip.model}
-原厂SN码: ${equip.sn}
-资产编号: ${equip.id}
-所在科室: ${equip.dept}
+设备名称: ${latestEquipment.deviceName}
+规格型号: ${latestEquipment.model}
+原厂SN码: ${latestEquipment.sn}
+资产编号: ${latestEquipment.id}
+所在科室: ${latestEquipment.dept}
 故障现象: 设备异常，需装备科紧急派人进行维修或PM检查。`;
     
     setInputMessage(presetText);
@@ -153,12 +158,12 @@ export default function App() {
     // Construct pre-filled draft ticket
     setDraftTicket({
       taskType: '设备报修',
-      department: normalizeDepartmentName(equip.dept),
-      deviceName: equip.deviceName,
-      deviceId: equip.id,
+      department: normalizeDepartmentName(latestEquipment.dept),
+      deviceName: latestEquipment.deviceName,
+      deviceId: latestEquipment.id,
       faultPhenomenon: '设备发生故障异常，需紧急现场排故与检修。',
-      urgency: equip.riskLevel === '高' ? '紧急' : '普通',
-      affectClinical: equip.category === '急救生命支持' ? '是' : '否',
+      urgency: latestEquipment.riskLevel === '高' ? '紧急' : '普通',
+      affectClinical: latestEquipment.category === '急救生命支持' ? '是' : '否',
       status: '待确认',
       source: '科室扫码报修'
     });
