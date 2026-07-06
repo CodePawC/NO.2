@@ -1261,6 +1261,19 @@ const checks: Check[] = [
           archiveSource.includes("setMobileView('list');"),
         '档案筛选为空时应清空旧选中设备，并让移动端退出详情页'
       );
+      {
+        const deepLinkStart = archiveSource.indexOf('const handleDeepLinkEquipment = (e: any) => {');
+        const deepLinkEnd = archiveSource.indexOf('window.addEventListener', deepLinkStart);
+        assert(deepLinkStart !== -1 && deepLinkEnd > deepLinkStart, '应能定位设备档案深链打开逻辑');
+        const deepLinkSource = archiveSource.slice(deepLinkStart, deepLinkEnd);
+        assert(
+          deepLinkSource.includes('setSelectedId(found.id);') &&
+            deepLinkSource.includes("setViewMode('inventory');") &&
+            deepLinkSource.includes("setMobileView('detail');") &&
+            deepLinkSource.includes('setActiveTab(e.detail.activeTab);'),
+          '从任务详情深链打开设备档案时，应在移动端直接进入设备详情并切到指定页签'
+        );
+      }
       assert(
         archiveSource.includes("['已完成', '已归档', '已关闭'].includes(ticket.status)") &&
           archiveSource.includes('全流程任务关联工单履历') &&

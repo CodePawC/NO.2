@@ -910,6 +910,7 @@ export default function EquipmentArchives({
 
           setSelectedId(found.id);
           setViewMode('inventory');
+          setMobileView('detail');
           if (e.detail?.activeTab) {
             setActiveTab(e.detail.activeTab);
           }
