@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Wrench, 
   Plus, 
@@ -127,6 +127,10 @@ export default function App() {
       localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(equipments));
     }
   }, [currentWorkspace]);
+
+  const handleEquipmentRecordsChange = useCallback((nextEquipments: MedicalEquipment[]) => {
+    setAllEquipments(nextEquipments);
+  }, []);
 
   const handleReportRepairFromEquip = (equip: any) => {
     const latestEquipment = parseStoredEquipmentList(localStorage.getItem(EQUIPMENT_STORAGE_KEY)).equipments.find(eq => eq.id === equip.id);
@@ -1749,6 +1753,7 @@ export default function App() {
             onReportRepairFromEquip={handleReportRepairFromEquip}
             onQuickRepairCreated={handleQuickRepairCreated}
             equipmentRecords={allEquipments}
+            onEquipmentRecordsChange={handleEquipmentRecordsChange}
             tasks={tasks}
             currentUser={currentSimulatedUser}
             onUserChange={(user) => handleSwitchUser(user.id)}

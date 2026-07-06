@@ -414,6 +414,7 @@ export default function EquipmentArchives({
   onReportRepairFromEquip,
   onQuickRepairCreated,
   equipmentRecords,
+  onEquipmentRecordsChange,
   tasks = [],
   currentUser: propCurrentUser,
   onUserChange
@@ -422,6 +423,7 @@ export default function EquipmentArchives({
   onReportRepairFromEquip?: (equip: MedicalEquipment) => void;
   onQuickRepairCreated?: (request: QuickRepairRequest) => boolean | void;
   equipmentRecords?: MedicalEquipment[];
+  onEquipmentRecordsChange?: (equipments: MedicalEquipment[]) => void;
   tasks?: StructuredTicket[];
   currentUser?: UserProfile;
   onUserChange?: (user: UserProfile) => void;
@@ -909,7 +911,8 @@ export default function EquipmentArchives({
       return;
     }
     localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(equipments));
-  }, [equipments, equipmentRecords]);
+    onEquipmentRecordsChange?.(equipments);
+  }, [equipments, equipmentRecords, onEquipmentRecordsChange]);
 
   // Listen to deep linking events to select equipment
   useEffect(() => {
