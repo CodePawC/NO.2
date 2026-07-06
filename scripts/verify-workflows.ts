@@ -561,8 +561,11 @@ const checks: Check[] = [
     run: () => {
       const appSource = readFileSync('src/App.tsx', 'utf8');
       assert(
-        appSource.includes("const sidebarEmergencyCount = visibleTasks.filter(t => needsClinicalAcceptance(t) && (t.urgency === '生命支持' || t.urgency === '特急')).length;"),
-        '侧边栏应急任务统计应只统计医学设备类应急，不能把电脑/后勤转派特急单算作设备抢救任务'
+        appSource.includes('const sidebarEmergencyCount = visibleTasks.filter(t => (') &&
+          appSource.includes('needsClinicalAcceptance(t) &&') &&
+          appSource.includes("(t.urgency === '生命支持' || t.urgency === '特急') &&") &&
+          appSource.includes("!['已关闭', '已完成', '已归档'].includes(t.status)"),
+        '侧边栏应急任务统计应只统计未闭环医学设备类应急，不能把电脑/后勤转派或已完成历史单算作当前抢救任务'
       );
 
       const statsSource = readFileSync('src/components/TaskStats.tsx', 'utf8');
@@ -596,11 +599,17 @@ const checks: Check[] = [
         status: '待确认',
         recommendedDept: '信息科'
       });
-      const urgentStatCount = [urgentEquipmentTask, urgentTransferTask].filter(
+      const completedUrgentEquipmentTask = createTask({
+        id: 'TKT-URGENT-EQUIPMENT-DONE',
+        taskType: '生命支持设备应急',
+        urgency: '特急',
+        status: '已完成'
+      });
+      const urgentStatCount = [urgentEquipmentTask, urgentTransferTask, completedUrgentEquipmentTask].filter(
         task => needsClinicalAcceptance(task) && ['特急', '紧急', '生命支持'].includes(task.urgency) && !['已关闭', '已完成', '已归档'].includes(task.status)
       ).length;
 
-      assertEqual(urgentStatCount, 1, '统计口径应保留设备特急单，同时排除非设备转派特急单');
+      assertEqual(urgentStatCount, 1, '统计口径应保留当前设备特急单，同时排除非设备转派特急单和已闭环历史应急单');
     }
   },
   {

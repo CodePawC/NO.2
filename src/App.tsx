@@ -332,7 +332,11 @@ export default function App() {
     if (diffDays === null) return false;
     return diffDays >= 0 && diffDays <= 30;
   }).length;
-  const sidebarEmergencyCount = visibleTasks.filter(t => needsClinicalAcceptance(t) && (t.urgency === '生命支持' || t.urgency === '特急')).length;
+  const sidebarEmergencyCount = visibleTasks.filter(t => (
+    needsClinicalAcceptance(t) &&
+    (t.urgency === '生命支持' || t.urgency === '特急') &&
+    !['已关闭', '已完成', '已归档'].includes(t.status)
+  )).length;
   const clinicalDepartmentTasks = getDepartmentTasks(tasks, currentUserDepartment);
   const normalizeClinicalDraftSource = (source?: StructuredTicket['source']) => {
     return source === '科室扫码报修' || source === '微信小程序' ? source : 'AI 对话生成';
