@@ -3659,10 +3659,21 @@ Clinical class: Life-saving respiratory device`;
                           {selectedEquipment.attachments.map((file) => (
                             <div 
                               key={file.id} 
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`预览技术附件：${file.name}，${file.size}`}
                               onClick={() => {
                                 setPreviewFile(file);
                                 setActivePreviewPage(1);
                                 setIsPreviewOpen(true);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  setPreviewFile(file);
+                                  setActivePreviewPage(1);
+                                  setIsPreviewOpen(true);
+                                }
                               }}
                               className="p-3.5 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-200 cursor-pointer transition-all flex items-center gap-3.5 group"
                             >
@@ -7238,7 +7249,16 @@ Clinical class: Life-saving respiratory device`;
                       {previewData.pages.map((p, pidx) => (
                         <div
                           key={pidx}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`切换到附件预览第 ${p.pageNum} 页：${p.title}`}
                           onClick={() => setActivePreviewPage(p.pageNum)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              setActivePreviewPage(p.pageNum);
+                            }
+                          }}
                           className={`p-2 rounded-lg border text-left cursor-pointer transition-all flex flex-col justify-between h-14 select-none ${
                             activePreviewPage === p.pageNum
                               ? 'bg-blue-600/10 border-blue-500'

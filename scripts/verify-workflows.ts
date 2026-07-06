@@ -1932,6 +1932,19 @@ const checks: Check[] = [
       const attachmentPreviewStart = archiveSource.indexOf('SMART ATTACHMENT PREVIEW & AI SNAPSHOT EXTRACTOR');
       const attachmentPreviewEnd = archiveSource.indexOf('{/* Document Split Grid Container */}', attachmentPreviewStart);
       assert(attachmentPreviewStart !== -1 && attachmentPreviewEnd > attachmentPreviewStart, '应能定位附件预览弹窗头部');
+      const attachmentListStart = archiveSource.indexOf('selectedEquipment.attachments.map((file) => (');
+      const attachmentListEnd = archiveSource.indexOf('{/* 已关联的技术快照页面 */}', attachmentListStart);
+      assert(attachmentListStart !== -1 && attachmentListEnd > attachmentListStart, '应能定位附件列表卡片');
+      const attachmentListSource = archiveSource.slice(attachmentListStart, attachmentListEnd);
+      assert(
+        attachmentListSource.includes('role="button"') &&
+          attachmentListSource.includes('tabIndex={0}') &&
+          attachmentListSource.includes('aria-label={`预览技术附件：${file.name}，${file.size}`}') &&
+          attachmentListSource.includes("if (e.key === 'Enter' || e.key === ' ')") &&
+          attachmentListSource.includes('setPreviewFile(file);') &&
+          attachmentListSource.includes('setIsPreviewOpen(true);'),
+        '附件列表卡片应具备按钮角色、键盘预览和可读标签，避免只靠鼠标点击 div'
+      );
       const attachmentPreviewSource = archiveSource.slice(attachmentPreviewStart, attachmentPreviewEnd);
       assert(
         attachmentPreviewSource.includes('{canManageEquipmentArchive ? (') &&
@@ -1950,6 +1963,18 @@ const checks: Check[] = [
           previewToolsSource.includes('提取当前页为设备关联快照') &&
           previewToolsSource.includes('临床只读预览'),
         '附件预览中的快照提取按钮应只允许工程师执行，临床端保留翻页预览能力'
+      );
+      const previewThumbnailStart = archiveSource.indexOf('previewData.pages.map((p, pidx) => (');
+      const previewThumbnailEnd = archiveSource.indexOf('关闭预览', previewThumbnailStart);
+      assert(previewThumbnailStart !== -1 && previewThumbnailEnd > previewThumbnailStart, '应能定位附件预览页缩略图');
+      const previewThumbnailSource = archiveSource.slice(previewThumbnailStart, previewThumbnailEnd);
+      assert(
+        previewThumbnailSource.includes('role="button"') &&
+          previewThumbnailSource.includes('tabIndex={0}') &&
+          previewThumbnailSource.includes('aria-label={`切换到附件预览第 ${p.pageNum} 页：${p.title}`}') &&
+          previewThumbnailSource.includes("if (e.key === 'Enter' || e.key === ' ')") &&
+          previewThumbnailSource.includes('setActivePreviewPage(p.pageNum);'),
+        '附件预览页缩略图应具备按钮角色、键盘切换和可读标签'
       );
     }
   },
