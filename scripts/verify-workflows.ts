@@ -2934,13 +2934,15 @@ const checks: Check[] = [
       );
       assert(
         archiveSource.includes('const chatRequestVersionRef = useRef(0);') &&
+          archiveSource.includes('const isChatSendingRef = useRef(false);') &&
           archiveSource.includes("const diagnosticChatSessionKeyRef = useRef('');") &&
           archiveSource.includes('const currentDiagnosticSessionKey = getDiagnosticSessionKey(selectedEquipment, currentUser);'),
-        '资产档案 AI 诊断异步请求应有会话版本和设备/用户 key'
+        '资产档案 AI 诊断异步请求应有同步发送闸门、会话版本和设备/用户 key'
       );
       assert(
         chatResetSource.includes('diagnosticChatSessionKeyRef.current = currentDiagnosticSessionKey;') &&
           chatResetSource.includes('chatRequestVersionRef.current += 1;') &&
+          chatResetSource.includes('isChatSendingRef.current = false;') &&
           chatResetSource.includes('setIsChatSending(false);') &&
           chatResetSource.includes("setChatInput('');") &&
           chatResetSource.includes('createDiagnosticWelcome(selectedEquipment, currentUser)') &&
@@ -2950,11 +2952,14 @@ const checks: Check[] = [
         '切换设备或角色时应重置资产档案 AI 诊断上下文并废弃旧请求'
       );
       assert(
-        sendChatSource.includes('if (!chatInput.trim() || !selectedEquipment || isChatSending) return;') &&
+        sendChatSource.includes('if (!chatInput.trim() || !selectedEquipment || isChatSendingRef.current) return;') &&
+          sendChatSource.includes('isChatSendingRef.current = true;') &&
+          sendChatSource.includes('setIsChatSending(true);') &&
+          sendChatSource.includes('isChatSendingRef.current = false;') &&
           sendChatSource.includes('const requestVersion = chatRequestVersionRef.current;') &&
           sendChatSource.includes('const requestSessionKey = currentDiagnosticSessionKey;') &&
           staleGuardMatches.length >= 2,
-        '资产档案 AI 诊断返回成功或失败时都应丢弃旧设备/旧角色的异步响应'
+        '资产档案 AI 诊断应同步拦截连续发送，并在返回成功或失败时丢弃旧设备/旧角色的异步响应'
       );
     }
   },

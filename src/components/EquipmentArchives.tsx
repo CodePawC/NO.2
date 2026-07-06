@@ -637,6 +637,7 @@ export default function EquipmentArchives({
   const [chatMessages, setChatMessages] = useState<Array<{role: 'user' | 'model', text: string}>>([
     { role: 'model', text: createDiagnosticWelcome() }
   ]);
+  const isChatSendingRef = useRef(false);
   const chatRequestVersionRef = useRef(0);
   const diagnosticChatSessionKeyRef = useRef('');
   const archiveManageRequestVersionRef = useRef(0);
@@ -1007,6 +1008,7 @@ export default function EquipmentArchives({
   useEffect(() => {
     diagnosticChatSessionKeyRef.current = currentDiagnosticSessionKey;
     chatRequestVersionRef.current += 1;
+    isChatSendingRef.current = false;
     setIsChatSending(false);
     setChatInput('');
     setChatMessages([
@@ -1587,7 +1589,8 @@ Clinical class: Life-saving respiratory device`;
 
   // Chat with AI Diagnostician Expert
   const sendChatMessage = () => {
-    if (!chatInput.trim() || !selectedEquipment || isChatSending) return;
+    if (!chatInput.trim() || !selectedEquipment || isChatSendingRef.current) return;
+    isChatSendingRef.current = true;
     const userMsg = chatInput;
     const requestVersion = chatRequestVersionRef.current;
     const requestSessionKey = currentDiagnosticSessionKey;
@@ -1610,6 +1613,7 @@ Clinical class: Life-saving respiratory device`;
     })
       .then(result => {
         if (requestVersion !== chatRequestVersionRef.current || requestSessionKey !== diagnosticChatSessionKeyRef.current) return;
+        isChatSendingRef.current = false;
         setIsChatSending(false);
         if (result.text) {
           setChatMessages([...newHistory, { role: 'model', text: result.text }]);
@@ -1619,6 +1623,7 @@ Clinical class: Life-saving respiratory device`;
       })
       .catch(err => {
         if (requestVersion !== chatRequestVersionRef.current || requestSessionKey !== diagnosticChatSessionKeyRef.current) return;
+        isChatSendingRef.current = false;
         setIsChatSending(false);
         setChatMessages([...newHistory, { role: 'model', text: `[错误] 无法连接到 AI 诊断服务端: ${err.message}` }]);
       });
