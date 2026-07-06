@@ -572,6 +572,14 @@ const checks: Check[] = [
           statsSource.includes("医学装备高危任务"),
         '任务统计看板的特急/紧急计数应排除非设备转派单，并用医学装备高危任务口径展示'
       );
+      assert(
+        statsSource.includes("const engineerInProgress = displayTasks.filter((t) => t.status === '处理中' || t.status === '已派工' || t.status === '待科室验收').length;") &&
+          statsSource.includes("const clinicalAwaitingAcceptance = displayTasks.filter((t) => needsClinicalAcceptance(t) && t.status === '待科室验收').length;") &&
+          statsSource.includes('const actionCount = isClinical ? clinicalAwaitingAcceptance : engineerInProgress;') &&
+          statsSource.includes("{isClinical ? '待科室验收' : '全院处理/协作中'}") &&
+          statsSource.includes("{isClinical ? '待您签署验收' : '驻场调配及厂家协同'}"),
+        '临床端统计卡应突出待科室验收数量，不能把待验收单混称为工程师处置中'
+      );
 
       const urgentEquipmentTask = createTask({
         id: 'TKT-URGENT-EQUIPMENT',
