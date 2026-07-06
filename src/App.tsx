@@ -1923,6 +1923,12 @@ export default function App() {
                 </div>
               </div>
 
+              {currentUserRole === 'medical_staff' && (
+                <div className="rounded-lg border border-emerald-800/70 bg-emerald-950/40 px-2.5 py-1.5 text-[9px] leading-relaxed text-emerald-100">
+                  临床端由系统按故障描述自动判定任务类型与责任部门，防止误转派绕过设备维修验收闭环。
+                </div>
+              )}
+
               {/* Mini Card Footer Buttons */}
               <div className="grid grid-cols-2 gap-1.5 pt-0.5">
                 <button
@@ -2552,12 +2558,12 @@ export default function App() {
                       if (matchedEquip) {
                         return (
                           <div className="bg-gradient-to-tr from-emerald-50 to-teal-50/40 border border-emerald-200/60 p-3 rounded-xl flex items-center justify-between gap-3 shadow-xs">
-                            <div className="space-y-0.5">
+                            <div className="space-y-0.5 min-w-0">
                               <div className="text-[10px] font-bold text-emerald-800 flex items-center gap-1">
                                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
                                 <span>已自动关联全生命周期电子档案</span>
                               </div>
-                              <p className="text-[11px] text-slate-700 font-semibold truncate max-w-[200px]">
+                              <p className="text-[11px] text-slate-700 font-semibold break-words leading-snug">
                                 {matchedEquip.manufacturer} {matchedEquip.deviceName} ({matchedEquip.model})
                               </p>
                               <p className="text-[9px] text-slate-400 font-mono">资产ID: {matchedEquip.id.toUpperCase()} • 风险评级: {matchedEquip.riskLevel}级</p>
@@ -3255,12 +3261,12 @@ export default function App() {
                   if (matchedEquip) {
                     return (
                       <div className="bg-gradient-to-tr from-emerald-50 to-teal-50/40 border border-emerald-200/60 p-3 rounded-xl flex items-center justify-between gap-3 shadow-xs">
-                        <div className="space-y-0.5">
+                        <div className="space-y-0.5 min-w-0">
                           <div className="text-[10px] font-bold text-emerald-800 flex items-center gap-1">
                             <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
                             <span>已自动关联全生命周期电子档案</span>
                           </div>
-                          <p className="text-[11px] text-slate-700 font-semibold truncate max-w-[200px]">
+                          <p className="text-[11px] text-slate-700 font-semibold break-words leading-snug">
                             {matchedEquip.manufacturer} {matchedEquip.deviceName} ({matchedEquip.model})
                           </p>
                           <p className="text-[9px] text-slate-400 font-mono">资产ID: {matchedEquip.id.toUpperCase()} • 风险评级: {matchedEquip.riskLevel}级</p>

@@ -2274,6 +2274,16 @@ const checks: Check[] = [
           !createSource.includes('当前状态：【待响应派单】'),
         '建单成功提示应展示新工单真实状态，不能与右侧任务卡片状态不一致'
       );
+      const compactDraftStart = appSource.indexOf('id="extraction-realtime-card"');
+      const compactDraftEnd = appSource.indexOf('{/* Message Stream */}', compactDraftStart);
+      assert(compactDraftStart !== -1 && compactDraftEnd > compactDraftStart, '应能定位折叠 AI 工单草稿摘要');
+      const compactDraftSource = appSource.slice(compactDraftStart, compactDraftEnd);
+      assert(
+        compactDraftSource.includes("{currentUserRole === 'medical_staff' && (") &&
+          compactDraftSource.includes('临床端由系统按故障描述自动判定任务类型与责任部门') &&
+          compactDraftSource.includes('防止误转派绕过设备维修验收闭环'),
+        '折叠 AI 工单草稿摘要也应提示临床端自动判定任务类型和责任部门，避免未展开完整表单时误以为可手动改派'
+      );
       assert(
         appSource.includes('const explicitlyNoVendorCoop = /暂不需要厂家|不需要厂家|无需厂家') &&
           appSource.includes('const isEndoscopeVendorIssue = /胃镜|内镜|奥林巴斯|插入管/i.test(textLower)') &&
@@ -2465,6 +2475,12 @@ const checks: Check[] = [
         '临床详情关联资产卡应只从当前临床账号可见设备中匹配，避免历史异常工单先泄露外科室资产信息'
       );
       assert(
+        clinicalDetailSource.includes('space-y-0.5 min-w-0') &&
+          clinicalDetailSource.includes('font-semibold break-words leading-snug') &&
+          !clinicalDetailSource.includes('truncate max-w-[200px]'),
+        '临床移动端详情中的关联资产名称/型号应允许换行断词，避免窄屏遮挡详情操作'
+      );
+      assert(
         clinicalDetailSource.includes('跨部门转派关闭留痕') &&
           clinicalDetailSource.includes('无需临床设备验收') &&
           clinicalDetailSource.includes('非设备问题已转派并关闭留痕'),
@@ -2531,6 +2547,16 @@ const checks: Check[] = [
           !clinicalDetailSource.includes('status-set-') &&
           !clinicalDetailSource.includes('流转状态快速调节器'),
         '临床任务详情不能暴露工程师状态快控入口'
+      );
+      const engineerLinkedArchiveStart = appSource.indexOf('{/* 双向数据穿透：关联医学装备数字档案卡 */}', engineerStart);
+      const engineerLinkedArchiveEnd = appSource.indexOf('任务工单详细流转明细', engineerLinkedArchiveStart);
+      assert(engineerLinkedArchiveStart !== -1 && engineerLinkedArchiveEnd > engineerLinkedArchiveStart, '应能定位工程师详情中的关联资产卡');
+      const engineerLinkedArchiveSource = appSource.slice(engineerLinkedArchiveStart, engineerLinkedArchiveEnd);
+      assert(
+        engineerLinkedArchiveSource.includes('space-y-0.5 min-w-0') &&
+          engineerLinkedArchiveSource.includes('font-semibold break-words leading-snug') &&
+          !engineerLinkedArchiveSource.includes('truncate max-w-[200px]'),
+        '工程师移动端详情中的关联资产名称/型号应允许换行断词，避免窄屏遮挡详情操作'
       );
       const deleteStart = appSource.indexOf('const handleDeleteTask = (id: string) => {');
       const deleteEnd = appSource.indexOf('// Clear all and restore presets', deleteStart);
