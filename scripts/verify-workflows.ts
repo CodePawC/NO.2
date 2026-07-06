@@ -816,9 +816,12 @@ const checks: Check[] = [
       assertEqual(completedSync.equipments[0].status, '正常运行', '完成的设备维修单应恢复设备状态');
       assertEqual(completedSync.equipments[0].lastMaintenanceDate, '2026-07-03', '完成日期应写入最近维保日期');
       assertEqual(completedSync.equipments[0].nextMaintenanceDate, '2026-10-01', '下次维保日期应按本地日期加周期');
-      assert(
-        completedSync.equipments[0].maintenanceLogs.some(log => log.workOrderNo === 'TKT-COMPLETE'),
-        '完成的设备维修单应写入档案维保履历'
+      const completedMaintenanceLog = completedSync.equipments[0].maintenanceLogs.find(log => log.workOrderNo === 'TKT-COMPLETE');
+      assert(!!completedMaintenanceLog, '完成的设备维修单应写入档案维保履历');
+      assertIncludes(
+        completedMaintenanceLog?.description || '',
+        '临床验收5星：设备运行正常（张护士）',
+        '完成设备维修单写入新档案履历时，应优先保留临床验收摘要'
       );
 
       const quickRepairClosedTask = createTask({
@@ -829,7 +832,8 @@ const checks: Check[] = [
         aiSuggestions: ['关联档案维修单号：WO-20260704-0001，请闭环后回写设备档案。'],
         logs: [
           { time: '2026-07-04 14:00', action: '工程师完成现场处置。', operator: '张明华 (工程师)' },
-          { time: '2026-07-04 15:30', action: '临床科室完成验收。', operator: '王健 (放射科主管医生)' }
+          { time: '2026-07-04 15:30', action: '临床科室完成验收。', operator: '王健 (放射科主管医生)' },
+          { time: '2026-07-04 15:35', action: '人工更改工单状态为【已归档】。', operator: '张明华 (工程师)' }
         ],
         clinicalAcceptance: {
           rating: 5,
@@ -868,8 +872,8 @@ const checks: Check[] = [
       assertEqual(quickRepairArchiveLog?.verifyPerson, '王健', '快捷报修关联档案维修单应保留临床验收人');
       assertIncludes(
         quickRepairArchiveLog?.description || '',
-        '主工单 TKT-QUICK-DONE 已闭环',
-        '快捷报修关联档案维修单应写入主工单闭环说明'
+        '主工单 TKT-QUICK-DONE 已闭环：临床验收5星：MRI 已恢复正常扫描（王健）',
+        '快捷报修关联档案维修单即便在验收后立刻归档，也应优先写入临床验收闭环说明'
       );
 
       const orphanedQuickRepairSync = syncTasksToEquipmentArchives(

@@ -137,14 +137,14 @@ export const getLinkedArchiveWorkOrderNo = (task: StructuredTicket) => {
 const buildCompletedMaintenanceLog = (
   ticket: StructuredTicket,
   completedDate: string,
-  lastLog: string,
+  closingSummary: string,
   verifyingPerson: string
 ): MaintenanceLog => ({
   id: `ML-${ticket.id}-${completedDate.replace(/-/g, '')}`,
   type: ticket.taskType.includes('保养') || ticket.taskType.includes('PM') ? '保养' : '维修',
   date: completedDate,
   technician: ticket.logs.find(log => log.operator.includes('工程师'))?.operator || '值班科室工程师',
-  description: `【智能闭环系统】工单 [${ticket.id}] 完成后自动归档。原故障描述：${ticket.faultPhenomenon || '无'}。最后维保说明：${lastLog}`,
+  description: `【智能闭环系统】工单 [${ticket.id}] 完成后自动归档。原故障描述：${ticket.faultPhenomenon || '无'}。最后维保说明：${closingSummary}`,
   cost: ticket.taskType === '生命支持设备应急' ? 150 : 0,
   status: '已完成',
   workOrderNo: ticket.id,
@@ -186,6 +186,14 @@ const closeOrphanedArchiveRepairLogs = (
     },
     closed
   };
+};
+
+const getTaskClosingSummary = (ticket: StructuredTicket) => {
+  if (ticket.clinicalAcceptance) {
+    return `临床验收${ticket.clinicalAcceptance.rating}星：${ticket.clinicalAcceptance.comment || '设备运行正常'}（${ticket.clinicalAcceptance.acceptedBy}）`;
+  }
+
+  return ticket.logs[ticket.logs.length - 1]?.action || '确认闭合验收';
 };
 
 export const syncTasksToEquipmentArchives = (
@@ -275,7 +283,7 @@ export const syncTasksToEquipmentArchives = (
     relatedTasks
       .filter(ticket => COMPLETED_TASK_STATUSES.includes(ticket.status))
       .forEach(ticket => {
-        const lastLog = ticket.logs[ticket.logs.length - 1]?.action || '确认闭合验收';
+        const closingSummary = getTaskClosingSummary(ticket);
         const completionDate = getTaskCompletionDate(ticket, now);
         const completedDate = getLocalDateString(completionDate);
         const verifyingPerson = ticket.clinicalAcceptance?.acceptedBy || ticket.contactPerson || '科室管理员';
@@ -298,14 +306,14 @@ export const syncTasksToEquipmentArchives = (
               date: archiveLog.date || completedDate,
               description: archiveLog.description.includes(`主工单 ${ticket.id}`)
                 ? archiveLog.description
-                : `${archiveLog.description}；主工单 ${ticket.id} 已闭环：${lastLog}`,
+                : `${archiveLog.description}；主工单 ${ticket.id} 已闭环：${closingSummary}`,
               verifyPerson: verifyingPerson
             };
             maintenanceChanged = true;
           }
         } else if (!syncedEquipment.maintenanceLogs.some(log => log.workOrderNo === ticket.id)) {
           syncedEquipment.maintenanceLogs = [
-            buildCompletedMaintenanceLog(ticket, completedDate, lastLog, verifyingPerson),
+            buildCompletedMaintenanceLog(ticket, completedDate, closingSummary, verifyingPerson),
             ...syncedEquipment.maintenanceLogs
           ];
           maintenanceChanged = true;
