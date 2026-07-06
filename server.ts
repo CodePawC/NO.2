@@ -324,9 +324,11 @@ app.post('/api/assistant/test-config', async (req, res) => {
     }
   } catch (err: any) {
     console.error('API Test connection error:', err);
+    const errorMessage = err.message || String(err);
     res.json({
       success: false,
-      message: `连接失败: ${err.message || err}`
+      error: errorMessage,
+      message: `连接失败: ${errorMessage}`
     });
   }
 });

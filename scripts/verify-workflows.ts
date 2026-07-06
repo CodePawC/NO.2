@@ -2428,6 +2428,12 @@ const checks: Check[] = [
           serverSource.includes("throw new Error(`自定义供应商 ${name || id || ''} 未配置 API 请求地址"),
         '自定义供应商联通测试应明确提示缺少 API 请求地址'
       );
+      assert(
+        serverSource.includes('const errorMessage = err.message || String(err);') &&
+          serverSource.includes('error: errorMessage') &&
+          serverSource.includes('message: `连接失败: ${errorMessage}`'),
+        'AI 联通测试失败响应应保留具体错误原因，避免前端只显示泛化排查文案'
+      );
     }
   },
   {
