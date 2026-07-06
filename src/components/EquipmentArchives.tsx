@@ -3136,7 +3136,9 @@ Clinical class: Life-saving respiratory device`;
                     <div className="flex justify-between items-center">
                       <div className="flex flex-col">
                         <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider">维保全履历跟踪</h4>
-                        <p className="text-[10px] text-slate-400 mt-0.5">点击任意维保卡片可查看并打印标准电子派工单</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">
+                          {canManageEquipmentArchive ? '点击任意维保卡片可查看并打印标准电子派工单' : '点击任意维保卡片可只读查验标准电子派工单'}
+                        </p>
                       </div>
                       {canManageEquipmentArchive ? (
                         <button
@@ -3287,7 +3289,16 @@ Clinical class: Life-saving respiratory device`;
                         {selectedEquipment.calibrationLogs.map((cal) => (
                           <div 
                             key={cal.id} 
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`打开计量证书：${cal.certificateNo}，${cal.result}，有效期至${cal.validUntil}`}
                             onClick={() => setViewCalibrationLog(cal)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                setViewCalibrationLog(cal);
+                              }
+                            }}
                             className="p-4 bg-white hover:bg-slate-50/75 rounded-xl border border-slate-200 hover:border-emerald-400 cursor-pointer shadow-2xs hover:shadow-xs group transition-all duration-200 flex justify-between items-start gap-4"
                           >
                             <div className="space-y-1.5">

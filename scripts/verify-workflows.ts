@@ -1870,6 +1870,15 @@ const checks: Check[] = [
           footerSource.includes('min-h-9 p-2 sm:px-4'),
         '设备详情底部操作栏在移动端应分组换行，避免删除/打印/编辑/克隆/报修按钮重叠误触'
       );
+      const maintenanceHistoryStart = archiveSource.indexOf('维保全履历跟踪');
+      const maintenanceHistoryEnd = archiveSource.indexOf('<BudgetStackedChart', maintenanceHistoryStart);
+      assert(maintenanceHistoryStart !== -1 && maintenanceHistoryEnd > maintenanceHistoryStart, '应能定位维保履历列表头部');
+      const maintenanceHistorySource = archiveSource.slice(maintenanceHistoryStart, maintenanceHistoryEnd);
+      assert(
+        maintenanceHistorySource.includes("canManageEquipmentArchive ? '点击任意维保卡片可查看并打印标准电子派工单' : '点击任意维保卡片可只读查验标准电子派工单'") &&
+          maintenanceHistorySource.includes('临床只读履历'),
+        '维保履历列表文案应按角色区分打印权限，临床端不能提示可打印派工单'
+      );
       const maintenancePrintStart = archiveSource.indexOf('医院设备资产管理系统 - 电子派工单');
       const maintenancePrintEnd = archiveSource.indexOf('onClick={() => setViewMaintenanceLog(null)}', maintenancePrintStart);
       assert(maintenancePrintStart !== -1 && maintenancePrintEnd > maintenancePrintStart, '应能定位维保派工单阅览弹窗头部');
@@ -1884,6 +1893,18 @@ const checks: Check[] = [
       const calibrationPrintStart = archiveSource.indexOf('法定计量强制检定证书与科室绿标印证系统');
       const calibrationPrintEnd = archiveSource.indexOf('onClick={() => setViewCalibrationLog(null)}', calibrationPrintStart);
       assert(calibrationPrintStart !== -1 && calibrationPrintEnd > calibrationPrintStart, '应能定位计量证书阅览弹窗头部');
+      const calibrationCardStart = archiveSource.indexOf('selectedEquipment.calibrationLogs.map((cal) => (');
+      const calibrationCardEnd = archiveSource.indexOf('{canManageEquipmentArchive && (', calibrationCardStart);
+      assert(calibrationCardStart !== -1 && calibrationCardEnd > calibrationCardStart, '应能定位计量证书列表卡片');
+      const calibrationCardSource = archiveSource.slice(calibrationCardStart, calibrationCardEnd);
+      assert(
+        calibrationCardSource.includes('role="button"') &&
+          calibrationCardSource.includes('tabIndex={0}') &&
+          calibrationCardSource.includes('aria-label={`打开计量证书：${cal.certificateNo}，${cal.result}，有效期至${cal.validUntil}`}') &&
+          calibrationCardSource.includes("if (e.key === 'Enter' || e.key === ' ')") &&
+          calibrationCardSource.includes('setViewCalibrationLog(cal);'),
+        '计量证书卡片应具备按钮角色、键盘打开和可读标签，避免只靠鼠标点击 div'
+      );
       const calibrationPrintSource = archiveSource.slice(calibrationPrintStart, calibrationPrintEnd);
       assert(
         calibrationPrintSource.includes('{canManageEquipmentArchive ? (') &&
