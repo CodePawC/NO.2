@@ -20,17 +20,31 @@ const CLINICAL_STATUS_WEIGHT: Record<TaskStatus, number> = {
   '已关闭': 0
 };
 
+const TERMINAL_STATUSES: TaskStatus[] = ['已完成', '已归档', '已关闭'];
+
 export const getUrgencyWeight = (urgency: UrgencyLevel) => URGENCY_WEIGHT[urgency] || 10;
 
+export const isTaskClosedForPriority = (task: StructuredTicket) => {
+  return TERMINAL_STATUSES.includes(task.status);
+};
+
 export const isPinnedCriticalTask = (task: StructuredTicket) => {
-  return task.taskType === '生命支持设备应急' ||
+  return !isTaskClosedForPriority(task) && (
+    task.taskType === '生命支持设备应急' ||
     task.taskType === '医用气体异常' ||
     task.deviceName.includes('抢救') ||
-    task.faultPhenomenon.includes('抢救');
+    task.faultPhenomenon.includes('抢救')
+  );
 };
 
 export const sortTasksByOperationalPriority = (tasks: StructuredTicket[]) => {
   return [...tasks].sort((a, b) => {
+    const isOpenA = !isTaskClosedForPriority(a);
+    const isOpenB = !isTaskClosedForPriority(b);
+
+    if (isOpenA && !isOpenB) return -1;
+    if (!isOpenA && isOpenB) return 1;
+
     const isPinnedA = isPinnedCriticalTask(a);
     const isPinnedB = isPinnedCriticalTask(b);
 

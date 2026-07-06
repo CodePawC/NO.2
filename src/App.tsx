@@ -55,7 +55,7 @@ import { getDateDiffDaysFromToday } from './utils/dateUtils';
 import { isSameDepartment, normalizeDepartmentName } from './utils/departmentUtils';
 import { findActiveEquipmentRepairTask, findUniqueEquipmentMatchForDraft, hasActiveEquipmentRepairTask, hasOpenEquipmentRepairWorkOrder, syncTasksToEquipmentArchives } from './utils/equipmentSync';
 import { EQUIPMENT_STORAGE_KEY, getDefaultEquipmentList, parseStoredEquipmentList } from './utils/equipmentStorage';
-import { getDepartmentTasks, sortTasksByOperationalPriority } from './utils/taskOrdering';
+import { getDepartmentTasks, isPinnedCriticalTask, sortTasksByOperationalPriority } from './utils/taskOrdering';
 import { loadStoredTasks, TASK_STORAGE_KEY } from './utils/taskStorage';
 import { getClinicalAcceptanceBlockReason, getEngineerNextStatus, getEngineerStatusBlockReason, getEngineerWorkflowHint, getRecommendedRoutingForTask, needsClinicalAcceptance } from './utils/taskWorkflow';
 import TaskStats from './components/TaskStats';
@@ -2305,7 +2305,7 @@ export default function App() {
                 else if (t.urgency === '普通') urgencyBadgeStyle += "bg-slate-100 text-slate-600 border-slate-200";
 
                 // Pinned automatic top trigger check (Requirement 5)
-                const isPinned = t.taskType === '生命支持设备应急' || t.taskType === '医用气体异常' || t.deviceName.includes('抢救') || t.faultPhenomenon.includes('抢救');
+                const isPinned = isPinnedCriticalTask(t);
 
                 // Format Time: MM-DD HH:mm
                 const formatTaskTime = (dateStr: string) => {

@@ -4,7 +4,7 @@ import { parseStoredEquipmentList } from '../src/utils/equipmentStorage.ts';
 import { findActiveEquipmentRepairTask, findUniqueEquipmentMatchForDraft, hasActiveEquipmentRepairTask, hasOpenEquipmentRepairWorkOrder, syncTasksToEquipmentArchives } from '../src/utils/equipmentSync.ts';
 import { repairMisroutedEquipmentTasks } from '../src/utils/taskRepair.ts';
 import { parseStoredTaskList } from '../src/utils/taskStorage.ts';
-import { getDepartmentTasks } from '../src/utils/taskOrdering.ts';
+import { getDepartmentTasks, isPinnedCriticalTask, sortTasksByOperationalPriority } from '../src/utils/taskOrdering.ts';
 import { normalizeEngineerName } from '../src/utils/engineerAssignments.ts';
 import { getPresetPromptsForUser, PRESET_PROMPTS, SIMULATED_USERS } from '../src/data/appPresets.ts';
 import { INITIAL_TASKS } from '../src/data/defaultTasks.ts';
@@ -610,6 +610,53 @@ const checks: Check[] = [
       ).length;
 
       assertEqual(urgentStatCount, 1, '统计口径应保留当前设备特急单，同时排除非设备转派特急单和已闭环历史应急单');
+    }
+  },
+  {
+    name: 'engineer task priority only pins active critical work',
+    run: () => {
+      const activeNormalTask = createTask({
+        id: 'TKT-ACTIVE-NORMAL',
+        taskType: '设备报修',
+        deviceName: '监护仪',
+        urgency: '紧急',
+        status: '待确认',
+        createdAt: '2026-07-04T09:00:00+08:00'
+      });
+      const closedLifeSupportTask = createTask({
+        id: 'TKT-CLOSED-LIFE',
+        taskType: '生命支持设备应急',
+        deviceName: '呼吸机',
+        urgency: '生命支持',
+        status: '已归档',
+        createdAt: '2026-07-04T10:00:00+08:00'
+      });
+      const activeLifeSupportTask = createTask({
+        id: 'TKT-ACTIVE-LIFE',
+        taskType: '生命支持设备应急',
+        deviceName: '呼吸机',
+        urgency: '生命支持',
+        status: '处理中',
+        createdAt: '2026-07-03T08:00:00+08:00'
+      });
+
+      assert(isPinnedCriticalTask(activeLifeSupportTask), '未闭环生命支持任务应继续应急置顶');
+      assert(!isPinnedCriticalTask(closedLifeSupportTask), '已归档生命支持历史单不能继续应急置顶');
+
+      const sortedIds = sortTasksByOperationalPriority([
+        closedLifeSupportTask,
+        activeNormalTask,
+        activeLifeSupportTask
+      ]).map(task => task.id);
+      assertEqual(sortedIds[0], 'TKT-ACTIVE-LIFE', '当前生命支持任务应排在工程师列表最前');
+      assertEqual(sortedIds[1], 'TKT-ACTIVE-NORMAL', '已归档生命支持历史单不应压过当前仍需处理的普通/紧急任务');
+
+      const appSource = readFileSync('src/App.tsx', 'utf8');
+      assert(
+        appSource.includes("import { getDepartmentTasks, isPinnedCriticalTask, sortTasksByOperationalPriority } from './utils/taskOrdering';") &&
+          appSource.includes('const isPinned = isPinnedCriticalTask(t);'),
+        '任务卡片应复用统一的未闭环应急置顶规则，避免已归档历史单仍显示应急置顶'
+      );
     }
   },
   {
