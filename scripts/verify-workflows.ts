@@ -2204,6 +2204,18 @@ const checks: Check[] = [
           updateDraftSource.includes('allowClinicalAssetId?: boolean'),
         '临床端草稿字段更新逻辑应拦截手动改写设备编号，仅允许从本科室在册资产选择同步'
       );
+      assert(
+        createSource.includes('const canUseSelectedEquipment = !!selectedEquipment && canCurrentUserUseEquipment(selectedEquipment);') &&
+          createSource.includes('const canUseDraftDeviceId = currentUserRole !== \'medical_staff\' && !!draftTicket.deviceId && !selectedEquipment;') &&
+          createSource.includes('const shouldUseAutoMatchedEquipment = currentUserRole === \'medical_staff\' && !canUseSelectedEquipment && !!autoMatchedEquipment && canCurrentUserUseEquipment(autoMatchedEquipment);') &&
+          createSource.includes('const linkedEquipment = canUseSelectedEquipment ? selectedEquipment : (shouldUseAutoMatchedEquipment ? autoMatchedEquipment : null);') &&
+          createSource.includes('const blockedLinkedEquipment = currentUserRole === \'medical_staff\' && selectedEquipment && !canUseSelectedEquipment ? selectedEquipment : null;') &&
+          createSource.includes('const shouldLinkEquipmentToTicket = !isNonEquipmentTransferTask && !!linkedEquipment;') &&
+          createSource.includes('? linkedEquipment.id') &&
+          createSource.includes(": (canUseDraftDeviceId ? draftTicket.deviceId : 'EQ-TEMP-'") &&
+          createSource.includes('blockedLinkedEquipment ? `临床账号尝试关联外科室资产 [${blockedLinkedEquipment.id}]'),
+        '临床端草稿提交应二次校验资产科室，外科室旧设备编号不能压掉本科室自动匹配或被写入新工单；工程师手工设备编号仍应保留'
+      );
 
       const inlineDeviceIdStart = appSource.indexOf('<label className="text-[10px] font-bold text-slate-500 block mb-1">设备资产编号</label>');
       const inlineDeviceIdEnd = appSource.indexOf('<label className="text-[10px] font-bold text-slate-500 block mb-1">科室联系人</label>', inlineDeviceIdStart);

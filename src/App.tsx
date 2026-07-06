@@ -981,11 +981,13 @@ export default function App() {
         })
       : null;
     const selectedEquipment = allEquipments.find(eq => eq.id === draftTicket.deviceId || eq.sn === draftTicket.deviceId);
-    const linkedEquipment = selectedEquipment || autoMatchedEquipment;
-    const canUseLinkedEquipment = !linkedEquipment || canCurrentUserUseEquipment(linkedEquipment);
-    const shouldUseAutoMatchedEquipment = !selectedEquipment && !!autoMatchedEquipment && canUseLinkedEquipment;
+    const canUseSelectedEquipment = !!selectedEquipment && canCurrentUserUseEquipment(selectedEquipment);
+    const canUseDraftDeviceId = currentUserRole !== 'medical_staff' && !!draftTicket.deviceId && !selectedEquipment;
+    const shouldUseAutoMatchedEquipment = currentUserRole === 'medical_staff' && !canUseSelectedEquipment && !!autoMatchedEquipment && canCurrentUserUseEquipment(autoMatchedEquipment);
+    const linkedEquipment = canUseSelectedEquipment ? selectedEquipment : (shouldUseAutoMatchedEquipment ? autoMatchedEquipment : null);
+    const blockedLinkedEquipment = currentUserRole === 'medical_staff' && selectedEquipment && !canUseSelectedEquipment ? selectedEquipment : null;
     const isNonEquipmentTransferTask = normalizedTaskType === '非设备类转派任务';
-    const shouldLinkEquipmentToTicket = !isNonEquipmentTransferTask && canUseLinkedEquipment;
+    const shouldLinkEquipmentToTicket = !isNonEquipmentTransferTask && !!linkedEquipment;
     const duplicateRepairTask = shouldLinkEquipmentToTicket && linkedEquipment
       ? findActiveEquipmentRepairTask(tasksRef.current, linkedEquipment)
       : null;
@@ -1008,9 +1010,9 @@ export default function App() {
 
     const effectiveDeviceId = isNonEquipmentTransferTask
       ? `NON-EQUIPMENT-${newTicketId}`
-      : canUseLinkedEquipment
-        ? (selectedEquipment?.id || autoMatchedEquipment?.id || draftTicket.deviceId || 'EQ-TEMP-' + Math.floor(Math.random() * 9000 + 1000))
-        : 'EQ-TEMP-' + Math.floor(Math.random() * 9000 + 1000);
+      : linkedEquipment
+        ? linkedEquipment.id
+        : (canUseDraftDeviceId ? draftTicket.deviceId : 'EQ-TEMP-' + Math.floor(Math.random() * 9000 + 1000));
     const effectiveRecommendedDept = currentUserRole === 'medical_staff'
       ? routing.recommendedDept
       : (forwardDept || draftTicket.recommendedDept || routing.recommendedDept);
@@ -1049,7 +1051,9 @@ export default function App() {
       source: finalSource,
       department: finalDepartment,
       location: linkedEquipment && shouldLinkEquipmentToTicket ? `${linkedEquipment.dept}设备点位` : defaultLoc,
-      deviceName: canUseLinkedEquipment ? (draftTicket.deviceName || (normalizedTaskType === '非设备类转派任务' ? '非设备转派事项' : '未录入设备名称')) : '未录入设备名称',
+      deviceName: linkedEquipment
+        ? linkedEquipment.deviceName
+        : (draftTicket.deviceName || (normalizedTaskType === '非设备类转派任务' ? '非设备转派事项' : '未录入设备名称')),
       deviceId: effectiveDeviceId,
       faultPhenomenon: draftTicket.faultPhenomenon || '暂未提供具体描述',
       contactPerson: finalContactPerson,
@@ -1078,7 +1082,7 @@ export default function App() {
         effectiveRecommendedDept && effectiveRecommendedDept !== '医学装备科' ? `系统判断此单归属部门为 [${effectiveRecommendedDept}]。` : '',
         shouldUseAutoMatchedEquipment ? `系统已按当前科室与设备名称自动关联在册资产 [${autoMatchedEquipment.id}]。` : '',
         normalizedTaskType === '非设备类转派任务' ? '非设备类转派任务不绑定医学设备电子档案。' : '',
-        !canUseLinkedEquipment && linkedEquipment ? `临床账号尝试关联外科室资产 [${linkedEquipment.id}]，系统已移除该资产绑定并按本科室工单提交。` : ''
+        blockedLinkedEquipment ? `临床账号尝试关联外科室资产 [${blockedLinkedEquipment.id}]，系统已移除该资产绑定并按本科室工单提交。` : ''
       ].filter(Boolean).join('\n')
     };
 
