@@ -103,6 +103,12 @@ type ArchiveConfirmation = {
   onConfirm: () => void;
 };
 
+type ArchiveToast = {
+  type: 'success' | 'warning' | 'info';
+  title?: string;
+  message: string;
+};
+
 const getDiagnosticSessionKey = (equipment: MedicalEquipment | null, user: UserProfile) => {
   return `${user.id}:${equipment?.id || 'no-equipment'}`;
 };
@@ -457,18 +463,18 @@ export default function EquipmentArchives({
   const [quickRepairEquipId, setQuickRepairEquipId] = useState<string>('');
   const [quickRepairDesc, setQuickRepairDesc] = useState<string>('');
   const [quickRepairUrgency, setQuickRepairUrgency] = useState<'low' | 'medium' | 'high'>('medium');
-  const [quickRepairToast, setQuickRepairToast] = useState<{ type: 'success' | 'warning'; message: string } | null>(null);
+  const [archiveToast, setArchiveToast] = useState<ArchiveToast | null>(null);
   const [archiveConfirmation, setArchiveConfirmation] = useState<ArchiveConfirmation | null>(null);
-  const quickRepairToastTimerRef = useRef<number | null>(null);
+  const archiveToastTimerRef = useRef<number | null>(null);
 
-  const showQuickRepairToast = (toast: { type: 'success' | 'warning'; message: string }) => {
-    if (quickRepairToastTimerRef.current !== null) {
-      window.clearTimeout(quickRepairToastTimerRef.current);
+  const showArchiveToast = (toast: ArchiveToast) => {
+    if (archiveToastTimerRef.current !== null) {
+      window.clearTimeout(archiveToastTimerRef.current);
     }
-    setQuickRepairToast(toast);
-    quickRepairToastTimerRef.current = window.setTimeout(() => {
-      setQuickRepairToast(null);
-      quickRepairToastTimerRef.current = null;
+    setArchiveToast(toast);
+    archiveToastTimerRef.current = window.setTimeout(() => {
+      setArchiveToast(null);
+      archiveToastTimerRef.current = null;
     }, 5000);
   };
 
@@ -488,8 +494,8 @@ export default function EquipmentArchives({
 
   useEffect(() => {
     return () => {
-      if (quickRepairToastTimerRef.current !== null) {
-        window.clearTimeout(quickRepairToastTimerRef.current);
+      if (archiveToastTimerRef.current !== null) {
+        window.clearTimeout(archiveToastTimerRef.current);
       }
     };
   }, []);
@@ -734,7 +740,7 @@ export default function EquipmentArchives({
   const canManageEquipmentArchive = currentUser.role === 'engineer';
   canManageEquipmentArchiveRef.current = canManageEquipmentArchive;
   const showArchiveManageBlockedToast = (actionName: string) => {
-    showQuickRepairToast({
+    showArchiveToast({
       type: 'warning',
       message: `当前临床账号只能查看本科室设备并发起报修，不能执行${actionName}。请切换到医学装备科工程师账号后再操作。`
     });
@@ -947,7 +953,7 @@ export default function EquipmentArchives({
         const found = equipments.find(eq => eq.id === equipId || eq.sn === equipId);
         if (found) {
           if (!canCurrentUserViewEquipment(found)) {
-            showQuickRepairToast({
+            showArchiveToast({
               type: 'warning',
               message: `当前临床账号只能查看本科室设备：${currentUserDepartment}`
             });
@@ -1215,7 +1221,11 @@ export default function EquipmentArchives({
     }
 
     if (!formDeviceName.trim() || !formModel.trim() || !formManufacturer.trim() || !formDept.trim()) {
-      alert('请完整填写基本档案中的必填项！');
+      showArchiveToast({
+        type: 'warning',
+        title: '档案信息未完整',
+        message: '请完整填写基本档案中的必填项！'
+      });
       return;
     }
 
@@ -1278,7 +1288,11 @@ export default function EquipmentArchives({
       setSelectedId(newEqs[0].id);
       
       if (newEqs.length > 1) {
-        alert(`🎉 批量导入成功！已成功一键新增 ${newEqs.length} 台具有相同名称规格（型号：${formModel}）的设备档案。`);
+        showArchiveToast({
+          type: 'success',
+          title: '批量导入成功',
+          message: `已一键新增 ${newEqs.length} 台具有相同名称规格（型号：${formModel}）的设备档案。`
+        });
       }
     } else {
       if (!currentEditId) return;
@@ -1322,11 +1336,19 @@ export default function EquipmentArchives({
   const handleQuickRepairSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!quickRepairEquipId) {
-      alert('请选择需要报修的设备！');
+      showArchiveToast({
+        type: 'warning',
+        title: '请选择设备',
+        message: '请选择需要报修的设备！'
+      });
       return;
     }
     if (!quickRepairDesc.trim()) {
-      alert('请填写故障现象描述！');
+      showArchiveToast({
+        type: 'warning',
+        title: '故障描述为空',
+        message: '请填写故障现象描述！'
+      });
       return;
     }
 
@@ -1334,7 +1356,7 @@ export default function EquipmentArchives({
     if (!targetEq) return;
     const quickRepairBlockMessage = getQuickRepairBlockMessage(targetEq);
     if (quickRepairBlockMessage) {
-      showQuickRepairToast({
+      showArchiveToast({
         type: 'warning',
         message: quickRepairBlockMessage
       });
@@ -1346,7 +1368,7 @@ export default function EquipmentArchives({
 
     setIsQuickRepairModalOpen(false);
     resetQuickRepairDraft();
-    showQuickRepairToast({
+    showArchiveToast({
       type: 'success',
       message: `报修成功：${targetEq.deviceName} 已同步生成主工单与档案维修记录 ${workOrderNo}`
     });
@@ -1357,7 +1379,11 @@ export default function EquipmentArchives({
     e.preventDefault();
     if (!ensureCanManageEquipmentArchive('新增维保工单')) return;
     if (!newLogTechnician.trim() || !newLogDescription.trim()) {
-      alert('请填写技术员姓名与工作描述！');
+      showArchiveToast({
+        type: 'warning',
+        title: '维保信息未完整',
+        message: '请填写技术员姓名与工作描述！'
+      });
       return;
     }
 
@@ -1412,7 +1438,11 @@ export default function EquipmentArchives({
     e.preventDefault();
     if (!ensureCanManageEquipmentArchive('登记计量证书')) return;
     if (!newCalAgency.trim() || !newCalCertificateNo.trim() || !newCalValidUntil) {
-      alert('请填写完整计量单位、证书编号及有效期！');
+      showArchiveToast({
+        type: 'warning',
+        title: '计量证书信息未完整',
+        message: '请填写完整计量单位、证书编号及有效期！'
+      });
       return;
     }
 
@@ -1536,7 +1566,11 @@ export default function EquipmentArchives({
     e.preventDefault();
     if (!ensureCanManageEquipmentArchive('上传资料附件')) return;
     if (!newAttachName.trim()) {
-      alert('请填写资料附件名称！');
+      showArchiveToast({
+        type: 'warning',
+        title: '附件名称为空',
+        message: '请填写资料附件名称！'
+      });
       return;
     }
 
@@ -1631,7 +1665,11 @@ Clinical class: Life-saving respiratory device`;
   // Run Custom Text OCR or Image upload OCR via Gemini API
   const handleCustomOcrAnalyze = () => {
     if (!aiInputText.trim()) {
-      alert('请输入铭牌描述、规格单据文本或上传附件描述！');
+      showArchiveToast({
+        type: 'warning',
+        title: '缺少解析文本',
+        message: '请输入铭牌描述、规格单据文本或上传附件描述！'
+      });
       return;
     }
     const requestVersion = beginArchiveAiAnalyze('AI 扫码入库');
@@ -1816,7 +1854,11 @@ Clinical class: Life-saving respiratory device`;
   // Simulated Instant Actions (e.g. print QR, quick error reporting)
   const handlePrintQR = () => {
     if (!ensureCanManageEquipmentArchive('打印物联二维码标签')) return;
-    alert(`[指令发送成功] 已向科室标签打印机(Zebra ZD888) 发送打印指令。\n设备名：${selectedEquipment.deviceName}\n编号：${selectedEquipment.id}\n规格：${selectedEquipment.model}`);
+    showArchiveToast({
+      type: 'success',
+      title: '打印指令已发送',
+      message: `已向科室标签打印机(Zebra ZD888)发送打印指令。设备名：${selectedEquipment.deviceName}；编号：${selectedEquipment.id}；规格：${selectedEquipment.model}`
+    });
   };
 
   const createQuickRepairRecord = (
@@ -1826,7 +1868,7 @@ Clinical class: Life-saving respiratory device`;
   ) => {
     const quickRepairBlockMessage = getQuickRepairBlockMessage(targetEq);
     if (quickRepairBlockMessage) {
-      showQuickRepairToast({
+      showArchiveToast({
         type: 'warning',
         message: quickRepairBlockMessage
       });
@@ -1844,7 +1886,7 @@ Clinical class: Life-saving respiratory device`;
     });
 
     if (parentAccepted === false) {
-      showQuickRepairToast({
+      showArchiveToast({
         type: 'warning',
         message: `当前登录身份无法同步该设备主工单，请确认设备归属科室：${targetEq.dept}`
       });
@@ -1855,7 +1897,7 @@ Clinical class: Life-saving respiratory device`;
     const freshTargetEq = postParentEquipments.find(eq => eq.id === targetEq.id);
     const freshQuickRepairBlockMessage = getQuickRepairBlockMessage(freshTargetEq || null);
     if (!freshTargetEq || freshQuickRepairBlockMessage) {
-      showQuickRepairToast({
+      showArchiveToast({
         type: 'warning',
         message: freshQuickRepairBlockMessage || `设备【${targetEq.deviceName}】已不在当前可报修范围，请刷新档案后重试。`
       });
@@ -1894,7 +1936,7 @@ Clinical class: Life-saving respiratory device`;
   const quickRepairAfterConfirmation = (equipment: MedicalEquipment) => {
     const quickRepairBlockMessage = getQuickRepairBlockMessage(equipment);
     if (quickRepairBlockMessage) {
-      showQuickRepairToast({
+      showArchiveToast({
         type: 'warning',
         message: quickRepairBlockMessage
       });
@@ -1906,7 +1948,7 @@ Clinical class: Life-saving respiratory device`;
     const workOrderNo = createQuickRepairRecord(equipment, description, urgency);
     if (!workOrderNo) return;
 
-    showQuickRepairToast({
+    showArchiveToast({
       type: 'success',
       message: `报修成功：${equipment.deviceName} 已同步生成主工单与档案维修记录 ${workOrderNo}`
     });
@@ -1915,7 +1957,7 @@ Clinical class: Life-saving respiratory device`;
   const handleQuickRepair = () => {
     const quickRepairBlockMessage = getQuickRepairBlockMessage(selectedEquipment);
     if (quickRepairBlockMessage) {
-      showQuickRepairToast({
+      showArchiveToast({
         type: 'warning',
         message: quickRepairBlockMessage
       });
@@ -1934,7 +1976,11 @@ Clinical class: Life-saving respiratory device`;
   // Simulated download or direct file link clicks
   const triggerDownloadFile = (file: Attachment) => {
     if (!ensureCanManageEquipmentArchive('下载技术资料原档')) return;
-    alert(`[安全原档下载] 正在安全信道解密调阅医疗器械原始技术文档：${file.name} (大小: ${file.size})`);
+    showArchiveToast({
+      type: 'info',
+      title: '安全原档下载',
+      message: `正在安全信道解密调阅医疗器械原始技术文档：${file.name}（大小：${file.size}）`
+    });
   };
 
   const handleExtractSnapshot = (page: PreviewPage) => {
@@ -1968,6 +2014,7 @@ Clinical class: Life-saving respiratory device`;
 
       // Update equipment list state
       let snapshotWasApplied = false;
+      let snapshotWasDuplicate = false;
       setEquipments(prevEquipments => {
         const latestTargetEquipment = prevEquipments.find(eq => eq.id === targetEquipmentId);
         const targetFileStillExists = latestTargetEquipment?.attachments.some(file => file.id === targetFileId);
@@ -1982,7 +2029,7 @@ Clinical class: Life-saving respiratory device`;
           const existingSnapshots = eq.extractedSnapshots || [];
           // Avoid duplicating same page snapshot
           if (existingSnapshots.some(s => s.sourceFileName === targetFileName && s.pageNum === targetPageNum)) {
-            alert('提示：该技术手册页快照已提取过，系统已自动重构其高阶关联指引并置顶！');
+            snapshotWasDuplicate = true;
             return {
               ...eq,
               extractedSnapshots: [newSnapshot, ...existingSnapshots.filter(s => !(s.sourceFileName === targetFileName && s.pageNum === targetPageNum))]
@@ -1999,32 +2046,52 @@ Clinical class: Life-saving respiratory device`;
       });
 
       setIsExtractingSnapshot(false);
+      if (snapshotWasDuplicate) {
+        showArchiveToast({
+          type: 'info',
+          title: '快照已重新置顶',
+          message: '该技术手册页快照已提取过，系统已自动重构其高阶关联指引并置顶。'
+        });
+        return;
+      }
       if (snapshotWasApplied) {
-        alert(`🎉 成功从《${targetFileName}》中提取第 ${targetPageNum} 页作为设备关联快照！此快照已与主技术档案完成高阶可信映射。`);
+        showArchiveToast({
+          type: 'success',
+          title: '快照提取成功',
+          message: `已从《${targetFileName}》中提取第 ${targetPageNum} 页作为设备关联快照，并与主技术档案完成可信映射。`
+        });
       }
     }, 800);
   };
 
   return (
     <div id="app_root" className="flex flex-col h-screen h-[100dvh] w-full bg-[#F0F2F5] p-2 sm:p-3 md:p-6 pb-16 md:pb-6 overflow-hidden font-sans">
-      {quickRepairToast && (
+      {archiveToast && (
         <div className={`fixed top-4 right-4 z-40 max-w-sm rounded-xl border bg-white px-4 py-3 shadow-xl flex items-start gap-2.5 ${
-          quickRepairToast.type === 'success'
+          archiveToast.type === 'success'
             ? 'border-emerald-200 shadow-emerald-900/10'
-            : 'border-amber-200 shadow-amber-900/10'
+            : archiveToast.type === 'info'
+              ? 'border-blue-200 shadow-blue-900/10'
+              : 'border-amber-200 shadow-amber-900/10'
         }`}>
-          {quickRepairToast.type === 'success' ? (
+          {archiveToast.type === 'success' ? (
             <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
+          ) : archiveToast.type === 'info' ? (
+            <Info className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
           ) : (
             <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
           )}
           <div>
             <p className={`text-xs font-black ${
-              quickRepairToast.type === 'success' ? 'text-emerald-800' : 'text-amber-800'
+              archiveToast.type === 'success'
+                ? 'text-emerald-800'
+                : archiveToast.type === 'info'
+                  ? 'text-blue-800'
+                  : 'text-amber-800'
             }`}>
-              {quickRepairToast.type === 'success' ? '快捷报修已同步' : '操作权限提醒'}
+              {archiveToast.title || (archiveToast.type === 'success' ? '操作已完成' : archiveToast.type === 'info' ? '操作提示' : '操作权限提醒')}
             </p>
-            <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">{quickRepairToast.message}</p>
+            <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">{archiveToast.message}</p>
           </div>
         </div>
       )}
@@ -2317,7 +2384,7 @@ Clinical class: Life-saving respiratory device`;
                   title={firstQuickRepairableEquipment ? '打开本科室故障一键快捷上报' : clinicalQuickRepairBlockMessage}
                   onClick={() => {
                     if (!firstQuickRepairableEquipment) {
-                      showQuickRepairToast({
+                      showArchiveToast({
                         type: 'warning',
                         message: clinicalQuickRepairBlockMessage
                       });
@@ -3699,7 +3766,7 @@ Clinical class: Life-saving respiratory device`;
                           onClick={() => {
                             const quickRepairBlockMessage = getQuickRepairBlockMessage(selectedEquipment);
                             if (quickRepairBlockMessage) {
-                              showQuickRepairToast({
+                              showArchiveToast({
                                 type: 'warning',
                                 message: quickRepairBlockMessage
                               });
@@ -4379,7 +4446,7 @@ Clinical class: Life-saving respiratory device`;
                                     onClick={() => {
                                       const quickRepairBlockMessage = getQuickRepairBlockMessage(eq);
                                       if (quickRepairBlockMessage) {
-                                        showQuickRepairToast({
+                                        showArchiveToast({
                                           type: 'warning',
                                           message: quickRepairBlockMessage
                                         });

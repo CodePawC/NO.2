@@ -44,6 +44,8 @@ const assertIncludes = (actual: string, expected: string, message: string) => {
   }
 };
 
+const readSource = (path: string) => readFileSync(path, 'utf8').replace(/\r\n/g, '\n');
+
 const withoutConsoleWarn = <T>(callback: () => T) => {
   const originalWarn = console.warn;
   console.warn = () => undefined;
@@ -230,7 +232,7 @@ const checks: Check[] = [
   {
     name: 'clinical acceptance form resets rating state after submit',
     run: () => {
-      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const appSource = readSource('src/App.tsx');
       const acceptStart = appSource.indexOf('const handleClinicalAcceptTask = (taskId: string) => {');
       const acceptEnd = appSource.indexOf('// Manually update fields in active draft', acceptStart);
       assert(acceptStart !== -1 && acceptEnd > acceptStart, '应能定位临床验收提交逻辑');
@@ -282,7 +284,7 @@ const checks: Check[] = [
   {
     name: 'task detail draft inputs reset on task or role change',
     run: () => {
-      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const appSource = readSource('src/App.tsx');
       const formStateStart = appSource.indexOf('// Status modify form inside task detail');
       const formStateEnd = appSource.indexOf('const chatEndRef = useRef<HTMLDivElement>(null);', formStateStart);
       assert(formStateStart !== -1 && formStateEnd > formStateStart, '应能定位任务详情表单状态逻辑');
@@ -301,7 +303,7 @@ const checks: Check[] = [
   {
     name: 'engineer filtered task list keeps detail selection in sync',
     run: () => {
-      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const appSource = readSource('src/App.tsx');
       const filterStart = appSource.indexOf('// Filters calculation');
       const renderStart = appSource.indexOf('return (', filterStart);
       assert(filterStart !== -1 && renderStart > filterStart, '应能定位任务筛选与渲染前状态联动逻辑');
@@ -486,7 +488,7 @@ const checks: Check[] = [
       assertEqual(untouchedTransferTask?.taskType, '非设备类转派任务', '真实电脑网络转派单不能被历史修正误改');
       assertEqual(untouchedTransferTask?.status, '已关闭', '真实电脑网络转派单应保持原关闭状态');
 
-      const storageSource = readFileSync('src/utils/taskStorage.ts', 'utf8');
+      const storageSource = readSource('src/utils/taskStorage.ts');
       assert(
         storageSource.includes('repairMisroutedEquipmentTasks(mergedTasks)') &&
           storageSource.includes('storage.setItem(TASK_STORAGE_KEY, JSON.stringify(tasks));') &&
@@ -519,7 +521,7 @@ const checks: Check[] = [
   {
     name: 'mobile task tab badge follows role-visible task count',
     run: () => {
-      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const appSource = readSource('src/App.tsx');
       const tabStart = appSource.indexOf('id="btn-tab-list"');
       const tabEnd = appSource.indexOf('</button>', tabStart);
       assert(tabStart !== -1 && tabEnd > tabStart, '应能定位移动端任务看板标签按钮');
@@ -539,7 +541,7 @@ const checks: Check[] = [
   {
     name: 'mobile task stats follows current role scope',
     run: () => {
-      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const appSource = readSource('src/App.tsx');
       const mobileStatsStart = appSource.indexOf('<div className="xl:hidden pb-1">');
       const mobileStatsEnd = appSource.indexOf('</div>', mobileStatsStart);
       assert(mobileStatsStart !== -1 && mobileStatsEnd > mobileStatsStart, '应能定位移动端任务统计看板');
@@ -559,7 +561,7 @@ const checks: Check[] = [
   {
     name: 'task emergency stats exclude non-equipment transfers',
     run: () => {
-      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const appSource = readSource('src/App.tsx');
       assert(
         appSource.includes('const sidebarEmergencyCount = visibleTasks.filter(t => (') &&
           appSource.includes('needsClinicalAcceptance(t) &&') &&
@@ -568,7 +570,7 @@ const checks: Check[] = [
         '侧边栏应急任务统计应只统计未闭环医学设备类应急，不能把电脑/后勤转派或已完成历史单算作当前抢救任务'
       );
 
-      const statsSource = readFileSync('src/components/TaskStats.tsx', 'utf8');
+      const statsSource = readSource('src/components/TaskStats.tsx');
       assert(
         statsSource.includes("import { needsClinicalAcceptance } from '../utils/taskWorkflow';") &&
           statsSource.includes("needsClinicalAcceptance(t) && (t.urgency === '特急' || t.urgency === '紧急' || t.urgency === '生命支持')") &&
@@ -615,7 +617,7 @@ const checks: Check[] = [
   {
     name: 'engineer task urgency filter covers every urgency level',
     run: () => {
-      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const appSource = readSource('src/App.tsx');
       const urgencyFilterStart = appSource.indexOf('value={urgencyFilter}');
       const urgencyFilterEnd = appSource.indexOf('</select>', urgencyFilterStart);
       assert(urgencyFilterStart !== -1 && urgencyFilterEnd > urgencyFilterStart, '应能定位工程师任务库紧急程度筛选器');
@@ -636,7 +638,7 @@ const checks: Check[] = [
   {
     name: 'task urgency text styling covers every urgency level',
     run: () => {
-      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const appSource = readSource('src/App.tsx');
       const helperStart = appSource.indexOf('const getUrgencyTextClass = (urgency?: UrgencyLevel) => {');
       const helperEnd = appSource.indexOf('export default function App()', helperStart);
       assert(helperStart !== -1 && helperEnd > helperStart, '应能定位紧急程度文字样式映射函数');
@@ -699,7 +701,7 @@ const checks: Check[] = [
       assertEqual(sortedIds[0], 'TKT-ACTIVE-LIFE', '当前生命支持任务应排在工程师列表最前');
       assertEqual(sortedIds[1], 'TKT-ACTIVE-NORMAL', '已归档生命支持历史单不应压过当前仍需处理的普通/紧急任务');
 
-      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const appSource = readSource('src/App.tsx');
       assert(
         appSource.includes("import { getDepartmentTasks, isPinnedCriticalTask, sortTasksByOperationalPriority } from './utils/taskOrdering';") &&
           appSource.includes('const isPinned = isPinnedCriticalTask(t);'),
@@ -710,7 +712,7 @@ const checks: Check[] = [
   {
     name: 'mobile sidebar navigation is accessible and testable',
     run: () => {
-      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const appSource = readSource('src/App.tsx');
       const headerStart = appSource.indexOf('{/* Mobile Top Header */}');
       const sidebarStart = appSource.indexOf('{/* Left Sidebar Navigation Menu */}', headerStart);
       const sidebarEnd = appSource.indexOf('{/* Mobile Sidebar Overlay Backdrop */}', sidebarStart);
@@ -773,7 +775,7 @@ const checks: Check[] = [
         assert(!!linkedEquipment, `默认医疗设备工单 ${taskId} 应能关联默认设备档案`);
       });
 
-      const storageSource = readFileSync('src/utils/taskStorage.ts', 'utf8');
+      const storageSource = readSource('src/utils/taskStorage.ts');
       const mergeStart = storageSource.indexOf('const TASK_PRESET_MIGRATION_IDS');
       const mergeEnd = storageSource.indexOf('export const parseStoredTaskList', mergeStart);
       assert(mergeStart !== -1 && mergeEnd > mergeStart, '应能定位默认任务迁移逻辑');
@@ -797,7 +799,7 @@ const checks: Check[] = [
         '首次加载默认任务时也应记录迁移标记，避免用户删除演示单后刷新又被补回'
       );
 
-      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const appSource = readSource('src/App.tsx');
       assert(
         appSource.includes("import { loadStoredTasks, TASK_STORAGE_KEY } from './utils/taskStorage';") &&
           appSource.includes('useState<StructuredTicket[]>(loadStoredTasks)'),
@@ -1080,7 +1082,7 @@ const checks: Check[] = [
       assertEqual(transferSync.equipments[0].maintenanceLogs.length, 0, '转派关闭单不应写入医疗设备维保履历');
       assertEqual(transferSync.equipments[0].status, '正常运行', '转派关闭单不应改变设备运行状态');
 
-      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const appSource = readSource('src/App.tsx');
       const createStart = appSource.indexOf('const handleCreateTicketFromDraft = () => {');
       const createEnd = appSource.indexOf('// Handle Clinical Closed-loop Sign-off & Rating', createStart);
       assert(createStart !== -1 && createEnd > createStart, '应能定位草稿建单逻辑');
@@ -1101,7 +1103,7 @@ const checks: Check[] = [
         '非设备转派单详情应明确提示不绑定设备档案，避免误导为漏绑或设备维修单'
       );
 
-      const archiveSource = readFileSync('src/components/EquipmentArchives.tsx', 'utf8');
+      const archiveSource = readSource('src/components/EquipmentArchives.tsx');
       const relatedStart = archiveSource.indexOf('const getRelatedTasksForEquipment = (equipment: MedicalEquipment) => {');
       const relatedEnd = archiveSource.indexOf('const canManageEquipmentArchive', relatedStart);
       assert(relatedStart !== -1 && relatedEnd > relatedStart, '应能定位设备档案相关工单聚合逻辑');
@@ -1151,7 +1153,7 @@ const checks: Check[] = [
       assertEqual(assignedEquipment?.assignedCalibrationEngineer, '赵安平', '旧版日历计量责任人应迁移到当前模拟工程师并持久化');
       assertEqual(assignedEquipmentStorage.shouldPersist, true, '迁移旧版日历责任工程师字段后应提示重新持久化');
 
-      const equipmentStorageSource = readFileSync('src/utils/equipmentStorage.ts', 'utf8');
+      const equipmentStorageSource = readSource('src/utils/equipmentStorage.ts');
       assert(
         equipmentStorageSource.includes("const EQUIPMENT_PRESET_MIGRATION_IDS = ['eq-006', 'eq-007', 'eq-008'];") &&
           equipmentStorageSource.includes('EQUIPMENT_PRESET_MIGRATION_KEY') &&
@@ -1240,7 +1242,7 @@ const checks: Check[] = [
   {
     name: 'engineer status control keeps current state read-only',
     run: () => {
-      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const appSource = readSource('src/App.tsx');
 
       assert(
         appSource.includes('const isCurrentStatus = selectedTask.status === st;'),
@@ -1263,7 +1265,7 @@ const checks: Check[] = [
   {
     name: 'terminal task logs are locked after archive or close',
     run: () => {
-      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const appSource = readSource('src/App.tsx');
       const addLogStart = appSource.indexOf('const handleAddLog = (e: React.FormEvent) => {');
       const addLogEnd = appSource.indexOf('// Update status of selected task', addLogStart);
       const resetKeysStart = appSource.indexOf('useEffect(() => {\n    pendingEngineerLogKeysRef.current.clear();');
@@ -1316,7 +1318,7 @@ const checks: Check[] = [
   {
     name: 'terminal task status changes do not mutate task logs',
     run: () => {
-      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const appSource = readSource('src/App.tsx');
       const statusStart = appSource.indexOf('const handleUpdateStatus = (newStatus: TaskStatus) => {');
       const statusEnd = appSource.indexOf('// Delete task with confirmation', statusStart);
       assert(statusStart !== -1 && statusEnd > statusStart, '应能定位工程师状态流转逻辑');
@@ -1349,7 +1351,7 @@ const checks: Check[] = [
   {
     name: 'clinical archive selection never falls back to hidden equipment',
     run: () => {
-      const archiveSource = readFileSync('src/components/EquipmentArchives.tsx', 'utf8');
+      const archiveSource = readSource('src/components/EquipmentArchives.tsx');
 
       assert(
         archiveSource.includes('const selectedEquipment = filteredEquipments.find(eq => eq.id === selectedId) || filteredEquipments[0] || null;'),
@@ -1551,23 +1553,37 @@ const checks: Check[] = [
           archiveSource.includes('!hasActiveRepairWorkOrder(equipment)'),
         '档案快捷报修应复用共享档案维修占用判断，识别已有进行中维修并避免重复生成维修记录'
       );
-      const quickRepairToastStart = archiveSource.indexOf("const showQuickRepairToast = (toast: { type: 'success' | 'warning'; message: string }) => {");
-      const quickRepairToastEnd = archiveSource.indexOf('useEffect(() => {\n    if (propCurrentUser)', quickRepairToastStart);
-      assert(quickRepairToastStart !== -1 && quickRepairToastEnd > quickRepairToastStart, '应能定位档案快捷报修 toast 逻辑');
-      const quickRepairToastSource = archiveSource.slice(quickRepairToastStart, quickRepairToastEnd);
-      const quickRepairToastCallCount = (archiveSource.match(/showQuickRepairToast\(/g) || []).length;
+      const archiveToastStart = archiveSource.indexOf('const showArchiveToast = (toast: ArchiveToast) => {');
+      const archiveToastEnd = archiveSource.indexOf('const requestArchiveConfirmation = (confirmation: ArchiveConfirmation) => {', archiveToastStart);
+      assert(archiveToastStart !== -1 && archiveToastEnd > archiveToastStart, '应能定位资产档案统一 toast 逻辑');
+      const archiveToastSource = archiveSource.slice(archiveToastStart, archiveToastEnd);
+      const archiveToastCallCount = (archiveSource.match(/showArchiveToast\(/g) || []).length;
       assert(
-        archiveSource.includes('const quickRepairToastTimerRef = useRef<number | null>(null);') &&
-          quickRepairToastSource.includes('if (quickRepairToastTimerRef.current !== null)') &&
-          quickRepairToastSource.includes('window.clearTimeout(quickRepairToastTimerRef.current);') &&
-          quickRepairToastSource.includes('quickRepairToastTimerRef.current = window.setTimeout(() => {') &&
-          quickRepairToastSource.includes('setQuickRepairToast(null);') &&
-          quickRepairToastSource.includes('quickRepairToastTimerRef.current = null;') &&
-          quickRepairToastSource.includes('return () => {') &&
-          quickRepairToastSource.includes('window.clearTimeout(quickRepairToastTimerRef.current);') &&
-          quickRepairToastCallCount >= 8 &&
-          !archiveSource.includes('setTimeout(() => setQuickRepairToast(null), 5000);'),
-        '资产档案快捷报修和权限提醒 toast 应统一清理旧定时器，避免连续报修或连续权限提醒时旧定时器提前清掉新提示'
+        archiveSource.includes('type ArchiveToast = {') &&
+          archiveSource.includes("type: 'success' | 'warning' | 'info';") &&
+          archiveSource.includes('const [archiveToast, setArchiveToast] = useState<ArchiveToast | null>(null);') &&
+          archiveSource.includes('const archiveToastTimerRef = useRef<number | null>(null);') &&
+          archiveToastSource.includes('if (archiveToastTimerRef.current !== null)') &&
+          archiveToastSource.includes('window.clearTimeout(archiveToastTimerRef.current);') &&
+          archiveToastSource.includes('archiveToastTimerRef.current = window.setTimeout(() => {') &&
+          archiveToastSource.includes('setArchiveToast(null);') &&
+          archiveToastSource.includes('archiveToastTimerRef.current = null;') &&
+          archiveSource.includes('return () => {') &&
+          archiveSource.includes('window.clearTimeout(archiveToastTimerRef.current);') &&
+          archiveToastCallCount >= 12 &&
+          !archiveSource.includes('setTimeout(() => setArchiveToast(null), 5000);'),
+        '资产档案快捷报修、字段校验、打印下载和快照提示应统一清理旧定时器，避免连续操作时旧定时器提前清掉新提示'
+      );
+      assert(
+        archiveSource.includes("title: '档案信息未完整'") &&
+          archiveSource.includes("title: '批量导入成功'") &&
+          archiveSource.includes("title: '打印指令已发送'") &&
+          archiveSource.includes("title: '安全原档下载'") &&
+          archiveSource.includes("title: '快照已重新置顶'") &&
+          archiveSource.includes("title: '快照提取成功'") &&
+          !archiveSource.includes('alert(') &&
+          !archiveSource.includes('window.alert('),
+        '资产档案提示应统一走应用内 toast，避免原生 alert 阻塞移动端和自动化流程'
       );
       assert(
         archiveSource.includes("const formatDepartmentScopeLabel = (dept: string) => {") &&
@@ -1863,7 +1879,7 @@ const checks: Check[] = [
   {
     name: 'quick archive repair callback has app-level clinical department guard',
     run: () => {
-      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const appSource = readSource('src/App.tsx');
       const assetReportStart = appSource.indexOf('const handleReportRepairFromEquip = (equip: any) => {');
       const assetReportEnd = appSource.indexOf('const handleQuickRepairCreated = ({', assetReportStart);
       assert(assetReportStart !== -1 && assetReportEnd > assetReportStart, '应能定位档案智能报修入口');
@@ -1981,8 +1997,8 @@ const checks: Check[] = [
         department: equipment.dept,
         status: '已关闭'
       });
-      const archiveSource = readFileSync('src/components/EquipmentArchives.tsx', 'utf8');
-      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const archiveSource = readSource('src/components/EquipmentArchives.tsx');
+      const appSource = readSource('src/App.tsx');
       const assetReportStart = appSource.indexOf('const handleReportRepairFromEquip = (equip: any) => {');
       const assetReportEnd = appSource.indexOf('const handleQuickRepairCreated = ({', assetReportStart);
       const callbackStart = appSource.indexOf('const handleQuickRepairCreated = ({');
@@ -2036,7 +2052,7 @@ const checks: Check[] = [
       );
       assert(
         relatedTaskActionSource.includes('const quickRepairBlockMessage = getQuickRepairBlockMessage(selectedEquipment);') &&
-          relatedTaskActionSource.includes('showQuickRepairToast({') &&
+          relatedTaskActionSource.includes('showArchiveToast({') &&
           relatedTaskActionSource.includes('disabled={!canStartQuickRepairForEquipment(selectedEquipment)}') &&
           relatedTaskActionSource.includes('title={canStartQuickRepairForEquipment(selectedEquipment) ?') &&
           relatedTaskActionSource.includes('bg-slate-200 text-slate-400 cursor-not-allowed'),
@@ -2047,7 +2063,7 @@ const checks: Check[] = [
   {
     name: 'archive quick repair keeps engineer proxy contact distinct from clinical reporter',
     run: () => {
-      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const appSource = readSource('src/App.tsx');
       const callbackStart = appSource.indexOf('const handleQuickRepairCreated = ({');
       const callbackEnd = appSource.indexOf('// Role and Auth Simulation States');
       assert(callbackStart !== -1 && callbackEnd > callbackStart, '应能定位快捷报修回调实现');
@@ -2078,7 +2094,7 @@ const checks: Check[] = [
   {
     name: 'quick archive repair mutates archive only after parent accepts',
     run: () => {
-      const archiveSource = readFileSync('src/components/EquipmentArchives.tsx', 'utf8');
+      const archiveSource = readSource('src/components/EquipmentArchives.tsx');
       const createStart = archiveSource.indexOf('const createQuickRepairRecord = (');
       const createEnd = archiveSource.indexOf('const handleQuickRepair = () =>');
       assert(createStart !== -1 && createEnd > createStart, '应能定位档案快捷报修写入逻辑');
@@ -2181,7 +2197,7 @@ const checks: Check[] = [
         archiveSource.includes('quickRepairableEquipments') &&
           archiveSource.includes('firstQuickRepairableEquipment') &&
           archiveSource.includes('clinicalQuickRepairBlockMessage') &&
-          archiveSource.includes('showQuickRepairToast({') &&
+          archiveSource.includes('showArchiveToast({') &&
           archiveSource.includes('本科室设备已有进行中的维修工单，请在现有工单中补充故障信息，避免重复派单。'),
         '临床快捷面板入口应在本科室无可报修设备时直接禁用并提示原因，避免打开空报修弹窗'
       );
@@ -2214,7 +2230,7 @@ const checks: Check[] = [
   {
     name: 'clinical task detail does not expose archive creation action',
     run: () => {
-      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const appSource = readSource('src/App.tsx');
       const clinicalStart = appSource.indexOf("{currentUserRole === 'medical_staff' ? (");
       const engineerStart = appSource.indexOf(') : selectedTask ? (', clinicalStart);
       assert(clinicalStart !== -1 && engineerStart > clinicalStart, '应能定位临床任务详情视图');
@@ -2266,7 +2282,7 @@ const checks: Check[] = [
   {
     name: 'clinical draft creation cannot manually reroute equipment repairs',
     run: () => {
-      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const appSource = readSource('src/App.tsx');
       const createStart = appSource.indexOf('const handleCreateTicketFromDraft = () => {');
       const createEnd = appSource.indexOf('// Handle Clinical Closed-loop Sign-off & Rating', createStart);
       assert(createStart !== -1 && createEnd > createStart, '应能定位草稿建单逻辑');
@@ -2393,7 +2409,7 @@ const checks: Check[] = [
         '前端本地兜底解析应先识别 MRI/DR/CT/超声等医学装备上下文，避免把设备系统错误误转信息科'
       );
 
-      const serverSource = readFileSync('server.ts', 'utf8');
+      const serverSource = readSource('server.ts');
       assert(
         serverSource.includes('const isMedicalEquipmentContext = /呼吸机|除颤仪|麻醉机|监护仪') &&
           serverSource.includes('mri') &&
@@ -2490,7 +2506,7 @@ const checks: Check[] = [
   {
     name: 'engineer manual draft keeps manual source and operator audit trail',
     run: () => {
-      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const appSource = readSource('src/App.tsx');
       const manualStart = appSource.indexOf('id="btn-manual-add"');
       const manualBlockStart = appSource.lastIndexOf('const newTemp: Partial<StructuredTicket> = {', manualStart);
       const manualBlockEnd = appSource.indexOf('setDraftTicket(newTemp);', manualBlockStart);
@@ -2522,7 +2538,7 @@ const checks: Check[] = [
   {
     name: 'clinical transfer timeline uses handoff wording instead of repair acceptance',
     run: () => {
-      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const appSource = readSource('src/App.tsx');
       const clinicalStart = appSource.indexOf("{currentUserRole === 'medical_staff' ? (");
       const engineerStart = appSource.indexOf(') : selectedTask ? (', clinicalStart);
       assert(clinicalStart !== -1 && engineerStart > clinicalStart, '应能定位临床任务详情视图');
@@ -2594,7 +2610,7 @@ const checks: Check[] = [
   {
     name: 'clinical task detail hides engineer management actions',
     run: () => {
-      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const appSource = readSource('src/App.tsx');
       const clinicalStart = appSource.indexOf("{currentUserRole === 'medical_staff' ? (");
       const engineerStart = appSource.indexOf(') : selectedTask ? (', clinicalStart);
       assert(clinicalStart !== -1 && engineerStart > clinicalStart, '应能定位临床任务详情视图');
@@ -2660,7 +2676,7 @@ const checks: Check[] = [
   {
     name: 'role switch preserves the focused visible task',
     run: () => {
-      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const appSource = readSource('src/App.tsx');
       const switchStart = appSource.indexOf('const handleSwitchUser = (userId: string) => {');
       const switchEnd = appSource.indexOf('const [chatMessages, setChatMessages]', switchStart);
       assert(switchStart !== -1 && switchEnd > switchStart, '应能定位角色切换逻辑');
@@ -2697,7 +2713,7 @@ const checks: Check[] = [
   {
     name: 'task deeplinks and clinical fallback use latest task state',
     run: () => {
-      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const appSource = readSource('src/App.tsx');
       const deepLinkStart = appSource.indexOf('const handleDeepLinkTicket = (e: any) => {');
       const deepLinkEnd = appSource.indexOf("window.addEventListener('deep-link-ticket'", deepLinkStart);
       assert(deepLinkStart !== -1 && deepLinkEnd > deepLinkStart, '应能定位工单深链逻辑');
@@ -2737,7 +2753,7 @@ const checks: Check[] = [
   {
     name: 'role switch clears stale draft intake state',
     run: () => {
-      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const appSource = readSource('src/App.tsx');
       const switchStart = appSource.indexOf('const handleSwitchUser = (userId: string) => {');
       const switchEnd = appSource.indexOf('// Set a toast to show role switch', switchStart);
       assert(switchStart !== -1 && switchEnd > switchStart, '应能定位角色切换开场清理逻辑');
@@ -2847,7 +2863,7 @@ const checks: Check[] = [
           restoreActionSource.includes("setCurrentWorkspace('tasks');"),
         '工程师重置演示数据应同时恢复任务、设备档案、内存统计和防重复 pending 状态，避免任务与资产档案不同步'
       );
-      const speechSource = readFileSync('src/hooks/useSpeechRecognition.ts', 'utf8');
+      const speechSource = readSource('src/hooks/useSpeechRecognition.ts');
       assert(
         speechSource.includes('const speechSessionVersionRef = useRef(0);') &&
           speechSource.includes('const SpeechRecognitionRef = useRef<any>(null);') &&
@@ -2898,13 +2914,13 @@ const checks: Check[] = [
   {
     name: 'assistant fallback keeps clinical user context on the server',
     run: () => {
-      const appSource = readFileSync('src/App.tsx', 'utf8');
+      const appSource = readSource('src/App.tsx');
       assert(
         appSource.includes('activeConfig: activeConfig') && appSource.includes('currentUser: currentSimulatedUser'),
         '前端应把当前模型配置与当前用户上下文发给服务端'
       );
 
-      const serverSource = readFileSync('server.ts', 'utf8');
+      const serverSource = readSource('server.ts');
       assert(
         serverSource.includes("req.body?.config || req.body?.activeConfig") &&
           serverSource.includes("req.body?.user || req.body?.currentUser"),
@@ -2937,7 +2953,7 @@ const checks: Check[] = [
         '服务端本地降级应识别厂家协同否定语义、典型内镜供应商协同，把后勤类转派归口后勤保障科，并避免急诊科误触发特急'
       );
 
-      const indexSource = readFileSync('index.html', 'utf8');
+      const indexSource = readSource('index.html');
       assert(
         indexSource.includes('<title>医学装备数字化平台</title>'),
         '浏览器标签标题应使用产品名称而不是模板默认名'
@@ -2947,8 +2963,8 @@ const checks: Check[] = [
   {
     name: 'local server port can be overridden for parallel role testing',
     run: () => {
-      const serverSource = readFileSync('server.ts', 'utf8');
-      const readmeSource = readFileSync('README.md', 'utf8');
+      const serverSource = readSource('server.ts');
+      const readmeSource = readSource('README.md');
       assert(
         serverSource.includes("import { createServer as createHttpServer } from 'node:http';") &&
           serverSource.includes('const parseServerPort = (value: string | undefined, fallback: number) => {') &&
@@ -2970,9 +2986,9 @@ const checks: Check[] = [
   {
     name: 'clinical model status cannot open engineer-only ai settings',
     run: () => {
-      const appSource = readFileSync('src/App.tsx', 'utf8');
-      const settingsSource = readFileSync('src/hooks/useAiSettings.ts', 'utf8');
-      const serverSource = readFileSync('server.ts', 'utf8');
+      const appSource = readSource('src/App.tsx');
+      const settingsSource = readSource('src/hooks/useAiSettings.ts');
+      const serverSource = readSource('server.ts');
       const openSettingsStart = appSource.indexOf('const openAiSettings = () => {');
       const openSettingsEnd = appSource.indexOf('useEffect(() => {', openSettingsStart);
       const switchUserStart = appSource.indexOf('const handleSwitchUser = (userId: string) => {');
@@ -3077,7 +3093,7 @@ const checks: Check[] = [
   {
     name: 'equipment diagnostic chat resets on equipment or role change',
     run: () => {
-      const archiveSource = readFileSync('src/components/EquipmentArchives.tsx', 'utf8');
+      const archiveSource = readSource('src/components/EquipmentArchives.tsx');
       const chatResetStart = archiveSource.indexOf('// Refresh AI Chat context on device and user change');
       const chatResetEnd = archiveSource.indexOf('// Unique list for filtering dropdowns', chatResetStart);
       assert(chatResetStart !== -1 && chatResetEnd > chatResetStart, '应能定位资产档案 AI 诊断会话重置逻辑');
@@ -3129,7 +3145,7 @@ const checks: Check[] = [
   {
     name: 'maintenance calendar keeps clinical readonly and engineer deploy paths',
     run: () => {
-      const calendarSource = readFileSync('src/components/MaintenanceCalendar.tsx', 'utf8');
+      const calendarSource = readSource('src/components/MaintenanceCalendar.tsx');
 
       assert(
         calendarSource.includes("const canManageSchedule = currentUser.role === 'engineer'") &&
@@ -3154,7 +3170,7 @@ const checks: Check[] = [
         '维保日历默认责任工程师应复用系统模拟工程师，避免切换到个人工程师视图后看板空白或身份不一致'
       );
       {
-        const engineerAssignmentSource = readFileSync('src/utils/engineerAssignments.ts', 'utf8');
+        const engineerAssignmentSource = readSource('src/utils/engineerAssignments.ts');
         assert(
           engineerAssignmentSource.includes("export const FALLBACK_ENGINEER_NAMES = ['张明华', '李建国', '赵安平'];") &&
             engineerAssignmentSource.includes('export const SIMULATED_ENGINEER_NAMES = SIMULATED_USERS') &&
