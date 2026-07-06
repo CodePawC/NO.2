@@ -1585,9 +1585,9 @@ const checks: Check[] = [
           archiveSource.includes('title={`点击穿透查看${assetScopeLabel}“${cat}”装备明细`}'),
         '资产矩阵看板应按当前角色范围展示全院/本科室文案，不能在临床端硬编码全院'
       );
-      const deleteEquipmentStart = archiveSource.indexOf('const handleDelete = (id: string) => {');
-      const deleteEquipmentEnd = archiveSource.indexOf('// Open modal for Create', deleteEquipmentStart);
-      assert(deleteEquipmentStart !== -1 && deleteEquipmentEnd > deleteEquipmentStart, '应能定位设备档案删除逻辑');
+      const deleteEquipmentStart = archiveSource.indexOf('const deleteEquipmentAfterConfirmation = (id: string) => {');
+      const deleteEquipmentEnd = archiveSource.indexOf('// Handle Equipment deletion', deleteEquipmentStart);
+      assert(deleteEquipmentStart !== -1 && deleteEquipmentEnd > deleteEquipmentStart, '应能定位确认后的设备档案删除逻辑');
       const deleteEquipmentSource = archiveSource.slice(deleteEquipmentStart, deleteEquipmentEnd);
       assert(
         deleteEquipmentSource.includes("showArchiveManageBlockedToast('档案作废删除');") &&
@@ -1595,6 +1595,16 @@ const checks: Check[] = [
           deleteEquipmentSource.includes('const nextEquipments = prevEquipments.filter(eq => eq.id !== id);') &&
           deleteEquipmentSource.includes('localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));'),
         '删除设备档案应基于最新设备列表写入，避免覆盖连续新增的附件或履历'
+      );
+      const deleteEquipmentRequestStart = archiveSource.indexOf('const handleDelete = (id: string) => {');
+      const deleteEquipmentRequestEnd = archiveSource.indexOf('// Open modal for Create', deleteEquipmentRequestStart);
+      assert(deleteEquipmentRequestStart !== -1 && deleteEquipmentRequestEnd > deleteEquipmentRequestStart, '应能定位设备档案删除确认入口');
+      const deleteEquipmentRequestSource = archiveSource.slice(deleteEquipmentRequestStart, deleteEquipmentRequestEnd);
+      assert(
+        deleteEquipmentRequestSource.includes("id: 'delete-equipment'") &&
+          deleteEquipmentRequestSource.includes("onConfirm: () => deleteEquipmentAfterConfirmation(id)") &&
+          deleteEquipmentRequestSource.includes("showArchiveManageBlockedToast('档案作废删除');"),
+        '删除设备档案入口应先做权限校验，再通过资产档案应用内确认弹层触发实际删除'
       );
       const saveFormStart = archiveSource.indexOf('const saveEquipmentForm = (e: React.FormEvent) => {');
       const saveFormEnd = archiveSource.indexOf('// 临床医护人员一键快捷报修提交', saveFormStart);
@@ -1649,9 +1659,9 @@ const checks: Check[] = [
           addCalibrationSource.includes('localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));'),
         '新增计量证书应基于最新设备列表写入，避免连续登记覆盖其他档案更新'
       );
-      const deleteMaintenanceStart = archiveSource.indexOf('const handleDeleteMaintenanceLog = (logId: string) => {');
-      const deleteMaintenanceEnd = archiveSource.indexOf('// Delete Calibration Log', deleteMaintenanceStart);
-      assert(deleteMaintenanceStart !== -1 && deleteMaintenanceEnd > deleteMaintenanceStart, '应能定位删除维保履历逻辑');
+      const deleteMaintenanceStart = archiveSource.indexOf('const deleteMaintenanceLogAfterConfirmation = (logId: string) => {');
+      const deleteMaintenanceEnd = archiveSource.indexOf('// Delete Maintenance Log', deleteMaintenanceStart);
+      assert(deleteMaintenanceStart !== -1 && deleteMaintenanceEnd > deleteMaintenanceStart, '应能定位确认后的删除维保履历逻辑');
       const deleteMaintenanceSource = archiveSource.slice(deleteMaintenanceStart, deleteMaintenanceEnd);
       assert(
         deleteMaintenanceSource.includes("if (!ensureCanManageEquipmentArchive('删除维保履历记录')) return;") &&
@@ -1662,9 +1672,18 @@ const checks: Check[] = [
           deleteMaintenanceSource.includes('localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));'),
         '删除维保/维修履历应基于最新设备列表写入，避免覆盖并发档案更新'
       );
-      const deleteCalibrationStart = archiveSource.indexOf('const handleDeleteCalibrationLog = (calId: string) => {');
-      const deleteCalibrationEnd = archiveSource.indexOf('const handleDeleteExtractedSnapshot = (snapshotId: string) => {', deleteCalibrationStart);
-      assert(deleteCalibrationStart !== -1 && deleteCalibrationEnd > deleteCalibrationStart, '应能定位删除计量证书逻辑');
+      const deleteMaintenanceRequestStart = archiveSource.indexOf('const handleDeleteMaintenanceLog = (logId: string) => {');
+      const deleteMaintenanceRequestEnd = archiveSource.indexOf('const deleteCalibrationLogAfterConfirmation', deleteMaintenanceRequestStart);
+      assert(deleteMaintenanceRequestStart !== -1 && deleteMaintenanceRequestEnd > deleteMaintenanceRequestStart, '应能定位删除维保履历确认入口');
+      const deleteMaintenanceRequestSource = archiveSource.slice(deleteMaintenanceRequestStart, deleteMaintenanceRequestEnd);
+      assert(
+        deleteMaintenanceRequestSource.includes("id: 'delete-maintenance-log'") &&
+          deleteMaintenanceRequestSource.includes('onConfirm: () => deleteMaintenanceLogAfterConfirmation(logId)'),
+        '删除维保履历入口应通过资产档案应用内确认弹层触发实际删除'
+      );
+      const deleteCalibrationStart = archiveSource.indexOf('const deleteCalibrationLogAfterConfirmation = (calId: string) => {');
+      const deleteCalibrationEnd = archiveSource.indexOf('// Delete Calibration Log', deleteCalibrationStart);
+      assert(deleteCalibrationStart !== -1 && deleteCalibrationEnd > deleteCalibrationStart, '应能定位确认后的删除计量证书逻辑');
       const deleteCalibrationSource = archiveSource.slice(deleteCalibrationStart, deleteCalibrationEnd);
       assert(
         deleteCalibrationSource.includes("if (!ensureCanManageEquipmentArchive('注销计量证书')) return;") &&
@@ -1674,6 +1693,15 @@ const checks: Check[] = [
           deleteCalibrationSource.includes('calibrationLogs: eq.calibrationLogs.filter(cal => cal.id !== calId)') &&
           deleteCalibrationSource.includes('localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));'),
         '删除计量证书应基于最新设备列表写入，避免覆盖并发档案更新'
+      );
+      const deleteCalibrationRequestStart = archiveSource.indexOf('const handleDeleteCalibrationLog = (calId: string) => {');
+      const deleteCalibrationRequestEnd = archiveSource.indexOf('const handleDeleteExtractedSnapshot = (snapshotId: string) => {', deleteCalibrationRequestStart);
+      assert(deleteCalibrationRequestStart !== -1 && deleteCalibrationRequestEnd > deleteCalibrationRequestStart, '应能定位删除计量证书确认入口');
+      const deleteCalibrationRequestSource = archiveSource.slice(deleteCalibrationRequestStart, deleteCalibrationRequestEnd);
+      assert(
+        deleteCalibrationRequestSource.includes("id: 'delete-calibration-log'") &&
+          deleteCalibrationRequestSource.includes('onConfirm: () => deleteCalibrationLogAfterConfirmation(calId)'),
+        '删除计量证书入口应通过资产档案应用内确认弹层触发实际删除'
       );
       const deleteSnapshotStart = archiveSource.indexOf('const handleDeleteExtractedSnapshot = (snapshotId: string) => {');
       const deleteSnapshotEnd = archiveSource.indexOf('// Add Attachment Item', deleteSnapshotStart);
@@ -2084,6 +2112,42 @@ const checks: Check[] = [
           createSource.includes('setEquipments(nextEquipments);') &&
           !createSource.includes('setEquipments(prevEquipments => {'),
         '档案快捷报修必须在父组件接受后基于最新持久化档案重新校验并立即写入维修履历，避免切换工作区时丢失档案记录或并发重复写入'
+      );
+      const quickRepairActionStart = archiveSource.indexOf('const quickRepairAfterConfirmation = (equipment: MedicalEquipment) => {');
+      const quickRepairActionEnd = archiveSource.indexOf('const handleQuickRepair = () => {', quickRepairActionStart);
+      assert(quickRepairActionStart !== -1 && quickRepairActionEnd > quickRepairActionStart, '应能定位确认后的档案快捷报修动作');
+      const quickRepairActionSource = archiveSource.slice(quickRepairActionStart, quickRepairActionEnd);
+      const quickRepairRequestStart = archiveSource.indexOf('const handleQuickRepair = () => {');
+      const quickRepairRequestEnd = archiveSource.indexOf('// Simulated download or direct file link clicks', quickRepairRequestStart);
+      assert(quickRepairRequestStart !== -1 && quickRepairRequestEnd > quickRepairRequestStart, '应能定位档案快捷报修确认入口');
+      const quickRepairRequestSource = archiveSource.slice(quickRepairRequestStart, quickRepairRequestEnd);
+      assert(
+        quickRepairActionSource.includes('const quickRepairBlockMessage = getQuickRepairBlockMessage(equipment);') &&
+          quickRepairActionSource.includes('const workOrderNo = createQuickRepairRecord(equipment, description, urgency);') &&
+          quickRepairRequestSource.includes("id: 'quick-repair'") &&
+          quickRepairRequestSource.includes('onConfirm: () => quickRepairAfterConfirmation(selectedEquipment)') &&
+          !quickRepairRequestSource.includes('window.confirm('),
+        '档案快捷报修应通过资产档案应用内确认弹层触发，并在确认后再次执行业务阻断校验'
+      );
+      const archiveConfirmationTypeStart = archiveSource.indexOf('type ArchiveConfirmation = {');
+      const archiveConfirmationTypeEnd = archiveSource.indexOf('const getDiagnosticSessionKey', archiveConfirmationTypeStart);
+      assert(archiveConfirmationTypeStart !== -1 && archiveConfirmationTypeEnd > archiveConfirmationTypeStart, '应能定位资产档案确认弹层类型');
+      const archiveConfirmationTypeSource = archiveSource.slice(archiveConfirmationTypeStart, archiveConfirmationTypeEnd);
+      const archiveConfirmationModalStart = archiveSource.indexOf('{archiveConfirmation && (');
+      const archiveConfirmationModalEnd = archiveSource.indexOf('{/* Top Header Section */}', archiveConfirmationModalStart);
+      assert(archiveConfirmationModalStart !== -1 && archiveConfirmationModalEnd > archiveConfirmationModalStart, '应能定位资产档案应用内确认弹层');
+      const archiveConfirmationModalSource = archiveSource.slice(archiveConfirmationModalStart, archiveConfirmationModalEnd);
+      assert(
+        archiveConfirmationTypeSource.includes("id: 'delete-equipment' | 'delete-maintenance-log' | 'delete-calibration-log' | 'quick-repair';") &&
+          archiveSource.includes('const [archiveConfirmation, setArchiveConfirmation] = useState<ArchiveConfirmation | null>(null);') &&
+          archiveSource.includes('const requestArchiveConfirmation = (confirmation: ArchiveConfirmation) => {') &&
+          archiveSource.includes('const handleConfirmArchiveAction = () => {') &&
+          archiveSource.includes('setArchiveConfirmation(null);') &&
+          archiveConfirmationModalSource.includes('id="archive-confirmation-modal"') &&
+          archiveConfirmationModalSource.includes('id="btn-archive-confirm-cancel"') &&
+          archiveConfirmationModalSource.includes('id="btn-archive-confirm-action"') &&
+          archiveSource.includes('setArchiveConfirmation(null);'),
+        '资产档案危险操作应统一使用组件内确认弹层，并在角色切换到临床只读时清理待确认操作'
       );
       assert(
         archiveSource.includes('id="btn-clinical-open-quick-repair"') &&

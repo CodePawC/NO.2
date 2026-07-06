@@ -94,6 +94,15 @@ interface QuickRepairRequest {
   workOrderNo: string;
 }
 
+type ArchiveConfirmation = {
+  id: 'delete-equipment' | 'delete-maintenance-log' | 'delete-calibration-log' | 'quick-repair';
+  title: string;
+  description: string;
+  confirmLabel: string;
+  tone?: 'danger' | 'primary';
+  onConfirm: () => void;
+};
+
 const getDiagnosticSessionKey = (equipment: MedicalEquipment | null, user: UserProfile) => {
   return `${user.id}:${equipment?.id || 'no-equipment'}`;
 };
@@ -449,6 +458,7 @@ export default function EquipmentArchives({
   const [quickRepairDesc, setQuickRepairDesc] = useState<string>('');
   const [quickRepairUrgency, setQuickRepairUrgency] = useState<'low' | 'medium' | 'high'>('medium');
   const [quickRepairToast, setQuickRepairToast] = useState<{ type: 'success' | 'warning'; message: string } | null>(null);
+  const [archiveConfirmation, setArchiveConfirmation] = useState<ArchiveConfirmation | null>(null);
   const quickRepairToastTimerRef = useRef<number | null>(null);
 
   const showQuickRepairToast = (toast: { type: 'success' | 'warning'; message: string }) => {
@@ -460,6 +470,20 @@ export default function EquipmentArchives({
       setQuickRepairToast(null);
       quickRepairToastTimerRef.current = null;
     }, 5000);
+  };
+
+  const requestArchiveConfirmation = (confirmation: ArchiveConfirmation) => {
+    setArchiveConfirmation(confirmation);
+  };
+
+  const handleCancelArchiveConfirmation = () => {
+    setArchiveConfirmation(null);
+  };
+
+  const handleConfirmArchiveAction = () => {
+    const action = archiveConfirmation?.onConfirm;
+    setArchiveConfirmation(null);
+    action?.();
   };
 
   useEffect(() => {
@@ -743,6 +767,7 @@ export default function EquipmentArchives({
     setIsDossierModalOpen(false);
     setIsScannerModalOpen(false);
     setIsQuickRepairModalOpen(false);
+    setArchiveConfirmation(null);
     setIsPreviewOpen(false);
     setPreviewFile(null);
     setIsExtractingSnapshot(false);
@@ -1057,6 +1082,19 @@ export default function EquipmentArchives({
     return diffDays >= 0 && diffDays <= 30; // Within 30 days
   }).length;
 
+  const deleteEquipmentAfterConfirmation = (id: string) => {
+    if (!canManageEquipmentArchive) {
+      showArchiveManageBlockedToast('档案作废删除');
+      return;
+    }
+
+    setEquipments(prevEquipments => {
+      const nextEquipments = prevEquipments.filter(eq => eq.id !== id);
+      localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));
+      return nextEquipments;
+    });
+  };
+
   // Handle Equipment deletion
   const handleDelete = (id: string) => {
     if (!canManageEquipmentArchive) {
@@ -1064,13 +1102,15 @@ export default function EquipmentArchives({
       return;
     }
 
-    if (window.confirm('您确定要永久删除该设备的全部档案、维保记录和附件吗？此操作不可撤销。')) {
-      setEquipments(prevEquipments => {
-        const nextEquipments = prevEquipments.filter(eq => eq.id !== id);
-        localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));
-        return nextEquipments;
-      });
-    }
+    const targetEquipment = equipments.find(eq => eq.id === id);
+    requestArchiveConfirmation({
+      id: 'delete-equipment',
+      title: '删除设备档案',
+      description: `确定要永久删除设备档案 ${targetEquipment?.deviceName || id} 及其维保记录、计量证书和附件吗？此操作不可撤销。`,
+      confirmLabel: '永久删除',
+      tone: 'danger',
+      onConfirm: () => deleteEquipmentAfterConfirmation(id)
+    });
   };
 
   // Open modal for Create
@@ -1415,10 +1455,8 @@ export default function EquipmentArchives({
     setIsLogModalOpen(false);
   };
 
-  // Delete Maintenance Log
-  const handleDeleteMaintenanceLog = (logId: string) => {
+  const deleteMaintenanceLogAfterConfirmation = (logId: string) => {
     if (!ensureCanManageEquipmentArchive('删除维保履历记录')) return;
-    if (!window.confirm('您确定要永久删除此条维保履历记录吗？')) return;
     setEquipments(prevEquipments => {
       const nextEquipments = prevEquipments.map(eq => {
         if (eq.id !== selectedId) return eq;
@@ -1432,10 +1470,22 @@ export default function EquipmentArchives({
     });
   };
 
-  // Delete Calibration Log
-  const handleDeleteCalibrationLog = (calId: string) => {
+  // Delete Maintenance Log
+  const handleDeleteMaintenanceLog = (logId: string) => {
+    if (!ensureCanManageEquipmentArchive('删除维保履历记录')) return;
+    const targetLog = selectedEquipment?.maintenanceLogs.find(log => log.id === logId);
+    requestArchiveConfirmation({
+      id: 'delete-maintenance-log',
+      title: '删除维保履历',
+      description: `确定要永久删除这条维保履历${targetLog?.workOrderNo ? `（${targetLog.workOrderNo}）` : ''}吗？删除后设备维修审计链中将不再显示该记录。`,
+      confirmLabel: '删除履历',
+      tone: 'danger',
+      onConfirm: () => deleteMaintenanceLogAfterConfirmation(logId)
+    });
+  };
+
+  const deleteCalibrationLogAfterConfirmation = (calId: string) => {
     if (!ensureCanManageEquipmentArchive('注销计量证书')) return;
-    if (!window.confirm('您确定要永久删除此条法定计量强检记录及证书档案吗？')) return;
     setEquipments(prevEquipments => {
       const nextEquipments = prevEquipments.map(eq => {
         if (eq.id !== selectedId) return eq;
@@ -1446,6 +1496,20 @@ export default function EquipmentArchives({
       });
       localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));
       return nextEquipments;
+    });
+  };
+
+  // Delete Calibration Log
+  const handleDeleteCalibrationLog = (calId: string) => {
+    if (!ensureCanManageEquipmentArchive('注销计量证书')) return;
+    const targetCalibration = selectedEquipment?.calibrationLogs.find(cal => cal.id === calId);
+    requestArchiveConfirmation({
+      id: 'delete-calibration-log',
+      title: '删除计量证书记录',
+      description: `确定要永久删除这条法定计量/校准记录${targetCalibration?.certificateNo ? `（证书号：${targetCalibration.certificateNo}）` : ''}吗？此操作会从设备档案中移除对应证书追溯信息。`,
+      confirmLabel: '删除证书记录',
+      tone: 'danger',
+      onConfirm: () => deleteCalibrationLogAfterConfirmation(calId)
     });
   };
 
@@ -1827,6 +1891,27 @@ Clinical class: Life-saving respiratory device`;
     return workOrderNo;
   };
 
+  const quickRepairAfterConfirmation = (equipment: MedicalEquipment) => {
+    const quickRepairBlockMessage = getQuickRepairBlockMessage(equipment);
+    if (quickRepairBlockMessage) {
+      showQuickRepairToast({
+        type: 'warning',
+        message: quickRepairBlockMessage
+      });
+      return;
+    }
+
+    const description = '科室通过快速报修渠道紧急申报，描述：设备发生突发性故障，无法正常开机或运行中断。';
+    const urgency: 'medium' | 'high' = equipment.category === '急救生命支持' || equipment.riskLevel === '高' ? 'high' : 'medium';
+    const workOrderNo = createQuickRepairRecord(equipment, description, urgency);
+    if (!workOrderNo) return;
+
+    showQuickRepairToast({
+      type: 'success',
+      message: `报修成功：${equipment.deviceName} 已同步生成主工单与档案维修记录 ${workOrderNo}`
+    });
+  };
+
   const handleQuickRepair = () => {
     const quickRepairBlockMessage = getQuickRepairBlockMessage(selectedEquipment);
     if (quickRepairBlockMessage) {
@@ -1837,17 +1922,13 @@ Clinical class: Life-saving respiratory device`;
       return;
     }
 
-    if (window.confirm(`确认要将设备 【${selectedEquipment.deviceName}】 的状态更改为“故障维修”并紧急派单至医学装备科吗？`)) {
-      const description = '科室通过快速报修渠道紧急申报，描述：设备发生突发性故障，无法正常开机或运行中断。';
-      const urgency: 'medium' | 'high' = selectedEquipment.category === '急救生命支持' || selectedEquipment.riskLevel === '高' ? 'high' : 'medium';
-      const workOrderNo = createQuickRepairRecord(selectedEquipment, description, urgency);
-      if (!workOrderNo) return;
-
-      showQuickRepairToast({
-        type: 'success',
-        message: `报修成功：${selectedEquipment.deviceName} 已同步生成主工单与档案维修记录 ${workOrderNo}`
-      });
-    }
+    requestArchiveConfirmation({
+      id: 'quick-repair',
+      title: '确认快捷报修',
+      description: `确认要将设备【${selectedEquipment.deviceName}】状态更改为“故障维修”，并紧急派单至医学装备科吗？系统会同步生成主工单和档案维修记录。`,
+      confirmLabel: '确认报修派单',
+      onConfirm: () => quickRepairAfterConfirmation(selectedEquipment)
+    });
   };
 
   // Simulated download or direct file link clicks
@@ -1944,6 +2025,49 @@ Clinical class: Life-saving respiratory device`;
               {quickRepairToast.type === 'success' ? '快捷报修已同步' : '操作权限提醒'}
             </p>
             <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">{quickRepairToast.message}</p>
+          </div>
+        </div>
+      )}
+
+      {archiveConfirmation && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center z-[85] p-4 animate-fade-in" id="archive-confirmation-modal">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-sm w-full overflow-hidden">
+            <div className="bg-slate-900 text-white px-5 py-4 flex items-center gap-2.5">
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                archiveConfirmation.tone === 'danger' ? 'bg-rose-500/15 text-rose-300' : 'bg-emerald-500/15 text-emerald-300'
+              }`}>
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-sm font-extrabold leading-tight">{archiveConfirmation.title}</h3>
+                <p className="text-[10px] text-slate-400 mt-0.5">设备档案操作需确认后继续</p>
+              </div>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <p className="text-xs text-slate-600 leading-relaxed">{archiveConfirmation.description}</p>
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={handleCancelArchiveConfirmation}
+                  className="px-3.5 py-2 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                  id="btn-archive-confirm-cancel"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmArchiveAction}
+                  className={`px-3.5 py-2 rounded-lg text-xs font-bold text-white transition cursor-pointer shadow-sm ${
+                    archiveConfirmation.tone === 'danger'
+                      ? 'bg-rose-600 hover:bg-rose-500 active:bg-rose-700'
+                      : 'bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700'
+                  }`}
+                  id="btn-archive-confirm-action"
+                >
+                  {archiveConfirmation.confirmLabel}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
