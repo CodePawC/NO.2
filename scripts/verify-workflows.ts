@@ -1270,8 +1270,15 @@ const checks: Check[] = [
           deepLinkSource.includes('setSelectedId(found.id);') &&
             deepLinkSource.includes("setViewMode('inventory');") &&
             deepLinkSource.includes("setMobileView('detail');") &&
+            deepLinkSource.includes("setSearchTerm('');") &&
+            deepLinkSource.includes("setSelectedCategory('全部分类');") &&
+            deepLinkSource.includes("setSelectedStatus('全部状态');") &&
+            deepLinkSource.includes('setFilterMenuOpen(null);') &&
+            deepLinkSource.includes("setClinicalFilterMode('all_dept');") &&
+            deepLinkSource.includes("setSelectedDept(currentUserDepartment);") &&
+            deepLinkSource.includes("setSelectedDept('全部科室');") &&
             deepLinkSource.includes('setActiveTab(e.detail.activeTab);'),
-          '从任务详情深链打开设备档案时，应在移动端直接进入设备详情并切到指定页签'
+          '从任务详情深链打开设备档案时，应清理旧筛选保证目标设备可见，在移动端直接进入设备详情并切到指定页签'
         );
       }
       assert(

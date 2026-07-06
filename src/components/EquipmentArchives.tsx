@@ -911,6 +911,17 @@ export default function EquipmentArchives({
           setSelectedId(found.id);
           setViewMode('inventory');
           setMobileView('detail');
+          setSearchTerm('');
+          setSelectedCategory('全部分类');
+          setSelectedStatus('全部状态');
+          setFilterMenuOpen(null);
+          setClinicalFilterMode('all_dept');
+          if (currentUser.role === 'medical_staff' && currentUserDepartment) {
+            setSelectedDept(currentUserDepartment);
+            setOnlyMyDept(true);
+          } else {
+            setSelectedDept('全部科室');
+          }
           if (e.detail?.activeTab) {
             setActiveTab(e.detail.activeTab);
           }
