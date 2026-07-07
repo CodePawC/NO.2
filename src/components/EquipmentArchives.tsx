@@ -2729,7 +2729,7 @@ Clinical class: Life-saving respiratory device`;
         </aside>
 
         {/* MIDDLE COLUMN: Selected Equipment Detailed Dossier Sheet */}
-        <section id="middle_detailed_column" className={`col-span-12 md:col-span-6 ${mobileView === 'detail' ? 'flex' : 'hidden md:flex'} bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-full min-h-0 overflow-hidden`}>
+        <section id="middle_detailed_column" className={`col-span-12 md:col-span-6 ${mobileView === 'detail' ? 'flex' : 'hidden md:flex'} bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-full min-h-0 overflow-y-auto md:overflow-hidden pb-20 md:pb-0 custom-scrollbar`}>
           
           {selectedEquipment ? (
             <>
@@ -2814,10 +2814,10 @@ Clinical class: Life-saving respiratory device`;
               </div>
 
               {/* Dynamic Information Navigation Tabs */}
-              <div className="flex overflow-x-auto whitespace-nowrap scrollbar-none border-b border-slate-100 px-3 sm:px-6 bg-slate-50/10">
+              <div className="relative z-10 flex flex-wrap md:flex-nowrap gap-x-1 md:gap-x-0 overflow-visible md:overflow-x-auto whitespace-normal md:whitespace-nowrap scrollbar-none border-b border-slate-100 px-3 sm:px-6 bg-slate-50/10">
                 <button 
                   onClick={() => setActiveTab('basic')}
-                  className={`py-2.5 px-3 md:py-3 md:px-4 text-[11px] sm:text-xs font-semibold border-b-2 transition-colors flex-shrink-0 ${
+                  className={`relative z-10 min-h-11 flex-1 basis-[calc(50%-0.125rem)] md:flex-none md:basis-auto py-2.5 px-3 md:py-3 md:px-4 text-[11px] sm:text-xs font-semibold border-b-2 transition-colors flex items-center justify-center md:justify-start flex-shrink-0 touch-manipulation cursor-pointer ${
                     activeTab === 'basic' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'
                   }`}
                 >
@@ -2825,7 +2825,7 @@ Clinical class: Life-saving respiratory device`;
                 </button>
                 <button 
                   onClick={() => setActiveTab('maintenance')}
-                  className={`py-2.5 px-3 md:py-3 md:px-4 text-[11px] sm:text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 flex-shrink-0 ${
+                  className={`relative z-10 min-h-11 flex-1 basis-[calc(50%-0.125rem)] md:flex-none md:basis-auto py-2.5 px-3 md:py-3 md:px-4 text-[11px] sm:text-xs font-semibold border-b-2 transition-colors flex items-center justify-center md:justify-start gap-1.5 flex-shrink-0 touch-manipulation cursor-pointer ${
                     activeTab === 'maintenance' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'
                   }`}
                 >
@@ -2836,7 +2836,7 @@ Clinical class: Life-saving respiratory device`;
                 </button>
                 <button 
                   onClick={() => setActiveTab('calibration')}
-                  className={`py-2.5 px-3 md:py-3 md:px-4 text-[11px] sm:text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 flex-shrink-0 ${
+                  className={`relative z-10 min-h-11 flex-1 basis-[calc(50%-0.125rem)] md:flex-none md:basis-auto py-2.5 px-3 md:py-3 md:px-4 text-[11px] sm:text-xs font-semibold border-b-2 transition-colors flex items-center justify-center md:justify-start gap-1.5 flex-shrink-0 touch-manipulation cursor-pointer ${
                     activeTab === 'calibration' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'
                   }`}
                 >
@@ -2847,7 +2847,7 @@ Clinical class: Life-saving respiratory device`;
                 </button>
                 <button 
                   onClick={() => setActiveTab('attachments')}
-                  className={`py-2.5 px-3 md:py-3 md:px-4 text-[11px] sm:text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 flex-shrink-0 ${
+                  className={`relative z-10 min-h-11 flex-1 basis-[calc(50%-0.125rem)] md:flex-none md:basis-auto py-2.5 px-3 md:py-3 md:px-4 text-[11px] sm:text-xs font-semibold border-b-2 transition-colors flex items-center justify-center md:justify-start gap-1.5 flex-shrink-0 touch-manipulation cursor-pointer ${
                     activeTab === 'attachments' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'
                   }`}
                 >
@@ -2858,7 +2858,7 @@ Clinical class: Life-saving respiratory device`;
                 </button>
                 <button 
                   onClick={() => setActiveTab('tickets')}
-                  className={`py-2.5 px-3 md:py-3 md:px-4 text-[11px] sm:text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 flex-shrink-0 ${
+                  className={`relative z-10 min-h-11 flex-1 basis-[calc(50%-0.125rem)] md:flex-none md:basis-auto py-2.5 px-3 md:py-3 md:px-4 text-[11px] sm:text-xs font-semibold border-b-2 transition-colors flex items-center justify-center md:justify-start gap-1.5 flex-shrink-0 touch-manipulation cursor-pointer ${
                     activeTab === 'tickets' ? 'border-emerald-600 text-emerald-600 font-bold' : 'border-transparent text-slate-500 hover:text-slate-800'
                   }`}
                 >
@@ -2870,7 +2870,7 @@ Clinical class: Life-saving respiratory device`;
               </div>
 
               {/* Central Details Scrollable Body */}
-              <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 space-y-4 md:space-y-6">
+              <div className="flex-none md:flex-1 md:min-h-0 overflow-x-hidden overflow-y-visible md:overflow-y-auto p-3 sm:p-4 md:p-6 space-y-4 md:space-y-6 pb-4 md:pb-6 custom-scrollbar">
                 
                 {/* 1. Basic Technical Archives Tab */}
                 {activeTab === 'basic' && (
@@ -3886,7 +3886,7 @@ Clinical class: Life-saving respiratory device`;
               </div>
 
               {/* Action Toolbar Footer in Details Sheet */}
-              <div id="equipment_details_actions" className="p-2.5 sm:p-4 bg-slate-50 border-t border-slate-200/80 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2.5 md:gap-3">
+              <div id="equipment_details_actions" className="p-2 md:p-4 bg-slate-50 border-t border-slate-200/80 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 md:gap-3 overflow-visible shrink-0">
                 {canManageEquipmentArchive ? (
                   <button
                     onClick={() => handleDelete(selectedEquipment.id)}

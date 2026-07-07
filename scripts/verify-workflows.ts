@@ -1494,6 +1494,22 @@ const checks: Check[] = [
         '台账明细表和科室资产看板应在固定工作台内开放纵向滚动，并在切换视图时回到顶部，避免 720px 桌面窗口裁掉下方内容'
       );
       assert(
+        archiveSource.includes('overflow-y-auto md:overflow-hidden pb-20 md:pb-0 custom-scrollbar') &&
+          archiveSource.includes('flex-none md:flex-1 md:min-h-0 overflow-x-hidden overflow-y-visible md:overflow-y-auto') &&
+          archiveSource.includes('pb-4 md:pb-6 custom-scrollbar') &&
+          archiveSource.includes('id="equipment_details_actions" className="p-2 md:p-4') &&
+          archiveSource.includes('overflow-visible shrink-0'),
+        '移动端设备详情应由整张详情卡滚动，正文和底部操作栏不能把附件/工单内容裁到不可用'
+      );
+      assert(
+        archiveSource.includes('relative z-10 flex flex-wrap md:flex-nowrap') &&
+          archiveSource.includes('overflow-visible md:overflow-x-auto whitespace-normal md:whitespace-nowrap') &&
+          archiveSource.includes('relative z-10 min-h-11') &&
+          archiveSource.includes('flex-1 basis-[calc(50%-0.125rem)] md:flex-none md:basis-auto') &&
+          archiveSource.includes('touch-manipulation cursor-pointer'),
+        '移动端详情页签应两列换行并提供可靠触控面积，避免附件/工单页签看得到但点不到'
+      );
+      assert(
         archiveSource.includes('setIsFormModalOpen(false);') &&
           archiveSource.includes('setIsAiParserOpen(false);') &&
           archiveSource.includes('setIsLogModalOpen(false);') &&
