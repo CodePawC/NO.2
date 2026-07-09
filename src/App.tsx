@@ -2431,13 +2431,15 @@ export default function App() {
                 };
 
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={t.id}
+                    aria-label={`查看工单详情 ${t.id} ${t.deviceName}`}
                     onClick={() => {
                       setSelectedTask(t);
                       setMobileTab('detail');
                     }}
-                    className={`p-3.5 rounded-xl border transition cursor-pointer text-left relative flex flex-col gap-2.5 ${
+                    className={`w-full p-3.5 rounded-xl border transition cursor-pointer text-left relative flex flex-col gap-2.5 ${
                       isSelected 
                         ? 'bg-white border-slate-900 shadow-md ring-1 ring-slate-900/10' 
                         : 'bg-white hover:bg-slate-100/50 border-slate-200 shadow-2xs'
@@ -2445,21 +2447,21 @@ export default function App() {
                     id={`task-card-${t.id}`}
                   >
                     {/* Urgency Highlight top border indicator */}
-                    {isPinned && <div className="absolute top-0 left-0 right-0 h-1 bg-red-600 rounded-t-xl" />}
-                    {!isPinned && t.urgency === '特急' && <div className="absolute top-0 left-0 right-0 h-1 bg-red-400 rounded-t-xl" />}
-                    {!isPinned && t.urgency === '紧急' && <div className="absolute top-0 left-0 right-0 h-1 bg-orange-400 rounded-t-xl" />}
+                    {isPinned && <span className="absolute top-0 left-0 right-0 h-1 bg-red-600 rounded-t-xl" />}
+                    {!isPinned && t.urgency === '特急' && <span className="absolute top-0 left-0 right-0 h-1 bg-red-400 rounded-t-xl" />}
+                    {!isPinned && t.urgency === '紧急' && <span className="absolute top-0 left-0 right-0 h-1 bg-orange-400 rounded-t-xl" />}
 
                     {/* Metadata Header */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
+                    <span className="flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
                         <span className="text-[11px] font-mono font-bold text-slate-500">{t.id}</span>
                         {isPinned && (
                           <span className="bg-red-600 text-white text-[9px] px-1.5 py-0.5 rounded font-extrabold animate-pulse flex items-center gap-0.5">
-                            📌 应急置顶
+                            应急置顶
                           </span>
                         )}
-                      </div>
-                      <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                      </span>
+                      <span className="flex items-center gap-1.5 flex-wrap justify-end">
                         <span className={`text-[9px] px-1.5 py-0.5 rounded border font-medium ${typeBadgeColor}`}>
                           {t.taskType}
                         </span>
@@ -2469,41 +2471,41 @@ export default function App() {
                         <span className={`text-[9px] px-1.5 py-0.5 rounded border font-bold ${aiStatusBadgeColor}`}>
                           AI: {t.aiStatus || '已分析'}
                         </span>
-                      </div>
-                    </div>
+                      </span>
+                    </span>
 
                     {/* Department and Patient Status Info */}
-                    <div className="space-y-1">
-                      <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                    <span className="space-y-1">
+                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
                         <Building2 className="w-3 h-3 text-slate-400" />
                         {t.department}
                         {t.location && <span className="text-slate-400 font-normal ml-1">({t.location})</span>}
-                      </h4>
-                      <h3 className="text-sm font-bold text-slate-900 line-clamp-1 flex items-center gap-1">
+                      </span>
+                      <span className="text-sm font-bold text-slate-900 line-clamp-1 flex items-center gap-1">
                         {t.deviceName}
                         <span className="text-[10px] text-slate-400 font-normal font-mono ml-1">#{t.deviceId}</span>
-                      </h3>
-                      <p className="text-xs text-slate-600 line-clamp-2 mt-0.5 bg-slate-50/50 p-2 rounded border border-slate-100 leading-relaxed">
+                      </span>
+                      <span className="block text-xs text-slate-600 line-clamp-2 mt-0.5 bg-slate-50/50 p-2 rounded border border-slate-100 leading-relaxed">
                         {t.faultPhenomenon}
-                      </p>
-                    </div>
+                      </span>
+                    </span>
 
                     {/* Footer Contact and Urgency badges */}
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[10px] text-slate-500 mt-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <div className="flex items-center gap-1">
+                    <span className="flex items-center justify-between pt-2 border-t border-slate-100 text-[10px] text-slate-500 mt-1">
+                      <span className="flex items-center gap-1.5 flex-wrap">
+                        <span className="flex items-center gap-1">
                           <User className="w-3 h-3 text-slate-400" />
                           <span className="font-medium text-slate-700">{t.contactPerson || '未录入'}</span>
-                        </div>
+                        </span>
                         <span className="text-slate-300">|</span>
                         <span className="bg-slate-100/80 text-slate-500 text-[9px] px-1.5 py-0.5 rounded border border-slate-200">{t.source || 'AI 对话生成'}</span>
                         <span className="text-slate-300">|</span>
                         <span className="text-[9px] text-slate-400 font-mono">
                           {formatTaskTime(t.createdAt)}
                         </span>
-                      </div>
+                      </span>
 
-                      <div className="flex items-center gap-1">
+                      <span className="flex items-center gap-1">
                         <span className={urgencyBadgeStyle}>
                           {t.urgency}
                         </span>
@@ -2512,9 +2514,9 @@ export default function App() {
                             影响临床
                           </span>
                         )}
-                      </div>
-                    </div>
-                  </div>
+                      </span>
+                    </span>
+                  </button>
                 );
               })
             )}
@@ -2529,7 +2531,7 @@ export default function App() {
         } xl:flex ${currentUserRole === 'medical_staff' ? 'xl:col-span-7' : 'xl:col-span-5'} bg-white rounded-2xl border border-slate-200/80 shadow-xs flex-col overflow-hidden flex-1 h-full min-h-0`} id="panel-task-details">
           {currentUserRole === 'medical_staff' ? (
             /* Clinical Workspace: Split layout with Left mini-sidebar and Right detail timeline */
-            <div className="flex-1 flex overflow-hidden h-full" id="clinical-workspace-container">
+            <div className="flex-1 flex overflow-hidden h-full min-h-0" id="clinical-workspace-container">
               {/* Left Column of Clinical workspace (Mini-sidebar: Department Tasks List) */}
               <div className={`${mobileTab === 'list' ? 'flex w-full' : 'hidden'} xl:flex xl:w-64 xl:md:w-72 border-r border-slate-200/65 flex-col shrink-0 bg-slate-50/20`}>
                 <div className="p-3.5 bg-slate-50/50 border-b border-slate-200/50 flex flex-col gap-1 shrink-0">
@@ -2589,9 +2591,9 @@ export default function App() {
               </div>
 
               {/* Right Column of Clinical workspace (Timeline Track & Closed-Loop Feedback Panel) */}
-              <div className={`${mobileTab === 'detail' ? 'flex flex-1' : 'hidden'} xl:flex xl:flex-1 flex-col min-h-0 bg-slate-50/30 overflow-y-auto`}>
+              <div className={`${mobileTab === 'detail' ? 'flex flex-1' : 'hidden'} xl:flex xl:flex-1 flex-col min-h-0 bg-slate-50/30 overflow-y-auto pb-20 xl:pb-0 custom-scrollbar`}>
                 {selectedTask && isSameDepartment(selectedTask.department, currentSimulatedUser.department || currentSimulatedUser.dept) ? (
-                  <div className="p-4 md:p-5 space-y-5 flex-1 flex flex-col">             <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs flex items-start justify-between gap-4">
+                  <div className="p-4 md:p-5 space-y-5 flex-none xl:flex-1 flex flex-col">             <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs flex items-start justify-between gap-4">
                       <div>
                         <div className="flex items-center gap-2 mb-1.5">
                           <span className="text-xs font-mono font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-sm">{selectedTask.id}</span>

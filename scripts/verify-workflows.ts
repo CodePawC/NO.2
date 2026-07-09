@@ -296,6 +296,22 @@ const checks: Check[] = [
         '临床验收表单应提供稳定控件标识和可访问名称，便于人工识别、无障碍使用和自动化回归'
       );
       assert(
+        appSource.includes('id="clinical-workspace-container"') &&
+          appSource.includes('flex-1 flex overflow-hidden h-full min-h-0') &&
+          appSource.includes("mobileTab === 'detail' ? 'flex flex-1' : 'hidden'") &&
+          appSource.includes('overflow-y-auto pb-20 xl:pb-0 custom-scrollbar') &&
+          appSource.includes('p-4 md:p-5 space-y-5 flex-none xl:flex-1 flex flex-col'),
+        '移动端临床任务详情应允许纵向滚动并给底部导航留白，待验收表单不能被裁切到不可操作'
+      );
+      assert(
+        appSource.includes('<button\n                    type="button"\n                    key={t.id}\n                    aria-label={`查看工单详情 ${t.id} ${t.deviceName}`}') &&
+          appSource.includes('id={`task-card-${t.id}`}') &&
+          appSource.includes('<span className="flex items-center justify-between">') &&
+          appSource.includes('<span className="block text-xs text-slate-600 line-clamp-2 mt-0.5 bg-slate-50/50 p-2 rounded border border-slate-100 leading-relaxed">') &&
+          !appSource.includes('📌 应急置顶'),
+        '工程师任务卡应使用原生按钮和可访问名称，便于键盘操作、移动端点击和自动化回归识别'
+      );
+      assert(
         appSource.includes('const isClinicalAcceptancePending = pendingClinicalAcceptanceTaskIds.has(selectedTask.id);') &&
           appSource.includes('disabled={isClinicalAcceptancePending}') &&
           appSource.includes("aria-label={isClinicalAcceptancePending ? '正在同步临床验收签署' : '签署临床验收并确认结单'}") &&
