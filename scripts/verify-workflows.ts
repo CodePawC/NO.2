@@ -767,6 +767,50 @@ const checks: Check[] = [
     }
   },
   {
+    name: 'interface typography follows the Chinese size scale',
+    run: () => {
+      const mainSource = readSource('src/main.tsx');
+      const cssSource = readSource('src/index.css');
+
+      assert(mainSource.includes("import './index.css';"), '应用入口应加载全局排版样式');
+      assert(
+        cssSource.includes('--type-page-title: 30px;') &&
+          cssSource.includes('--type-section-title: 24px;') &&
+          cssSource.includes('--type-subsection-title: 20px;') &&
+          cssSource.includes('--type-card-title: 18px;') &&
+          cssSource.includes('--type-body: 16px;') &&
+          cssSource.includes('--type-table: 15px;') &&
+          cssSource.includes('--type-label: 15px;') &&
+          cssSource.includes('--type-button: 15px;') &&
+          cssSource.includes('--type-secondary: 14px;') &&
+          cssSource.includes('--type-micro: 13px;'),
+        '全局 CSS 应声明页面主标题、标题、正文、表格、表单、按钮和极小辅助文字的字号令牌'
+      );
+      assert(
+        cssSource.includes('.text-\\[5px\\]') &&
+          cssSource.includes('.text-\\[7px\\]') &&
+          cssSource.includes('.text-\\[8px\\]') &&
+          cssSource.includes('.text-\\[9px\\]') &&
+          cssSource.includes('.text-\\[10\\.5px\\]') &&
+          cssSource.includes('.text-\\[12px\\]') &&
+          cssSource.includes('.text-\\[12\\.5px\\]') &&
+          cssSource.includes('.text-\\[13px\\]') &&
+          cssSource.includes('#root :where(.text-\\[10px\\], .text-\\[11px\\], .text-xs)') &&
+          cssSource.includes('#root :where(.text-sm, .text-base)') &&
+          cssSource.includes('#root :where(h1):not(.sr-only)') &&
+          cssSource.includes('#root :where(h2):not(.sr-only)') &&
+          cssSource.includes('#root :where(h3):not(.sr-only)') &&
+          cssSource.includes('#root :where(h4, h5, h6):not(.sr-only)') &&
+          cssSource.includes('#root :where(button, [role="button"])') &&
+          cssSource.includes('#root :where(label)') &&
+          cssSource.includes('#root :where(input, select, textarea)') &&
+          cssSource.includes('#root :where(table, tbody, td)') &&
+          cssSource.includes('#root :where(th)'),
+        '全局 CSS 应覆盖既有 Tailwind 字号工具、标题、按钮、表单和表格，避免页面中文继续使用 13px 以下小字'
+      );
+    }
+  },
+  {
     name: 'mobile sidebar navigation is accessible and testable',
     run: () => {
       const appSource = readSource('src/App.tsx');

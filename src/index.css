@@ -1,1 +1,128 @@
 @import "tailwindcss";
+
+:root {
+  --type-page-title: 30px;
+  --type-section-title: 24px;
+  --type-subsection-title: 20px;
+  --type-card-title: 18px;
+  --type-body: 16px;
+  --type-table: 15px;
+  --type-label: 15px;
+  --type-button: 15px;
+  --type-secondary: 14px;
+  --type-micro: 13px;
+}
+
+#root {
+  font-size: var(--type-body);
+  line-height: 1.6;
+  font-weight: 400;
+}
+
+#root :where(
+  .text-\[5px\],
+  .text-\[7px\],
+  .text-\[8px\],
+  .text-\[9px\],
+  .text-\[10\.5px\],
+  .text-\[12px\],
+  .text-\[12\.5px\],
+  .text-\[13px\]
+) {
+  font-size: var(--type-micro);
+  line-height: 1.4;
+}
+
+#root :where(.text-\[10px\], .text-\[11px\], .text-xs) {
+  font-size: var(--type-secondary);
+  line-height: 1.5;
+}
+
+#root :where(.text-sm, .text-base) {
+  font-size: var(--type-body);
+  line-height: 1.6;
+}
+
+#root :where(.text-lg) {
+  font-size: var(--type-card-title);
+  line-height: 1.4;
+}
+
+#root :where(.text-xl) {
+  font-size: var(--type-subsection-title);
+  line-height: 1.4;
+}
+
+#root :where(.text-2xl) {
+  font-size: var(--type-section-title);
+  line-height: 1.3;
+}
+
+#root :where(.text-3xl, .text-4xl) {
+  font-size: var(--type-page-title);
+  line-height: 1.2;
+}
+
+#root :where(h1):not(.sr-only) {
+  font-size: var(--type-page-title);
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+#root :where(h2):not(.sr-only) {
+  font-size: var(--type-section-title);
+  line-height: 1.3;
+  font-weight: 600;
+}
+
+#root :where(h3):not(.sr-only) {
+  font-size: var(--type-subsection-title);
+  line-height: 1.4;
+  font-weight: 600;
+}
+
+#root :where(h4, h5, h6):not(.sr-only) {
+  font-size: var(--type-card-title);
+  line-height: 1.4;
+  font-weight: 600;
+}
+
+#root :where(p, li, dd, dt) {
+  line-height: 1.6;
+}
+
+#root :where(small) {
+  font-size: var(--type-micro);
+  line-height: 1.4;
+  font-weight: 400;
+}
+
+#root :where(button, [role="button"]) {
+  font-size: var(--type-button);
+  line-height: 1.4;
+  font-weight: 500;
+}
+
+#root :where(label) {
+  font-size: var(--type-label);
+  line-height: 1.5;
+  font-weight: 500;
+}
+
+#root :where(input, select, textarea) {
+  font-size: var(--type-body);
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+#root :where(table, tbody, td) {
+  font-size: var(--type-table);
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+#root :where(th) {
+  font-size: var(--type-table);
+  line-height: 1.5;
+  font-weight: 600;
+}
