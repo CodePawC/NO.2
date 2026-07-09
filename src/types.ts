@@ -51,6 +51,14 @@ export interface TaskLog {
   operator: string;
 }
 
+export interface ClinicalAcceptanceRecord {
+  rating: number;
+  comment: string;
+  acceptedBy: string;
+  acceptedByTitle: string;
+  acceptedAt: string;
+}
+
 export interface StructuredTicket {
   id: string;
   taskType: TaskType;
@@ -72,6 +80,7 @@ export interface StructuredTicket {
   logs: TaskLog[];
   rawText?: string;
   notes?: string; // 补充备注
+  clinicalAcceptance?: ClinicalAcceptanceRecord;
   needBackupDevice?: '是' | '否'; // 是否需要备用设备
   needVendorCoop?: '是' | '否'; // 是否需要厂家协同
   recommendedDept?: string; // 建议责任部门
@@ -154,9 +163,11 @@ export interface MedicalEquipment {
   maintenanceCycleDays: number;
   lastMaintenanceDate: string;
   nextMaintenanceDate: string;
+  assignedMaintenanceEngineer?: string;
   calibrationRequired: boolean;
   lastCalibrationDate?: string;
   nextCalibrationDate?: string;
+  assignedCalibrationEngineer?: string;
   attachments: Attachment[];
   maintenanceLogs: MaintenanceLog[];
   calibrationLogs: CalibrationLog[];
@@ -191,4 +202,3 @@ export interface UserProfile {
   avatarColor?: string;
   phone?: string;
 }
-

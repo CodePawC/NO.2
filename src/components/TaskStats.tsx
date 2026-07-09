@@ -6,6 +6,8 @@
 import React from 'react';
 import { StructuredTicket, UserProfile } from '../types';
 import { ShieldCheck, AlertTriangle, Play, CheckCircle2, Clock } from 'lucide-react';
+import { isSameDepartment } from '../utils/departmentUtils';
+import { needsClinicalAcceptance } from '../utils/taskWorkflow';
 
 interface TaskStatsProps {
   tasks: StructuredTicket[];
@@ -19,16 +21,18 @@ export default function TaskStats({ tasks, userRole = 'engineer', simulatedUser 
   
   // Filter tasks based on role: clinical users only see their own department's statistics
   const displayTasks = isClinical 
-    ? tasks.filter(t => t.department === deptName)
+    ? tasks.filter(t => isSameDepartment(t.department, deptName))
     : tasks;
 
   const total = displayTasks.length;
   const pending = displayTasks.filter((t) => t.status === '待确认' || t.status === '待派工').length;
-  const inProgress = displayTasks.filter((t) => t.status === '处理中' || t.status === '已派工' || t.status === '待科室验收').length;
+  const engineerInProgress = displayTasks.filter((t) => t.status === '处理中' || t.status === '已派工' || t.status === '待科室验收').length;
+  const clinicalAwaitingAcceptance = displayTasks.filter((t) => needsClinicalAcceptance(t) && t.status === '待科室验收').length;
+  const actionCount = isClinical ? clinicalAwaitingAcceptance : engineerInProgress;
   const completed = displayTasks.filter((t) => t.status === '已完成' || t.status === '已归档' || t.status === '已关闭').length;
 
   const urgentCount = displayTasks.filter(
-    (t) => (t.urgency === '特急' || t.urgency === '紧急' || t.urgency === '生命支持') && t.status !== '已关闭' && t.status !== '已完成' && t.status !== '已归档'
+    (t) => needsClinicalAcceptance(t) && (t.urgency === '特急' || t.urgency === '紧急' || t.urgency === '生命支持') && t.status !== '已关闭' && t.status !== '已完成' && t.status !== '已归档'
   ).length;
 
   // Closure Rate calculation
@@ -58,7 +62,7 @@ export default function TaskStats({ tasks, userRole = 'engineer', simulatedUser 
           </p>
           <h3 className={`text-lg md:text-2xl font-bold mt-1 ${urgentCount > 0 ? 'text-red-600 animate-pulse' : 'text-gray-950'}`}>{urgentCount}</h3>
           <p className="text-[10px] text-red-500 mt-0.5 font-medium">
-            {isClinical ? '科室高危保障中' : '生命支持抢救设备'}
+            {isClinical ? '科室高危保障中' : '医学装备高危任务'}
           </p>
         </div>
         <div className="p-1.5 md:p-2 bg-red-50 text-red-600 rounded-lg">
@@ -84,11 +88,11 @@ export default function TaskStats({ tasks, userRole = 'engineer', simulatedUser 
       <div className="bg-white p-3 md:p-4 rounded-xl border border-gray-100 shadow-xs flex items-start justify-between">
         <div>
           <p className="text-[10px] md:text-xs font-medium text-gray-500 uppercase tracking-wider">
-            {isClinical ? '工程师处置中' : '全院处理/协作中'}
+            {isClinical ? '待科室验收' : '全院处理/协作中'}
           </p>
-          <h3 className="text-lg md:text-2xl font-bold text-amber-600 mt-1">{inProgress}</h3>
+          <h3 className="text-lg md:text-2xl font-bold text-amber-600 mt-1">{actionCount}</h3>
           <p className="text-[10px] text-gray-400 mt-0.5">
-            {isClinical ? '现场维修/厂家协同' : '驻场调配及厂家协同'}
+            {isClinical ? '待您签署验收' : '驻场调配及厂家协同'}
           </p>
         </div>
         <div className="p-1.5 md:p-2 bg-amber-50 text-amber-600 rounded-lg">

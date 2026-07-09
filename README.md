@@ -63,6 +63,12 @@ Open:
 http://127.0.0.1:3000
 ```
 
+To run a second local instance for isolated role testing, set `PORT` before starting the dev server:
+
+```powershell
+$env:PORT="3001"; npm run dev
+```
+
 ## Available Scripts
 
 ```bash
@@ -76,6 +82,12 @@ npm run lint
 ```
 
 Runs TypeScript checking with `tsc --noEmit`.
+
+```bash
+npm run verify
+```
+
+Runs lightweight workflow checks for role permissions, task transitions, transfer routing, equipment archive sync, and local date helpers.
 
 ```bash
 npm run build
@@ -106,8 +118,9 @@ The workflow performs:
 
 1. Dependency installation
 2. TypeScript check
-3. Production build
-4. Production server smoke test against `/api/health`
+3. Workflow verification
+4. Production build
+5. Production server smoke test against `/api/health`
 
 CI does not require `GEMINI_API_KEY`.
 
@@ -129,4 +142,4 @@ Future engineering priorities:
 - Split the large React components into focused pages, hooks, and services.
 - Move durable production data out of `localStorage`.
 - Keep provider API keys on the server side for production deployments.
-- Add tests around task parsing, status transitions, and equipment archive workflows.
+- Expand workflow checks toward browser-level role smoke tests as the UI is split into smaller modules.

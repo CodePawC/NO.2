@@ -1,10 +1,13 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   Calendar, ChevronLeft, ChevronRight, Wrench, ShieldCheck, 
   Check, Clock, AlertTriangle, FileText, Info, X, Sparkles, Send, Bell,
   User, Plus, Search, Briefcase, History, TrendingUp, DollarSign
 } from 'lucide-react';
 import { MedicalEquipment, MaintenanceLog, CalibrationLog, UserProfile } from '../types';
+import { isSameDepartment } from '../utils/departmentUtils';
+import { getDefaultEngineerName, getEngineerNameByIndex, normalizeEngineerName, SIMULATED_ENGINEER_NAMES } from '../utils/engineerAssignments';
+import { getLocalDateString } from '../utils/dateUtils';
 
 interface MaintenanceCalendarProps {
   equipments: MedicalEquipment[];
@@ -43,23 +46,38 @@ export default function MaintenanceCalendar({
   setIsLogModalOpen,
   currentUser
 }: MaintenanceCalendarProps) {
-  // Current calendar view date: default to July 2026 (matching system metadata local time)
-  const [currentYear, setCurrentYear] = useState(2026);
-  const [currentMonth, setCurrentMonth] = useState(6); // July (0-indexed, so 6 is July)
+  const todayDateString = getLocalDateString();
+  const [todayYear, todayMonthText, todayDayText] = todayDateString.split('-');
+  const todayYearNumber = Number(todayYear);
+  const todayMonthIndex = Number(todayMonthText) - 1;
+  const todayDayNumber = Number(todayDayText);
+  const [currentYear, setCurrentYear] = useState(() => todayYearNumber);
+  const [currentMonth, setCurrentMonth] = useState(() => todayMonthIndex);
 
   // Simulated logged-in engineer workspace state
   const [currentEngineer, setCurrentEngineer] = useState<string>('all'); // 'all' or specific engineer name
+  const canManageSchedule = currentUser.role === 'engineer';
+  const canManageScheduleRef = useRef(canManageSchedule);
+  canManageScheduleRef.current = canManageSchedule;
+  const scheduleScopeLabel = currentUser.role === 'medical_staff' ? '本科室' : '全院';
+
+  const getScheduleManageBlockReason = (actionName: string) => {
+    if (canManageSchedule) return '';
+    return `当前登录身份为【${currentUser.name} ${currentUser.title}】，只能查看${currentUser.department || currentUser.dept || '本科室'}设备日程，不能执行${actionName}。`;
+  };
 
   // 同步全局模拟登录账户到日历技术员筛选
   useEffect(() => {
     if (currentUser.role === 'engineer') {
-      if (currentUser.id === 'u-admin') {
+      if (currentUser.id === 'u-admin' || currentUser.title.includes('主任')) {
         setCurrentEngineer('all');
       } else {
         setCurrentEngineer(currentUser.name);
       }
+      setDeployEngineer(currentUser.name);
     } else {
       setCurrentEngineer('all'); // 临床医护人员强制显示全部（因为已在 equipment.forEach 过滤了整科室的设备日程）
+      setDeployEngineer(getDefaultEngineerName());
     }
   }, [currentUser]);
 
@@ -84,55 +102,105 @@ export default function MaintenanceCalendar({
   const [isDeployMode, setIsDeployMode] = useState(false);
   const [deployEquipmentId, setDeployEquipmentId] = useState('');
   const [deployTaskType, setDeployTaskType] = useState<'maintenance' | 'calibration' | 'repair'>('maintenance');
-  const [deployDate, setDeployDate] = useState('2026-07-15');
-  const [deployEngineer, setDeployEngineer] = useState('王强');
+  const [deployDate, setDeployDate] = useState(getLocalDateString);
+  const [deployEngineer, setDeployEngineer] = useState(() => currentUser.role === 'engineer' ? currentUser.name : getDefaultEngineerName());
   const [deployNotes, setDeployNotes] = useState('');
   const [deploySearchQuery, setDeploySearchQuery] = useState('');
 
   // Custom temporary success notifications
   const [notification, setNotification] = useState<string | null>(null);
+  const notificationTimerRef = useRef<number | null>(null);
+  const rescheduleTimerRef = useRef<number | null>(null);
+  const scheduleMutationVersionRef = useRef(0);
+
+  useEffect(() => {
+    if (canManageSchedule) return;
+
+    scheduleMutationVersionRef.current += 1;
+    if (rescheduleTimerRef.current !== null) {
+      window.clearTimeout(rescheduleTimerRef.current);
+      rescheduleTimerRef.current = null;
+    }
+    setIsRescheduling(false);
+    setIsDeployMode(false);
+    setActiveDatePopup(null);
+    setSelectedEvent(prev => {
+      if (!prev) return prev;
+      return isSameDepartment(prev.equipment.dept, currentUser.department || currentUser.dept) ? prev : null;
+    });
+  }, [canManageSchedule, currentUser.department, currentUser.dept]);
+
+  useEffect(() => {
+    scheduleMutationVersionRef.current += 1;
+    if (rescheduleTimerRef.current !== null) {
+      window.clearTimeout(rescheduleTimerRef.current);
+      rescheduleTimerRef.current = null;
+    }
+    setIsRescheduling(false);
+  }, [currentUser.id, currentUser.role]);
 
   // Predefined engineers list & dynamic extraction
   const availableEngineers = useMemo(() => {
     const set = new Set<string>();
-    set.add('王强');
-    set.add('张华');
-    set.add('李明');
-    set.add('赵四');
+    SIMULATED_ENGINEER_NAMES.forEach(name => set.add(name));
+    if (currentUser.role === 'engineer') {
+      set.add(currentUser.name);
+    }
     equipments.forEach(eq => {
+      const assignedMaintenanceEngineer = normalizeEngineerName(eq.assignedMaintenanceEngineer);
+      const assignedCalibrationEngineer = normalizeEngineerName(eq.assignedCalibrationEngineer);
+      if (assignedMaintenanceEngineer) set.add(assignedMaintenanceEngineer);
+      if (assignedCalibrationEngineer) set.add(assignedCalibrationEngineer);
       eq.maintenanceLogs.forEach(log => {
         if (log.technician) set.add(log.technician);
       });
     });
     return Array.from(set);
-  }, [equipments]);
+  }, [equipments, currentUser]);
 
   // Map deterministic fallback engineers for existing future events
   const getAssignedEngineer = (eq: MedicalEquipment, type: 'maintenance' | 'calibration') => {
     // Check if customized on equipment state
-    const customAssigned = (eq as any)[type === 'maintenance' ? 'assignedMaintenanceEngineer' : 'assignedCalibrationEngineer'];
+    const customAssigned = normalizeEngineerName(type === 'maintenance' ? eq.assignedMaintenanceEngineer : eq.assignedCalibrationEngineer);
     if (customAssigned) return customAssigned;
 
     // Fallback based on category & dept
     if (type === 'maintenance') {
-      if (eq.category === '急救生命支持') return '王强';
-      if (eq.category === '影像诊断') return '张华';
-      if (eq.category === '检验分析') return '李明';
-      return '赵四';
+      if (eq.category === '急救生命支持') return getEngineerNameByIndex(0);
+      if (eq.category === '影像诊断') return getEngineerNameByIndex(1);
+      if (eq.category === '检验分析') return getEngineerNameByIndex(2);
+      return getEngineerNameByIndex(2);
     } else {
-      if (eq.category === '影像诊断') return '李明';
-      if (eq.category === '检验分析') return '张华';
-      return '王强';
+      if (eq.category === '影像诊断') return getEngineerNameByIndex(2);
+      if (eq.category === '检验分析') return getEngineerNameByIndex(1);
+      return getEngineerNameByIndex(0);
     }
   };
 
   // Show a notification briefly
   const triggerNotification = (msg: string) => {
+    if (notificationTimerRef.current !== null) {
+      window.clearTimeout(notificationTimerRef.current);
+    }
     setNotification(msg);
-    setTimeout(() => {
+    notificationTimerRef.current = window.setTimeout(() => {
       setNotification(null);
+      notificationTimerRef.current = null;
     }, 5000);
   };
+
+  useEffect(() => {
+    return () => {
+      if (notificationTimerRef.current !== null) {
+        window.clearTimeout(notificationTimerRef.current);
+      }
+      scheduleMutationVersionRef.current += 1;
+      if (rescheduleTimerRef.current !== null) {
+        window.clearTimeout(rescheduleTimerRef.current);
+        rescheduleTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // Weekday headers
   const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
@@ -142,7 +210,7 @@ export default function MaintenanceCalendar({
     const events: CalendarEvent[] = [];
     equipments.forEach(eq => {
       // 临床医护人员登录时，仅显示其所在科室的设备维保与计量日程
-      if (currentUser.role === 'medical_staff' && eq.dept !== currentUser.dept) {
+      if (currentUser.role === 'medical_staff' && !isSameDepartment(eq.dept, currentUser.department || currentUser.dept)) {
         return;
       }
 
@@ -237,7 +305,35 @@ export default function MaintenanceCalendar({
       });
     });
     return events;
-  }, [equipments, showMaintenance, showCalibration, showHistMaintenance, showHistRepair, showHistCalibration, currentEngineer]);
+  }, [equipments, showMaintenance, showCalibration, showHistMaintenance, showHistRepair, showHistCalibration, currentEngineer, currentUser.role, currentUser.department, currentUser.dept]);
+
+  const selectedEventId = selectedEvent?.id || '';
+
+  useEffect(() => {
+    if (!selectedEventId) return;
+
+    const latestSelectedEvent = allEvents.find(evt => evt.id === selectedEventId);
+    setSelectedEvent(prev => {
+      if (!prev || prev.id !== selectedEventId) return prev;
+      if (!latestSelectedEvent) return null;
+
+      if (
+        prev.equipment === latestSelectedEvent.equipment &&
+        prev.date === latestSelectedEvent.date &&
+        prev.technician === latestSelectedEvent.technician &&
+        prev.title === latestSelectedEvent.title &&
+        prev.status === latestSelectedEvent.status &&
+        prev.description === latestSelectedEvent.description &&
+        prev.cost === latestSelectedEvent.cost &&
+        prev.result === latestSelectedEvent.result &&
+        prev.logId === latestSelectedEvent.logId
+      ) {
+        return prev;
+      }
+
+      return latestSelectedEvent;
+    });
+  }, [allEvents, selectedEventId]);
 
   // Group events by day string (YYYY-MM-DD)
   const eventsByDay = useMemo(() => {
@@ -310,8 +406,8 @@ export default function MaintenanceCalendar({
   };
 
   const setTodayMonth = () => {
-    setCurrentYear(2026);
-    setCurrentMonth(6); // July 2026
+    setCurrentYear(todayYearNumber);
+    setCurrentMonth(todayMonthIndex);
     setSelectedEvent(null);
   };
 
@@ -377,26 +473,49 @@ export default function MaintenanceCalendar({
   // Reschedule submit handler (future tasks only)
   const handleReschedule = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedEvent || !newScheduleDate) return;
+    const form = e.currentTarget as HTMLFormElement;
+    const submittedDate = String(new FormData(form).get('newScheduleDate') || newScheduleDate).trim();
+    if (!selectedEvent || !submittedDate) return;
+    const blockReason = getScheduleManageBlockReason('日程调期');
+    if (blockReason) {
+      triggerNotification(`⚠️ ${blockReason}`);
+      return;
+    }
 
     setIsRescheduling(true);
+    scheduleMutationVersionRef.current += 1;
+    const requestVersion = scheduleMutationVersionRef.current;
+    if (rescheduleTimerRef.current !== null) {
+      window.clearTimeout(rescheduleTimerRef.current);
+    }
+    const targetEventId = selectedEvent.id;
     const targetEqId = selectedEvent.equipment.id;
     const taskType = selectedEvent.type;
+    const assignedTechnician = selectedEvent.technician;
+    const deviceName = selectedEvent.equipment.deviceName;
+    const targetDate = submittedDate;
+    setNewScheduleDate(submittedDate);
 
-    setTimeout(() => {
+    rescheduleTimerRef.current = window.setTimeout(() => {
+      rescheduleTimerRef.current = null;
+      if (requestVersion !== scheduleMutationVersionRef.current || !canManageScheduleRef.current) {
+        setIsRescheduling(false);
+        return;
+      }
+
       setEquipments(prev => prev.map(eq => {
         if (eq.id === targetEqId) {
           if (taskType === 'maintenance') {
             return { 
               ...eq, 
-              nextMaintenanceDate: newScheduleDate,
-              assignedMaintenanceEngineer: selectedEvent.technician // preserve or update
+              nextMaintenanceDate: targetDate,
+              assignedMaintenanceEngineer: assignedTechnician
             };
           } else if (taskType === 'calibration') {
             return { 
               ...eq, 
-              nextCalibrationDate: newScheduleDate,
-              assignedCalibrationEngineer: selectedEvent.technician // preserve or update
+              nextCalibrationDate: targetDate,
+              assignedCalibrationEngineer: assignedTechnician
             };
           }
         }
@@ -405,20 +524,27 @@ export default function MaintenanceCalendar({
 
       setSelectedEvent(prev => {
         if (!prev) return null;
+        if (prev.id !== targetEventId) return prev;
         return {
           ...prev,
-          date: newScheduleDate
+          date: targetDate
         };
       });
 
       setIsRescheduling(false);
-      triggerNotification(`🎉 成功将《${selectedEvent.equipment.deviceName}》的计划工作调整至 ${newScheduleDate}。工程师调度指令已下发。`);
+      triggerNotification(`🎉 成功将《${deviceName}》的计划工作调整至 ${targetDate}。工程师调度指令已下发。`);
     }, 400);
   };
 
   // Re-assign engineer for a future scheduled task
   const handleReassignEngineer = (engineer: string) => {
     if (!selectedEvent) return;
+    const blockReason = getScheduleManageBlockReason('技术员改派');
+    if (blockReason) {
+      triggerNotification(`⚠️ ${blockReason}`);
+      return;
+    }
+
     const targetEqId = selectedEvent.equipment.id;
     const taskType = selectedEvent.type;
 
@@ -447,26 +573,39 @@ export default function MaintenanceCalendar({
   // Work Deployment Form Submission
   const handleDeployWorkSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!deployEquipmentId || !deployDate) {
-      triggerNotification('❌ 请完整选择受托医疗设备及计划日期。');
+    const form = e.currentTarget as HTMLFormElement;
+    const submittedDate = String(new FormData(form).get('deployDate') || deployDate).trim();
+    const blockReason = getScheduleManageBlockReason('新工单部署');
+    if (blockReason) {
+      triggerNotification(`⚠️ ${blockReason}`);
       return;
     }
 
-    const selectedEquipment = equipments.find(eq => eq.id === deployEquipmentId);
-    if (!selectedEquipment) return;
+    if (!submittedDate) {
+      triggerNotification('❌ 请选择排期计划开展日期。');
+      return;
+    }
+
+    const selectedEquipment = selectedDeployEquipment;
+    if (!selectedEquipment) {
+      triggerNotification(`❌ ${deploySubmitDisabledReason || '当前筛选条件下无法部署到该设备，请重新选择可见设备。'}`);
+      return;
+    }
+
+    setDeployDate(submittedDate);
 
     setEquipments(prev => prev.map(eq => {
       if (eq.id === deployEquipmentId) {
         if (deployTaskType === 'maintenance') {
           return {
             ...eq,
-            nextMaintenanceDate: deployDate,
+            nextMaintenanceDate: submittedDate,
             assignedMaintenanceEngineer: deployEngineer
           };
         } else if (deployTaskType === 'calibration') {
           return {
             ...eq,
-            nextCalibrationDate: deployDate,
+            nextCalibrationDate: submittedDate,
             assignedCalibrationEngineer: deployEngineer,
             calibrationRequired: true
           };
@@ -475,12 +614,12 @@ export default function MaintenanceCalendar({
           const newWorkOrder: MaintenanceLog = {
             id: `WO-REPAIR-${Date.now().toString().substring(6)}`,
             type: '维修',
-            date: deployDate,
+            date: submittedDate,
             technician: deployEngineer,
             description: deployNotes || '应急维修指令，请迅速排除故障',
             cost: 0,
             status: '进行中',
-            workOrderNo: `WO-${deployDate.replace(/-/g, '')}-${Math.floor(100 + Math.random() * 900)}`,
+            workOrderNo: `WO-${submittedDate.replace(/-/g, '')}-${Math.floor(100 + Math.random() * 900)}`,
             faultPhenomenon: deployNotes || '设备出现非预期异常，需要现场紧急维修'
           };
           return {
@@ -495,7 +634,7 @@ export default function MaintenanceCalendar({
 
     triggerNotification(`🚀 工单部署成功！已将《${selectedEquipment.deviceName}》的 ${
       deployTaskType === 'maintenance' ? '计划PM保养' : deployTaskType === 'calibration' ? '计量周期强检' : '紧急维修任务'
-    } 下发给技术员【${deployEngineer}】，计划执行日期为 ${deployDate}。`);
+    } 下发给技术员【${deployEngineer}】，计划执行日期为 ${submittedDate}。`);
 
     // Reset Form
     setIsDeployMode(false);
@@ -504,19 +643,17 @@ export default function MaintenanceCalendar({
 
   // Pre-fill deploy form from calendar cell click
   const openDeployForDate = (dateStr: string) => {
-    setDeployDate(dateStr);
-    setIsDeployMode(true);
-    setSelectedEvent(null);
-    setActiveDatePopup(null);
-    // Auto-select first equipment if none selected
-    if (equipments.length > 0 && !deployEquipmentId) {
-      setDeployEquipmentId(equipments[0].id);
-    }
+    openDeployPanel(dateStr);
   };
 
   // Direct dispatch handler (links to existing recording flow)
   const handleDirectDispatch = () => {
     if (!selectedEvent) return;
+    const blockReason = getScheduleManageBlockReason('现场执行登记');
+    if (blockReason) {
+      triggerNotification(`⚠️ ${blockReason}`);
+      return;
+    }
     
     // 1. Select the equipment
     setSelectedId(selectedEvent.equipment.id);
@@ -537,6 +674,12 @@ export default function MaintenanceCalendar({
   // Push instant alert notification to technicians
   const handlePushAlert = () => {
     if (!selectedEvent) return;
+    const blockReason = getScheduleManageBlockReason('通知推送');
+    if (blockReason) {
+      triggerNotification(`⚠️ ${blockReason}`);
+      return;
+    }
+
     triggerNotification(`🔔 催办通知已通过【企业微信/医院内部OA】推送至归口科室：${selectedEvent.equipment.dept}，并提醒值班工程师。`);
   };
 
@@ -566,6 +709,43 @@ export default function MaintenanceCalendar({
              eq.sn.toLowerCase().includes(q);
     });
   }, [equipments, deploySearchQuery]);
+  const selectedDeployEquipment = filteredEquipmentsForDeploy.find(eq => eq.id === deployEquipmentId) || null;
+  const deploySubmitDisabledReason = !deployEquipmentId
+    ? '请先选择受托医疗设备。'
+    : !selectedDeployEquipment
+      ? '当前搜索筛选下无法部署到该设备，请重新选择可见设备。'
+      : !deployDate
+        ? '请选择排期计划开展日期。'
+        : '';
+  const canSubmitDeployWork = !deploySubmitDisabledReason;
+  const filteredDeployEquipmentIds = filteredEquipmentsForDeploy.map(eq => eq.id).join('|');
+
+  useEffect(() => {
+    if (!isDeployMode) return;
+    if (!deployEquipmentId) {
+      setDeployEquipmentId(filteredEquipmentsForDeploy[0]?.id || '');
+      return;
+    }
+
+    if (!filteredEquipmentsForDeploy.some(eq => eq.id === deployEquipmentId)) {
+      setDeployEquipmentId(filteredEquipmentsForDeploy[0]?.id || '');
+    }
+  }, [isDeployMode, deployEquipmentId, filteredDeployEquipmentIds]);
+
+  const openDeployPanel = (dateStr = getLocalDateString()) => {
+    const blockReason = getScheduleManageBlockReason('新工单部署');
+    if (blockReason) {
+      triggerNotification(`⚠️ ${blockReason}`);
+      return;
+    }
+
+    setDeploySearchQuery('');
+    setDeployDate(dateStr);
+    setIsDeployMode(true);
+    setSelectedEvent(null);
+    setActiveDatePopup(null);
+    setDeployEquipmentId(equipments[0]?.id || '');
+  };
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-slate-50/50">
@@ -580,7 +760,7 @@ export default function MaintenanceCalendar({
           </div>
           <div>
             <h3 className="text-sm font-black text-slate-800 font-sans tracking-tight">装备科资产调度及维保履历回溯日历</h3>
-            <p className="text-[10px] text-slate-400">统筹全院医疗设备预防性维护(PM)、计量强检并全景回溯设备历史维修、保养履历</p>
+            <p className="text-[10px] text-slate-400">统筹{scheduleScopeLabel}医疗设备预防性维护(PM)、计量强检并全景回溯设备历史维修、保养履历</p>
           </div>
         </div>
 
@@ -590,7 +770,7 @@ export default function MaintenanceCalendar({
           {currentUser.role === 'medical_staff' ? (
             <div className="flex items-center gap-1.5 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-lg text-blue-700 font-sans shadow-2xs">
               <span className="p-0.5 bg-blue-600 rounded text-white"><Briefcase className="w-3 h-3" /></span>
-              <span className="text-[10px] font-black uppercase tracking-wide">已按科室自动建档: {currentUser.dept}</span>
+              <span className="text-[10px] font-black uppercase tracking-wide">已按科室自动建档: {currentUser.department || currentUser.dept}</span>
             </div>
           ) : (
             <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/80 px-2.5 py-1 rounded-lg">
@@ -785,7 +965,7 @@ export default function MaintenanceCalendar({
               const hasEvents = dayEvents.length > 0;
               const loadStatus = getDayLoadStatus(dayEvents.filter(e => e.type === 'maintenance' || e.type === 'calibration').length);
               
-              const isToday = cell.year === 2026 && cell.month === 6 && cell.day === 2;
+              const isToday = cell.year === todayYearNumber && cell.month === todayMonthIndex && cell.day === todayDayNumber;
 
               return (
                 <div 
@@ -960,7 +1140,14 @@ export default function MaintenanceCalendar({
                 {/* ─── SCENARIO A: FUTURE SCHEDULED TASK (Editable) ─── */}
                 {(selectedEvent.type === 'maintenance' || selectedEvent.type === 'calibration') && (
                   <>
+                    {!canManageSchedule && (
+                      <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-[11px] text-blue-800 leading-relaxed font-medium">
+                        当前为临床科室只读追踪视图，可查看计划与责任人；调期、改派和现场执行登记由医学装备科工程师处理。
+                      </div>
+                    )}
+
                     {/* Assigned Technician selector */}
+                    {canManageSchedule && (
                     <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-3xs space-y-2">
                       <div className="flex items-center gap-1 text-[11px] font-bold text-slate-700 uppercase tracking-wider">
                         <User className="w-3.5 h-3.5 text-blue-500" />
@@ -976,8 +1163,10 @@ export default function MaintenanceCalendar({
                         ))}
                       </select>
                     </div>
+                    )}
 
                     {/* Reschedule Date Selector Panel */}
+                    {canManageSchedule && (
                     <form onSubmit={handleReschedule} className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-3xs space-y-3">
                       <div className="flex items-center gap-1 text-[11px] font-extrabold text-slate-700 uppercase tracking-wider">
                         <Clock className="w-3.5 h-3.5 text-blue-500" />
@@ -986,15 +1175,19 @@ export default function MaintenanceCalendar({
 
                       <div className="space-y-1">
                         <input 
+                          id="maintenance-reschedule-date"
+                          name="newScheduleDate"
                           type="date" 
                           value={newScheduleDate}
                           onChange={(e) => setNewScheduleDate(e.target.value)}
+                          onInput={(e) => setNewScheduleDate(e.currentTarget.value)}
                           className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-800 bg-slate-50/50 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors font-mono font-bold"
                           required
                         />
                       </div>
 
                       <button
+                        id="btn-maintenance-confirm-reschedule"
                         type="submit"
                         disabled={isRescheduling || newScheduleDate === selectedEvent.date}
                         className="w-full py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-lg text-[11px] font-bold shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
@@ -1002,8 +1195,10 @@ export default function MaintenanceCalendar({
                         {isRescheduling ? '更新调度指令中...' : '确认修改计划日期'}
                       </button>
                     </form>
+                    )}
 
                     {/* Quick deployment actions */}
+                    {canManageSchedule && (
                     <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-3xs space-y-2">
                       <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">工单与现场派发</div>
                       
@@ -1023,6 +1218,7 @@ export default function MaintenanceCalendar({
                         <span>一键推送企业微信通知</span>
                       </button>
                     </div>
+                    )}
                   </>
                 )}
 
@@ -1102,7 +1298,7 @@ export default function MaintenanceCalendar({
                 <div className="flex items-center justify-between pb-2 border-b border-slate-200/80">
                   <span className="text-xs font-black text-slate-700 tracking-wider uppercase flex items-center gap-1">
                     <Plus className="w-4 h-4 text-blue-600" />
-                    部署全院新维保工单
+                    部署{scheduleScopeLabel}新维保工单
                   </span>
                   <button 
                     type="button"
@@ -1160,6 +1356,7 @@ export default function MaintenanceCalendar({
                   <div className="relative">
                     <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" />
                     <input 
+                      id="maintenance-deploy-search"
                       type="text"
                       placeholder="检索：设备名 / 编号 / SN码 / 科室"
                       value={deploySearchQuery}
@@ -1169,6 +1366,7 @@ export default function MaintenanceCalendar({
                   </div>
 
                   <select
+                    id="maintenance-deploy-equipment"
                     value={deployEquipmentId}
                     onChange={(e) => setDeployEquipmentId(e.target.value)}
                     className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-2 text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 font-bold"
@@ -1181,7 +1379,7 @@ export default function MaintenanceCalendar({
                       </option>
                     ))}
                     {filteredEquipmentsForDeploy.length === 0 && (
-                      <option disabled className="text-slate-400 italic">未找到相匹配的受试设备</option>
+                      <option value="" disabled className="text-slate-400 italic">未找到相匹配的受试设备</option>
                     )}
                   </select>
                 </div>
@@ -1190,6 +1388,7 @@ export default function MaintenanceCalendar({
                 <div className="space-y-1.5">
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">指派责任临床工程师</label>
                   <select
+                    id="maintenance-deploy-engineer"
                     value={deployEngineer}
                     onChange={(e) => setDeployEngineer(e.target.value)}
                     className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 font-bold"
@@ -1204,9 +1403,12 @@ export default function MaintenanceCalendar({
                 <div className="space-y-1.5">
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">排期计划开展日期</label>
                   <input 
+                    id="maintenance-deploy-date"
+                    name="deployDate"
                     type="date"
                     value={deployDate}
                     onChange={(e) => setDeployDate(e.target.value)}
+                    onInput={(e) => setDeployDate(e.currentTarget.value)}
                     className="w-full text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono font-bold"
                     required
                   />
@@ -1216,6 +1418,7 @@ export default function MaintenanceCalendar({
                 <div className="space-y-1.5">
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">特殊指令/派发备注</label>
                   <textarea
+                    id="maintenance-deploy-notes"
                     rows={2}
                     value={deployNotes}
                     onChange={(e) => setDeployNotes(e.target.value)}
@@ -1228,11 +1431,14 @@ export default function MaintenanceCalendar({
               {/* Action buttons */}
               <div className="space-y-2 pt-3 border-t border-slate-200">
                 <button
+                  id="btn-maintenance-submit-deploy"
                   type="submit"
-                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-black shadow-sm transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                  disabled={!canSubmitDeployWork}
+                  title={canSubmitDeployWork ? '立即下发维保工单' : deploySubmitDisabledReason}
+                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-lg text-xs font-black shadow-sm transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
                 >
                   <Send className="w-3.5 h-3.5" />
-                  <span>立即向全院下发工单</span>
+                  <span>立即向{scheduleScopeLabel}下发工单</span>
                 </button>
                 <button
                   type="button"
@@ -1277,7 +1483,9 @@ export default function MaintenanceCalendar({
                 </div>
                 <p className="text-[11px] text-slate-500 leading-relaxed font-sans font-medium">
                   {monthStats.totalScheduled === 0 ? (
-                    '本月无计划安排。可以点击下方“工作部署”下达维保、强检任务，或在左侧列表设定计划周期。'
+                    canManageSchedule
+                      ? '本月无计划安排。可以点击下方“工作部署”下达维保、强检任务，或在左侧列表设定计划周期。'
+                      : '本月本科室暂无待执行计划。临床端可查看历史记录和后续排期；如需新增维保、强检或维修安排，请联系医学装备科工程师统一部署。'
                   ) : monthStats.totalScheduled > 4 ? (
                     `诊断结果：本月排期密度偏高（共计${monthStats.totalScheduled}台精密设备待执行）。目前现场待岗工程师负荷较满，建议点击日历天数标签对高风险设备执行错峰调度。`
                   ) : (
@@ -1287,6 +1495,7 @@ export default function MaintenanceCalendar({
               </div>
 
               {/* Direct Work deployment launcher */}
+              {canManageSchedule ? (
               <div className="bg-blue-50/50 p-4 border border-blue-100/60 rounded-xl space-y-2.5">
                 <div className="space-y-1">
                   <span className="text-xs font-black text-blue-900 flex items-center gap-1.5">
@@ -1298,20 +1507,24 @@ export default function MaintenanceCalendar({
                   </p>
                 </div>
                 <button
-                  onClick={() => {
-                    setIsDeployMode(true);
-                    // Preselect first equipment and today
-                    if (equipments.length > 0) {
-                      setDeployEquipmentId(equipments[0].id);
-                    }
-                    setDeployDate('2026-07-02');
-                  }}
+                  onClick={() => openDeployPanel()}
                   className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-black shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>部署全院新工作指令</span>
+                  <span>部署{scheduleScopeLabel}新工作指令</span>
                 </button>
               </div>
+              ) : (
+                <div className="bg-slate-50 p-4 border border-slate-200 rounded-xl space-y-1.5">
+                  <span className="text-xs font-black text-slate-700 flex items-center gap-1.5">
+                    <Info className="w-4 h-4 text-blue-500" />
+                    临床日程只读视图
+                  </span>
+                  <p className="text-[10px] text-slate-500 leading-relaxed font-medium">
+                    当前账号可查看本科室设备维保、维修和计量记录；新工单部署、调期和改派由医学装备科工程师执行。
+                  </p>
+                </div>
+              )}
 
               {/* Upcoming chronological events list */}
               <div className="flex-1 flex flex-col min-h-0 space-y-2">
@@ -1404,7 +1617,9 @@ export default function MaintenanceCalendar({
                   <div>
                     <p className="text-xs font-bold text-slate-500 font-sans">该日期暂无任何任务或记录</p>
                     <p className="text-[10px] text-slate-400 mt-1 max-w-[280px] mx-auto leading-relaxed">
-                      本天暂无安排的PM自检或周期强检记录。点击下方按钮，可立刻在此日期为工程师部署受试任务。
+                      {canManageSchedule
+                        ? '本天暂无安排的PM自检或周期强检记录。点击下方按钮，可立刻在此日期为工程师部署受试任务。'
+                        : '本天本科室暂无安排的PM自检或周期强检记录。临床端可查看当天排程；如需新增任务，请联系医学装备科工程师统一部署。'}
                     </p>
                   </div>
                 </div>
@@ -1464,13 +1679,19 @@ export default function MaintenanceCalendar({
 
             {/* Modal Footer */}
             <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400 font-medium flex-shrink-0">
-              <button
-                onClick={() => openDeployForDate(activeDatePopup)}
-                className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-[10px] font-black transition-all flex items-center gap-1 cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5 text-blue-600" />
-                <span>在此日期部署新任务</span>
-              </button>
+              {canManageSchedule ? (
+                <button
+                  onClick={() => openDeployForDate(activeDatePopup)}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-[10px] font-black transition-all flex items-center gap-1 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5 text-blue-600" />
+                  <span>在此日期部署新任务</span>
+                </button>
+              ) : (
+                <span className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-slate-500 font-bold">
+                  临床只读：仅查看当天本科室排程
+                </span>
+              )}
               <button 
                 onClick={() => setActiveDatePopup(null)}
                 className="text-slate-500 hover:text-slate-800 font-black cursor-pointer"

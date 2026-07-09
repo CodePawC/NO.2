@@ -20,6 +20,7 @@ The app includes AI-assisted repair intake, medical equipment archives, role sim
 - Install dependencies: `npm install`
 - Start local dev server: `npm run dev`
 - Type-check: `npm run lint`
+- Workflow checks: `npm run verify`
 - Production build: `npm run build`
 - Start production build: `npm run start`
 
@@ -28,6 +29,7 @@ The app includes AI-assisted repair intake, medical equipment archives, role sim
 Before opening a pull request or handing off code:
 
 - Run `npm run lint`.
+- Run `npm run verify` after changing task status flow, role visibility, routing, equipment sync, or date helpers.
 - Run `npm run build`.
 - For server/API changes, start the built app with `npm run start` and verify `GET /api/health` returns `{ "status": "ok" }`.
 - For frontend UI changes, smoke-test the affected screen at `http://127.0.0.1:3000`.

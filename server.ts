@@ -4,6 +4,7 @@
  */
 
 import express from 'express';
+import { createServer as createHttpServer } from 'node:http';
 import path from 'path';
 import { GoogleGenAI, Type } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
@@ -13,7 +14,11 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const parseServerPort = (value: string | undefined, fallback: number) => {
+  const port = Number(value);
+  return Number.isInteger(port) && port > 0 && port < 65536 ? port : fallback;
+};
+const PORT = parseServerPort(process.env.PORT || process.env.VITE_PORT, 3000);
 
 // Initialize Gemini SDK securely on the server
 const ai = new GoogleGenAI({
@@ -33,9 +38,48 @@ app.get('/api/health', (req, res) => {
 });
 
 /// Helper to generate a structured fallback payload when Gemini is unavailable or not configured
+const DEPARTMENT_ALIASES: Record<string, string> = {
+  ICU: '重症医学科 (ICU)',
+  重症: '重症医学科 (ICU)',
+  重症科: '重症医学科 (ICU)',
+  重症医学科: '重症医学科 (ICU)',
+  急诊: '急诊科',
+  急诊科: '急诊科',
+  放射: '放射科',
+  放射科: '放射科',
+  妇产: '妇产科',
+  妇产科: '妇产科',
+  胃镜: '胃镜室',
+  胃镜室: '胃镜室',
+  手术: '手术室',
+  手术室: '手术室',
+  呼吸: '呼吸内科',
+  呼吸内科: '呼吸内科',
+  儿科: '儿科',
+  检验: '检验科',
+  检验科: '检验科',
+  超声: '超声科',
+  超声科: '超声科'
+};
+
+function normalizeDepartmentName(department?: string) {
+  const cleaned = department?.trim();
+  if (!cleaned) return '';
+
+  return DEPARTMENT_ALIASES[cleaned.toUpperCase()] || DEPARTMENT_ALIASES[cleaned] || cleaned;
+}
+
 function getRuleBasedFallback(message: string, currentDraft: any, isApiError: boolean = false, currentUser?: any) {
   const textLower = message.toLowerCase();
   const draft = currentDraft || {};
+  const currentUserDepartment = normalizeDepartmentName(currentUser?.department || currentUser?.dept);
+  const isClinicalUser = currentUser?.role === 'medical_staff' && !!currentUserDepartment;
+  const explicitlyNoVendorCoop = /暂不需要厂家|不需要厂家|无需厂家|不用厂家|不联系厂家|无需供应商|不需要供应商|院内自主|设备科看一下/i.test(textLower);
+  const isEndoscopeVendorIssue = /胃镜|内镜|奥林巴斯|插入管/i.test(textLower) && /漏水|气密|破损|模糊/i.test(textLower);
+  const isMedicalEquipmentContext = /呼吸机|除颤仪|麻醉机|监护仪|氧气|负压吸引|胃镜|内镜|dr机|dr房|\bdr\b|ct机|ct室|\bct\b|\bmri\b|磁共振|x射线|x光|数字化x线|数字化x射线|注射泵|输液泵|超声|彩超|胎心|血气|生化|医学装备|医疗设备|扫描床|扫描序列|梯度|球管|探测器|高压发生器|重建工作站/i.test(textLower);
+  const isEquipmentLeakIssue = /漏水/i.test(textLower) && /胃镜|内镜|奥林巴斯|插入管|探头|管路|设备|泵|机/i.test(textLower);
+  const isInformationIssue = /电脑|网络|网线|系统|his|pacs|lis|打印机|卡纸|扫码枪|处方|开立|登录|信息系统|办公系统/i.test(textLower) && !isMedicalEquipmentContext;
+  const isLogisticsIssue = /后勤|跳闸|照明|插座|强电|水管|空调|门锁|电源插座|漏电|配电/i.test(textLower) || (/漏水/i.test(textLower) && !isEquipmentLeakIssue);
   
   // 1. Task Type
   let taskType = '设备报修';
@@ -45,23 +89,26 @@ function getRuleBasedFallback(message: string, currentDraft: any, isApiError: bo
     taskType = '医用气体异常';
   } else if (/验收|安装|到货|开箱/.test(textLower)) {
     taskType = '验收安装协同';
-  } else if (/厂家|外送|寄修|供应商|奥林巴斯/.test(textLower)) {
+  } else if (!explicitlyNoVendorCoop && (isEndoscopeVendorIssue || /厂家|外送|寄修|供应商|奥林巴斯/.test(textLower))) {
     taskType = '供应商协同';
   } else if (/计量|强检|质控|送检/.test(textLower)) {
     taskType = '计量/质控提醒';
   } else if (/配件|耗材|更换|电池/.test(textLower)) {
     taskType = '配件耗材申请';
-  } else if (/电脑|网络|网线|系统|his|后勤|打印机|卡纸|跳闸|照明|插座/.test(textLower)) {
+  } else if (isInformationIssue || isLogisticsIssue) {
     taskType = '非设备类转派任务';
   } else if (/巡检|保养|培训|鉴定|盘点/.test(textLower)) {
     taskType = '普通杂项任务';
   }
 
   // 2. Department
-  let department = draft.department || null;
-  const deptMatch = message.match(/(icu|急诊|放射|妇产|胃镜|儿科|外科|内科|手术室|胃镜室|门诊|住院)/i);
-  if (deptMatch) {
-    department = deptMatch[0].toUpperCase();
+  let department = draft.department ? normalizeDepartmentName(draft.department) : null;
+  const deptMatch = message.match(/(呼吸内科|重症医学科|急诊科|放射科|妇产科|胃镜室|手术室|检验科|超声科|icu|急诊|放射|妇产|胃镜|儿科|呼吸|手术)/i);
+  const extractedDepartment = deptMatch ? normalizeDepartmentName(deptMatch[0]) : '';
+  if (isClinicalUser) {
+    department = currentUserDepartment;
+  } else if (extractedDepartment) {
+    department = extractedDepartment;
   }
 
   // 3. Location
@@ -73,7 +120,7 @@ function getRuleBasedFallback(message: string, currentDraft: any, isApiError: bo
 
   // 4. Device Name
   let deviceName = draft.deviceName || null;
-  const devMatch = message.match(/(呼吸机|除颤仪|麻醉机|监护仪|氧气|负压吸引|胃镜|dr|电脑|打印机|注射泵|输液泵)/i);
+  const devMatch = message.match(/(呼吸机|除颤仪|麻醉机|监护仪|氧气|负压吸引|胃镜|内镜|mri|磁共振|ct|dr|超声|彩超|电脑|打印机|注射泵|输液泵)/i);
   if (devMatch) {
     deviceName = devMatch[0];
   }
@@ -81,30 +128,39 @@ function getRuleBasedFallback(message: string, currentDraft: any, isApiError: bo
   // 5. Urgency level rules
   const urgentKeywords = ['呼吸机', '除颤仪', '麻醉机', '监护仪', '氧气', '负压吸引', '抢救', '生命支持', '病人正在用', '无法通气', '压力不足'];
   const isUrgent = urgentKeywords.some(kw => textLower.includes(kw));
-  const urgency = isUrgent ? '生命支持' : (textLower.includes('急') ? '特急' : (draft.urgency || '普通'));
+  const hasExplicitUrgency = /紧急|急需|急用|急修|赶紧|尽快|立即|马上|危急|严重|无法正常运行|影响患者|影响临床/i.test(textLower);
+  const urgency = isUrgent ? '生命支持' : (hasExplicitUrgency ? '特急' : (draft.urgency || '普通'));
 
   // 6. Clinical Impact
   const affectClinical = isUrgent || textLower.includes('影响临床') ? '是' : (draft.affectClinical || '否');
 
   // 7. Need backup / Vendor coop
   const needBackupDevice = isUrgent ? '是' : (draft.needBackupDevice || '否');
-  const needVendorCoop = taskType === '供应商协同' || taskType === '验收安装协同' ? '是' : (draft.needVendorCoop || '否');
+  const needVendorCoop = explicitlyNoVendorCoop
+    ? '否'
+    : (taskType === '供应商协同' || taskType === '验收安装协同' ? '是' : (draft.needVendorCoop || '否'));
 
   // 8. Recommended Dept
-  const recommendedDept = taskType === '非设备类转派任务' ? '信息科' : (draft.recommendedDept || '医学装备科');
+  const recommendedDept = taskType === '非设备类转派任务'
+    ? (isLogisticsIssue ? '后勤保障科' : '信息科')
+    : (draft.recommendedDept || '医学装备科');
 
   // 9. Contacts
-  let contactPerson = draft.contactPerson || '科室医护人员';
+  let contactPerson = isClinicalUser ? currentUser.name : (draft.contactPerson || '科室医护人员');
   const contactMatch = message.match(/(周医生|王护士|李医生|张医生|刘护士|陈工|赵主任)/);
-  if (contactMatch) {
+  if (!isClinicalUser && contactMatch) {
     contactPerson = contactMatch[0];
   }
   
-  let contactPhone = draft.contactPhone || '未提取';
+  let contactPhone = isClinicalUser ? (currentUser.phone || draft.contactPhone || '未提取') : (draft.contactPhone || '未提取');
   const phoneMatch = message.match(/(1[3-9]\d{9}|\d{3,4}-\d{7,8}|\d{4})/);
-  if (phoneMatch) {
+  if (!isClinicalUser && phoneMatch) {
     contactPhone = phoneMatch[0];
   }
+
+  const notes = isClinicalUser && extractedDepartment && extractedDepartment !== currentUserDepartment
+    ? `AI原始识别科室为 [${extractedDepartment}]，已按当前登录临床用户归属规范化为 [${currentUserDepartment}]。`
+    : (draft.notes || '');
 
   const faultPhenomenon = message;
 
@@ -133,7 +189,8 @@ function getRuleBasedFallback(message: string, currentDraft: any, isApiError: bo
       recommendedDept,
       aiStatus: 'AI待补全',
       contactPerson,
-      contactPhone
+      contactPhone,
+      notes
     },
     aiSuggestions: [
       '已启用本地应急智能过滤规则自动研判。',
@@ -141,7 +198,7 @@ function getRuleBasedFallback(message: string, currentDraft: any, isApiError: bo
       '对于未提取到或有误差的字段，您可在弹窗或确认页面中直接手动微调。'
     ],
     isClarification: false,
-    forwardDepartment: taskType === '非设备类转派任务' ? '信息科' : null
+    forwardDepartment: taskType === '非设备类转派任务' ? recommendedDept : null
   };
 }
 
@@ -198,8 +255,11 @@ app.post('/api/assistant/test-config', async (req, res) => {
       return;
     }
 
-    // 2. Gemini native configuration (No custom endpoint, or matches gemini)
-    if (id === 'gemini-default' || !endpoint || endpoint.includes('googleapis.com') || endpoint.includes('gemini')) {
+    const normalizedEndpoint = typeof endpoint === 'string' ? endpoint.trim() : '';
+    const isGeminiNative = id === 'gemini-default' || normalizedEndpoint.includes('googleapis.com') || normalizedEndpoint.includes('gemini');
+
+    // 2. Gemini native configuration
+    if (isGeminiNative) {
       const apiKeyToUse = apiKey || process.env.GEMINI_API_KEY;
       if (!apiKeyToUse) {
         throw new Error('未配置 Gemini API Key，无法进行云端联通测试。请在配置中填入密钥。');
@@ -230,8 +290,11 @@ app.post('/api/assistant/test-config', async (req, res) => {
       });
     } else {
       // 3. Custom OpenAI-compatible endpoint
+      if (!normalizedEndpoint) {
+        throw new Error(`自定义供应商 ${name || id || ''} 未配置 API 请求地址，无法进行联通测试。`);
+      }
       const modelToUse = model || 'gpt-4o-mini';
-      const response = await fetch(`${endpoint.replace(/\/$/, '')}/chat/completions`, {
+      const response = await fetch(`${normalizedEndpoint.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -261,16 +324,20 @@ app.post('/api/assistant/test-config', async (req, res) => {
     }
   } catch (err: any) {
     console.error('API Test connection error:', err);
+    const errorMessage = err.message || String(err);
     res.json({
       success: false,
-      message: `连接失败: ${err.message || err}`
+      error: errorMessage,
+      message: `连接失败: ${errorMessage}`
     });
   }
 });
 
 // API: Core AI Assistant Chat Endpoint
 app.post('/api/assistant/chat', async (req, res) => {
-  const { message, currentDraft, history, config, user } = req.body;
+  const { message, currentDraft, history } = req.body;
+  const config = req.body?.config || req.body?.activeConfig;
+  const user = req.body?.user || req.body?.currentUser;
   if (!message) {
     res.status(400).json({ error: 'Message cannot be empty' });
     return;
@@ -373,14 +440,15 @@ app.post('/api/assistant/chat', async (req, res) => {
     const finalPrompt = prompt.replace('{formatted_history_placeholder}', finalFormattedHistory);
 
     // 4. Call Model Provider
-    const isGeminiNative = configToUse.id === 'gemini-default' || !configToUse.endpoint || configToUse.endpoint.includes('googleapis.com') || configToUse.endpoint.includes('gemini');
+    const normalizedEndpoint = typeof configToUse.endpoint === 'string' ? configToUse.endpoint.trim() : '';
+    const isGeminiNative = configToUse.id === 'gemini-default' || normalizedEndpoint.includes('googleapis.com') || normalizedEndpoint.includes('gemini');
 
     if (isGeminiNative) {
       // Use native Gemini SDK
       const apiKeyToUse = configToUse.apiKey || process.env.GEMINI_API_KEY;
       if (!apiKeyToUse) {
         console.log('No Gemini API key specified for native client. Falling back to local heuristics.');
-        const fallbackPayload = getRuleBasedFallback(message, currentDraft, false);
+        const fallbackPayload = getRuleBasedFallback(message, currentDraft, false, user);
         res.json(fallbackPayload);
         return;
       }
@@ -497,7 +565,13 @@ app.post('/api/assistant/chat', async (req, res) => {
       res.json(parsedResult);
     } else {
       // 5. OpenAI-compatible Custom HTTP Request
-      const endpoint = configToUse.endpoint.trim().replace(/\/+$/, '');
+      if (!normalizedEndpoint) {
+        console.log('[AI Routing] Custom provider endpoint missing. Falling back to local heuristics.');
+        const fallbackPayload = getRuleBasedFallback(message, currentDraft, false, user);
+        res.json(fallbackPayload);
+        return;
+      }
+      const endpoint = normalizedEndpoint.replace(/\/+$/, '');
       const url = endpoint.endsWith('/chat/completions') ? endpoint : `${endpoint}/chat/completions`;
       const modelName = configToUse.model ? configToUse.model.trim() : 'gpt-3.5-turbo';
 
@@ -579,7 +653,7 @@ app.post('/api/assistant/chat', async (req, res) => {
   } catch (error: any) {
     console.error('Error handling assistant chat, triggering rule-based fallback:', error);
     try {
-      const fallbackPayload = getRuleBasedFallback(message, currentDraft, true);
+      const fallbackPayload = getRuleBasedFallback(message, currentDraft, true, user);
       res.json(fallbackPayload);
     } catch (fallbackError: any) {
       console.error('Fatal failure in fallback generator:', fallbackError);
@@ -721,9 +795,11 @@ app.post("/api/gemini/chat", async (req, res) => {
 
 // Serve frontend build static files in production, use Vite middleware in dev
 async function setupVite() {
+  const httpServer = createHttpServer(app);
+
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { middlewareMode: true, hmr: { server: httpServer } },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -737,7 +813,7 @@ async function setupVite() {
     console.log('Serving production static files from dist');
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }

@@ -6,9 +6,14 @@ import {
   PlusCircle, FileUp, ChevronRight, ChevronLeft, ChevronDown, Info, HardDrive, RefreshCw,
   HelpCircle, CheckSquare, Layers, Copy, Printer, User, BarChart2, LayoutGrid, Table, Filter, ArrowUpDown
 } from 'lucide-react';
-import { MedicalEquipment, MaintenanceLog, CalibrationLog, Attachment, UserProfile } from '../types';
+import { MedicalEquipment, MaintenanceLog, CalibrationLog, Attachment, UserProfile, StructuredTicket } from '../types';
 import { SIMULATED_USERS } from '../data/appPresets';
 import { analyzeGeminiContent, chatWithGeminiExpert } from '../services/aiApi';
+import { isSameDepartment } from '../utils/departmentUtils';
+import { EQUIPMENT_STORAGE_KEY, parseStoredEquipmentList } from '../utils/equipmentStorage';
+import { hasOpenEquipmentRepairWorkOrder } from '../utils/equipmentSync';
+import { addLocalDays, getDateDiffDaysFromToday, getLocalDateString, getLocalDateTimeString } from '../utils/dateUtils';
+import { needsClinicalAcceptance } from '../utils/taskWorkflow';
 import MaintenanceCalendar from './MaintenanceCalendar';
 import BudgetStackedChart from './BudgetStackedChart';
 
@@ -35,15 +40,30 @@ const parseBatchSns = (text: string): string[] => {
 // 检查医疗器械注册证有效期状态
 const getRegistrationStatus = (dateStr?: string) => {
   if (!dateStr) return { status: 'none', text: '未设置有效期' };
-  const validDate = new Date(dateStr).getTime();
-  const today = new Date('2026-07-01').getTime(); // 固定的系统比对时间
-  const diffDays = (validDate - today) / (1000 * 3600 * 24);
+  const diffDays = getDateDiffDaysFromToday(dateStr);
+  if (diffDays === null) return { status: 'none', text: '日期格式异常' };
   if (diffDays < 0) {
     return { status: 'expired', text: '已过期', diffDays: Math.floor(Math.abs(diffDays)) };
   } else if (diffDays <= 90) {
     return { status: 'expiring', text: '即将过期', diffDays: Math.floor(diffDays) };
   }
   return { status: 'valid', text: '有效中', diffDays: Math.floor(diffDays) };
+};
+
+const createQuickRepairWorkOrderNo = (equipments: MedicalEquipment[], date = getLocalDateString()) => {
+  const datePart = date.replace(/-/g, '');
+  const idPattern = new RegExp(`^WO-${datePart}-(\\d+)$`);
+  const maxSequence = equipments.reduce((max, equipment) => {
+    const equipmentMax = (equipment.maintenanceLogs || []).reduce((logMax, log) => {
+      const match = log.workOrderNo?.match(idPattern);
+      if (!match) return logMax;
+      return Math.max(logMax, Number(match[1]) || 0);
+    }, 0);
+
+    return Math.max(max, equipmentMax);
+  }, 0);
+
+  return `WO-${datePart}-${String(maxSequence + 1).padStart(4, '0')}`;
 };
 
 export interface PreviewPage {
@@ -67,6 +87,44 @@ export interface PreviewData {
   pages: PreviewPage[];
 }
 
+interface QuickRepairRequest {
+  equipment: MedicalEquipment;
+  description: string;
+  urgency: 'low' | 'medium' | 'high';
+  workOrderNo: string;
+}
+
+type ArchiveConfirmation = {
+  id: 'delete-equipment' | 'delete-maintenance-log' | 'delete-calibration-log' | 'quick-repair';
+  title: string;
+  description: string;
+  confirmLabel: string;
+  tone?: 'danger' | 'primary';
+  onConfirm: () => void;
+};
+
+type ArchiveToast = {
+  type: 'success' | 'warning' | 'info';
+  title?: string;
+  message: string;
+};
+
+const getDiagnosticSessionKey = (equipment: MedicalEquipment | null, user: UserProfile) => {
+  return `${user.id}:${equipment?.id || 'no-equipment'}`;
+};
+
+const createDiagnosticWelcome = (equipment?: MedicalEquipment | null, user?: UserProfile) => {
+  if (!equipment) {
+    return '当前筛选条件下暂无可选设备。请调整左侧筛选条件后，再选择设备进行故障诊断、PM 维保或计量检测咨询。';
+  }
+
+  const userScope = user?.role === 'medical_staff'
+    ? `${user.department || user.dept || '本科室'}临床只读视角`
+    : '医学装备科工程师视角';
+
+  return `已切换至【${equipment.deviceName}】诊断会话。\n当前设备：${equipment.model} / SN: ${equipment.sn || '未登记'}\n当前视角：${userScope}\n请描述故障现象、报警代码或想核对的维保/计量操作，我会基于当前设备档案给出建议。`;
+};
+
 export const generatePreviewData = (equipment: MedicalEquipment, file: Attachment): PreviewData => {
   const fileTypeStr = 
     file.type === 'manual' ? '操作手册' :
@@ -78,7 +136,7 @@ export const generatePreviewData = (equipment: MedicalEquipment, file: Attachmen
       fileName: file.name,
       fileSize: file.size,
       fileType: fileTypeStr,
-      uploadDate: file.uploadDate || '2026-07-01',
+      uploadDate: file.uploadDate || getLocalDateString(),
       author: '原厂技术维护委员会审核印制',
       summary: `本手册是关于《${equipment.deviceName} (型号: ${equipment.model})》的官方全生命周期技术手册。涵盖了整机基本电气指标、操作前置条件、日常预防性维护(PM)检测节点、漏电流测试容限、特种环境电磁兼容指引以及常规故障诊断速查指南。`,
       tlDr: [
@@ -176,7 +234,7 @@ export const generatePreviewData = (equipment: MedicalEquipment, file: Attachmen
       fileName: file.name,
       fileSize: file.size,
       fileType: fileTypeStr,
-      uploadDate: file.uploadDate || '2026-07-01',
+      uploadDate: file.uploadDate || getLocalDateString(),
       author: '中华人民共和国财政税务机关专用核签',
       summary: `本发票为《${equipment.deviceName} (型号: ${equipment.model})》的官方增值税专用凭证。记录了该设备购入原值、采购流程合规编码、国家专用发票代码及号码，并附带了医学装备科采购合同与入库核验流程。`,
       tlDr: [
@@ -274,7 +332,7 @@ export const generatePreviewData = (equipment: MedicalEquipment, file: Attachmen
       fileName: file.name,
       fileSize: file.size,
       fileType: fileTypeStr,
-      uploadDate: file.uploadDate || '2026-07-01',
+      uploadDate: file.uploadDate || getLocalDateString(),
       author: '医院装备科信息档案处自动提取',
       summary: `本文件是关于《${equipment.deviceName}》的技术文件。系统已运用 AI 智能引擎对其进行了 OCR 信息扫描，建立了元数据目录，便于日常维护审计、计量校准及快速核查。`,
       tlDr: [
@@ -353,7 +411,7 @@ export const generatePreviewData = (equipment: MedicalEquipment, file: Attachmen
             { label: "签署机构", value: "装备部终审" }
           ],
           lines: [
-            `档案登记时间: ${file.uploadDate || '2026-07-01'}`,
+            `档案登记时间: ${file.uploadDate || getLocalDateString()}`,
             `上传原件文件名: ${file.name}`,
             "技术档案可信审计散列值: [SHA256: 7f8a9e1d2c3b4a5f6e7d8c9b0a1b2c3d4e5f]",
             "系统数字可信核签：临床工程师及科室主管对以上参数一致性进行了电子签字，确认永久归档备查。"
@@ -364,177 +422,24 @@ export const generatePreviewData = (equipment: MedicalEquipment, file: Attachmen
   }
 };
 
-// Preset default equipment data to seed localStorage
-const DEFAULT_EQUIPMENT: MedicalEquipment[] = [
-  {
-    id: 'eq-001',
-    deviceName: '磁共振成像系统 (MRI)',
-    model: 'Siemens Magnetom Vida 3.0T',
-    sn: 'MR-SI-90812',
-    manufacturer: '西门子医疗 (Siemens Healthineers)',
-    category: '影像诊断',
-    dept: '放射科',
-    status: '正常运行',
-    riskLevel: '高',
-    purchaseDate: '2023-05-12',
-    purchaseCost: 12800000,
-    maintenanceCycleDays: 180,
-    lastMaintenanceDate: '2026-01-15',
-    nextMaintenanceDate: '2026-07-14',
-    calibrationRequired: true,
-    lastCalibrationDate: '2025-11-20',
-    nextCalibrationDate: '2026-11-19',
-    attachments: [
-      { id: 'a1', name: '磁共振操作手册.pdf', type: 'manual', size: '12.4 MB', uploadDate: '2023-05-13' },
-      { id: 'a2', name: '入库发票-F48291.pdf', type: 'invoice', size: '1.2 MB', uploadDate: '2023-05-12' }
-    ],
-    maintenanceLogs: [
-      { id: 'm1', type: '保养', date: '2026-01-15', technician: '张建国', description: '高低温超导液冷检查，射频线圈调谐校准。', cost: 12000, status: '已完成' },
-      { id: 'm2', type: '维修', date: '2025-08-10', technician: '西门子原厂工程师', description: '更换床面板传动皮带，消除传动异响。', cost: 8500, status: '已完成' }
-    ],
-    calibrationLogs: [
-      { id: 'c1', date: '2025-11-20', agency: '省计量科学研究院', certificateNo: 'JJG-2025-MR-0482', result: '合格', validUntil: '2026-11-19' }
-    ],
-    registrationNo: '国械注进20183061611',
-    registrationValidUntil: '2028-04-15',
-    deviceClass: 'III类',
-    productionLicenseNo: '国械生产许20150012号',
-    photoUrl: 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=600&h=450&q=80'
-  },
-  {
-    id: 'eq-002',
-    deviceName: '多参数监护仪',
-    model: 'Mindray BeneVision N17',
-    sn: 'MN-MI-883012',
-    manufacturer: '迈瑞医疗 (Mindray)',
-    category: '急救生命支持',
-    dept: '重症医学科 (ICU)',
-    status: '正常运行',
-    riskLevel: '中',
-    purchaseDate: '2024-02-18',
-    purchaseCost: 45000,
-    maintenanceCycleDays: 90,
-    lastMaintenanceDate: '2026-05-10',
-    nextMaintenanceDate: '2026-08-08',
-    calibrationRequired: true,
-    lastCalibrationDate: '2026-02-15',
-    nextCalibrationDate: '2027-02-14',
-    attachments: [
-      { id: 'a3', name: 'N17使用手册_V1.1.pdf', type: 'manual', size: '4.8 MB', uploadDate: '2024-02-18' }
-    ],
-    maintenanceLogs: [
-      { id: 'm3', type: '保养', date: '2026-05-10', technician: '李工', description: '清洁机壳、测量传感器电缆、电池充放电效能测试。', cost: 200, status: '已完成' }
-    ],
-    calibrationLogs: [
-      { id: 'c2', date: '2026-02-15', agency: '市医疗器械检测所', certificateNo: 'CAL-2026-PM-904', result: '合格', validUntil: '2027-02-14' }
-    ],
-    registrationNo: '国械注准20203070415',
-    registrationValidUntil: '2029-10-12',
-    deviceClass: 'II类',
-    productionLicenseNo: '粤食药监械生产许20100155号',
-    photoUrl: 'https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=600&h=450&q=80'
-  },
-  {
-    id: 'eq-003',
-    deviceName: '医用超声诊断仪',
-    model: 'Philips Epiq Elite',
-    sn: 'PH-UL-730129',
-    manufacturer: '飞利浦医疗 (Philips Healthcare)',
-    category: '影像诊断',
-    dept: '超声科',
-    status: '故障维修',
-    riskLevel: '中',
-    purchaseDate: '2022-10-15',
-    purchaseCost: 1550000,
-    maintenanceCycleDays: 180,
-    lastMaintenanceDate: '2025-12-05',
-    nextMaintenanceDate: '2026-06-03',
-    calibrationRequired: false,
-    attachments: [],
-    maintenanceLogs: [
-      { id: 'm4', type: '维修', date: '2026-06-25', technician: '飞利浦售后工程师', description: '探头晶片老化导致图像噪点大，目前已向原厂申领替换探头，等待到货中。', cost: 0, status: '进行中' }
-    ],
-    calibrationLogs: [],
-    registrationNo: '国械注进20193060124',
-    registrationValidUntil: '2027-02-28',
-    deviceClass: 'III类',
-    productionLicenseNo: '国械生产许20150018号',
-    photoUrl: 'https://images.unsplash.com/photo-1581594693702-fbdc51b2763b?auto=format&fit=crop&w=600&h=450&q=80'
-  },
-  {
-    id: 'eq-004',
-    deviceName: '无创呼吸机',
-    model: 'ResMed Stellar 150',
-    sn: 'RM-VE-229104',
-    manufacturer: '瑞思迈 (ResMed)',
-    category: '急救生命支持',
-    dept: '呼吸内科',
-    status: '正常运行',
-    riskLevel: '高',
-    purchaseDate: '2023-11-01',
-    purchaseCost: 88000,
-    maintenanceCycleDays: 90,
-    lastMaintenanceDate: '2026-04-20',
-    nextMaintenanceDate: '2026-07-19',
-    calibrationRequired: true,
-    lastCalibrationDate: '2025-10-12',
-    nextCalibrationDate: '2026-10-11',
-    attachments: [],
-    maintenanceLogs: [
-      { id: 'm5', type: '保养', date: '2026-04-20', technician: '刘工程师', description: '更换吸气过滤网，进行压力校准 and 氧浓度传感器校准。', cost: 450, status: '已完成' }
-    ],
-    calibrationLogs: [
-      { id: 'c3', date: '2025-10-12', agency: '市计量测试院', certificateNo: 'VAL-2025-VT-129', result: '合格', validUntil: '2026-10-11' }
-    ],
-    registrationNo: '国械注进20163082512',
-    registrationValidUntil: '2026-06-30', // 已过期，便于展示预警
-    deviceClass: 'II类',
-    productionLicenseNo: '国械生产许20160029号',
-    photoUrl: 'https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&w=600&h=450&q=80'
-  },
-  {
-    id: 'eq-005',
-    deviceName: '全自动生化分析仪',
-    model: 'Roche Cobas c501',
-    sn: 'RO-CH-110291',
-    manufacturer: '罗氏诊断 (Roche Diagnostics)',
-    category: '检验分析',
-    dept: '检验科',
-    status: '正常运行',
-    riskLevel: '高',
-    purchaseDate: '2021-08-10',
-    purchaseCost: 2100000,
-    maintenanceCycleDays: 90,
-    lastMaintenanceDate: '2026-05-18',
-    nextMaintenanceDate: '2026-08-16',
-    calibrationRequired: true,
-    lastCalibrationDate: '2025-08-15',
-    nextCalibrationDate: '2026-08-14',
-    attachments: [],
-    maintenanceLogs: [
-      { id: 'm6', type: '保养', date: '2026-05-18', technician: '罗氏原厂李工', description: '反应盘比色杯清洗及透光度校准，加样针疏通及清洗。', cost: 3500, status: '已完成' }
-    ],
-    calibrationLogs: [
-      { id: 'c4', date: '2025-08-15', agency: '省计量测试所', certificateNo: 'CHE-2025-RC-101', result: '合格', validUntil: '2026-08-14' }
-    ],
-    registrationNo: '国械注进20173220190',
-    registrationValidUntil: '2028-11-18',
-    deviceClass: 'III类',
-    productionLicenseNo: '国械生产许20150022号',
-    photoUrl: 'https://images.unsplash.com/photo-1579165466511-71e5b8aa7789?auto=format&fit=crop&w=600&h=450&q=80'
-  }
-];
+
 
 export default function EquipmentArchives({
   onBackToTasks,
   onReportRepairFromEquip,
+  onQuickRepairCreated,
+  equipmentRecords,
+  onEquipmentRecordsChange,
   tasks = [],
   currentUser: propCurrentUser,
   onUserChange
 }: {
   onBackToTasks?: () => void;
   onReportRepairFromEquip?: (equip: MedicalEquipment) => void;
-  tasks?: any[];
+  onQuickRepairCreated?: (request: QuickRepairRequest) => boolean | void;
+  equipmentRecords?: MedicalEquipment[];
+  onEquipmentRecordsChange?: (equipments: MedicalEquipment[]) => void;
+  tasks?: StructuredTicket[];
   currentUser?: UserProfile;
   onUserChange?: (user: UserProfile) => void;
 }) {
@@ -558,6 +463,42 @@ export default function EquipmentArchives({
   const [quickRepairEquipId, setQuickRepairEquipId] = useState<string>('');
   const [quickRepairDesc, setQuickRepairDesc] = useState<string>('');
   const [quickRepairUrgency, setQuickRepairUrgency] = useState<'low' | 'medium' | 'high'>('medium');
+  const [archiveToast, setArchiveToast] = useState<ArchiveToast | null>(null);
+  const [archiveConfirmation, setArchiveConfirmation] = useState<ArchiveConfirmation | null>(null);
+  const archiveToastTimerRef = useRef<number | null>(null);
+
+  const showArchiveToast = (toast: ArchiveToast) => {
+    if (archiveToastTimerRef.current !== null) {
+      window.clearTimeout(archiveToastTimerRef.current);
+    }
+    setArchiveToast(toast);
+    archiveToastTimerRef.current = window.setTimeout(() => {
+      setArchiveToast(null);
+      archiveToastTimerRef.current = null;
+    }, 5000);
+  };
+
+  const requestArchiveConfirmation = (confirmation: ArchiveConfirmation) => {
+    setArchiveConfirmation(confirmation);
+  };
+
+  const handleCancelArchiveConfirmation = () => {
+    setArchiveConfirmation(null);
+  };
+
+  const handleConfirmArchiveAction = () => {
+    const action = archiveConfirmation?.onConfirm;
+    setArchiveConfirmation(null);
+    action?.();
+  };
+
+  useEffect(() => {
+    return () => {
+      if (archiveToastTimerRef.current !== null) {
+        window.clearTimeout(archiveToastTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (propCurrentUser) {
@@ -567,46 +508,54 @@ export default function EquipmentArchives({
 
   useEffect(() => {
     localStorage.setItem('simulated_current_user', JSON.stringify(currentUser));
-    if (onUserChange && currentUser.id !== propCurrentUser?.id) {
+    if (!propCurrentUser && onUserChange) {
       onUserChange(currentUser);
     }
-  }, [currentUser]);
+  }, [currentUser, onUserChange, propCurrentUser]);
 
   useEffect(() => {
     if (currentUser) {
-      if (currentUser.role === 'medical_staff' && currentUser.dept) {
-        setSelectedDept(currentUser.dept);
+      const userDepartment = currentUser.dept || currentUser.department;
+      setSearchTerm('');
+      setSelectedCategory('全部分类');
+      setSelectedStatus('全部状态');
+      setFilterMenuOpen(null);
+      setClinicalFilterMode('all_dept');
+      setMatrixSelectedCategory('全部分类');
+      setMatrixSelectedStatus('全部状态');
+      setMatrixSearchQuery('');
+      setMatrixSortField('deviceName');
+      setMatrixSortOrder('asc');
+      setMobileView('list');
+      if (currentUser.role === 'medical_staff' && userDepartment) {
+        setSelectedDept(userDepartment);
+        setMatrixSelectedDept(userDepartment);
         setOnlyMyDept(true);
       } else {
         setSelectedDept('全部科室');
+        setMatrixSelectedDept('全部科室');
         setOnlyMyDept(false);
       }
     }
-  }, [currentUser.id]);
+  }, [currentUser.id, currentUser.role, currentUser.dept, currentUser.department]);
 
   // 1. Data States
-  const [equipments, setEquipments] = useState<MedicalEquipment[]>(() => {
-    const saved = localStorage.getItem('medical_equipment_data');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error('Error parsing equipment from localStorage', e);
-      }
+  const [equipments, setEquipments] = useState<MedicalEquipment[]>(() => (
+    equipmentRecords || parseStoredEquipmentList(localStorage.getItem(EQUIPMENT_STORAGE_KEY)).equipments
+  ));
+  const isApplyingExternalEquipmentRecordsRef = useRef(false);
+
+  useEffect(() => {
+    if (equipmentRecords) {
+      isApplyingExternalEquipmentRecordsRef.current = true;
+      setEquipments(equipmentRecords);
     }
-    return DEFAULT_EQUIPMENT;
-  });
+  }, [equipmentRecords]);
 
   // Selected Equipment Focus state
   const [selectedId, setSelectedId] = useState<string>(() => {
-    const saved = localStorage.getItem('medical_equipment_data');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.length > 0) return parsed[0].id;
-      } catch (e) {}
-    }
-    return DEFAULT_EQUIPMENT[0].id;
+    const { equipments: storedEquipments } = parseStoredEquipmentList(localStorage.getItem(EQUIPMENT_STORAGE_KEY));
+    return storedEquipments[0]?.id || '';
   });
 
   // Filter States
@@ -620,6 +569,7 @@ export default function EquipmentArchives({
 
   // Top-level View Mode: 'inventory' (Standard 3-column list/dossier) | 'calendar' (Unified scheduling calendar) | 'matrix' (Department & type equipment matrix dashboard) | 'list' (Detailed list grid)
   const [viewMode, setViewMode] = useState<'inventory' | 'calendar' | 'matrix' | 'list'>('inventory');
+  const mainContainerRef = useRef<HTMLElement | null>(null);
 
   // Matrix and Category All Equipment Tab Filters
   const [matrixSelectedDept, setMatrixSelectedDept] = useState('全部科室');
@@ -672,7 +622,7 @@ export default function EquipmentArchives({
   
   // Log Add State
   const [newLogType, setNewLogType] = useState<'维修' | '保养'>('保养');
-  const [newLogDate, setNewLogDate] = useState(new Date().toISOString().split('T')[0]);
+  const [newLogDate, setNewLogDate] = useState(getLocalDateString);
   const [newLogTechnician, setNewLogTechnician] = useState('');
   const [newLogDescription, setNewLogDescription] = useState('');
   const [newLogCost, setNewLogCost] = useState(0);
@@ -684,7 +634,7 @@ export default function EquipmentArchives({
   const [newLogPmChecklist, setNewLogPmChecklist] = useState<string[]>(['外观清洁检查', '电源与接地安全', '功能自检测试']);
 
   // Calibration Add State
-  const [newCalDate, setNewCalDate] = useState(new Date().toISOString().split('T')[0]);
+  const [newCalDate, setNewCalDate] = useState(getLocalDateString);
   const [newCalAgency, setNewCalAgency] = useState('');
   const [newCalCertificateNo, setNewCalCertificateNo] = useState('');
   const [newCalResult, setNewCalResult] = useState<'合格' | '准用' | '限用' | '不合格'>('合格');
@@ -714,6 +664,7 @@ export default function EquipmentArchives({
   const [activePreviewPage, setActivePreviewPage] = useState<number>(1);
   const [isExtractingSnapshot, setIsExtractingSnapshot] = useState(false);
   const [hoveredSlice, setHoveredSlice] = useState<number | null>(null);
+  const snapshotExtractRequestVersionRef = useRef(0);
 
   // AI OCR Parser State
   const [isAiParserOpen, setIsAiParserOpen] = useState(false);
@@ -727,19 +678,177 @@ export default function EquipmentArchives({
   const [chatInput, setChatInput] = useState('');
   const [isChatSending, setIsChatSending] = useState(false);
   const [chatMessages, setChatMessages] = useState<Array<{role: 'user' | 'model', text: string}>>([
-    { role: 'model', text: '您好！我是AI临床医学装备管理工程师。请选择一台设备，我可以为您进行故障诊断、推荐预防性维保(PM)方案或提供专业的技术操作规范建议！' }
+    { role: 'model', text: createDiagnosticWelcome() }
   ]);
+
+  useEffect(() => {
+    mainContainerRef.current?.scrollTo({ top: 0, left: 0 });
+  }, [viewMode]);
+  const isChatSendingRef = useRef(false);
+  const chatRequestVersionRef = useRef(0);
+  const diagnosticChatSessionKeyRef = useRef('');
+  const archiveManageRequestVersionRef = useRef(0);
+  const canManageEquipmentArchiveRef = useRef(false);
 
   // 扫码报修状态与引用
   const [isScannerModalOpen, setIsScannerModalOpen] = useState(false);
   const [scannedSnResult, setScannedSnResult] = useState('');
   const [scannerCameraError, setScannerCameraError] = useState<string | null>(null);
+  const [scannerMatchError, setScannerMatchError] = useState<string | null>(null);
   const [isScannerCameraActive, setIsScannerCameraActive] = useState(false);
   const scannerVideoRef = useRef<HTMLVideoElement | null>(null);
   const scannerStreamRef = useRef<MediaStream | null>(null);
+  const scannerCameraRequestVersionRef = useRef(0);
+  const currentUserDepartment = currentUser.dept || currentUser.department;
+
+  const canCurrentUserReportEquipment = (equipment: MedicalEquipment) => {
+    return currentUser.role !== 'medical_staff' || !currentUserDepartment || isSameDepartment(equipment.dept, currentUserDepartment);
+  };
+  const hasActiveRepairWorkOrder = (equipment: MedicalEquipment) => {
+    return hasOpenEquipmentRepairWorkOrder(equipment);
+  };
+  const canStartQuickRepairForEquipment = (equipment: MedicalEquipment | null) => {
+    return !!equipment && canCurrentUserReportEquipment(equipment) && !hasActiveRepairWorkOrder(equipment);
+  };
+  const getDefaultQuickRepairUrgency = (equipment: MedicalEquipment | null): 'low' | 'medium' | 'high' => {
+    if (!equipment) return 'medium';
+    return equipment.category === '急救生命支持' || equipment.riskLevel === '高' ? 'high' : 'medium';
+  };
+  const resetQuickRepairDraft = (nextEquipmentId = '') => {
+    setQuickRepairEquipId(nextEquipmentId);
+    setQuickRepairDesc('');
+    const nextEquipment = nextEquipmentId ? equipments.find(eq => eq.id === nextEquipmentId) || null : null;
+    setQuickRepairUrgency(getDefaultQuickRepairUrgency(nextEquipment));
+  };
+  const getQuickRepairBlockMessage = (equipment: MedicalEquipment | null) => {
+    if (!equipment) return '请先选择需要报修的设备。';
+    if (!canCurrentUserReportEquipment(equipment)) {
+      return `当前临床账号只能为本科室设备发起报修：${currentUserDepartment}`;
+    }
+    if (hasActiveRepairWorkOrder(equipment)) {
+      return `设备【${equipment.deviceName}】已有进行中的维修工单，请在现有工单中补充故障信息，避免重复派单。`;
+    }
+    return '';
+  };
+  const canCurrentUserViewEquipment = (equipment: MedicalEquipment) => {
+    return currentUser.role !== 'medical_staff' || !currentUserDepartment || isSameDepartment(equipment.dept, currentUserDepartment);
+  };
+  const canCurrentUserViewTicket = (ticket: StructuredTicket) => {
+    return currentUser.role !== 'medical_staff' || !currentUserDepartment || isSameDepartment(ticket.department, currentUserDepartment);
+  };
+  const getRelatedTasksForEquipment = (equipment: MedicalEquipment) => {
+    return tasks
+      .filter(needsClinicalAcceptance)
+      .filter(t => t.deviceId === equipment.id || t.deviceId === equipment.sn || (t.deviceName === equipment.deviceName && isSameDepartment(t.department, equipment.dept)))
+      .filter(canCurrentUserViewTicket);
+  };
+  const canManageEquipmentArchive = currentUser.role === 'engineer';
+  canManageEquipmentArchiveRef.current = canManageEquipmentArchive;
+  const showArchiveManageBlockedToast = (actionName: string) => {
+    showArchiveToast({
+      type: 'warning',
+      message: `当前临床账号只能查看本科室设备并发起报修，不能执行${actionName}。请切换到医学装备科工程师账号后再操作。`
+    });
+  };
+  const ensureCanManageEquipmentArchive = (actionName: string) => {
+    if (canManageEquipmentArchive) return true;
+    showArchiveManageBlockedToast(actionName);
+    return false;
+  };
+  const beginArchiveAiAnalyze = (actionName: string) => {
+    if (!ensureCanManageEquipmentArchive(actionName)) return null;
+    archiveManageRequestVersionRef.current += 1;
+    setIsAnalyzing(true);
+    setAnalyzerError(null);
+    return archiveManageRequestVersionRef.current;
+  };
+  const isArchiveAiAnalyzeCurrent = (requestVersion: number) => (
+    requestVersion === archiveManageRequestVersionRef.current && canManageEquipmentArchiveRef.current
+  );
+
+  useEffect(() => {
+    if (canManageEquipmentArchive) return;
+    archiveManageRequestVersionRef.current += 1;
+    setIsAnalyzing(false);
+    setAnalyzerError(null);
+    setIsFormModalOpen(false);
+    setIsAiParserOpen(false);
+    setIsLogModalOpen(false);
+    setIsAttachmentModalOpen(false);
+    setIsDossierModalOpen(false);
+    setIsScannerModalOpen(false);
+    setIsQuickRepairModalOpen(false);
+    setArchiveConfirmation(null);
+    setIsPreviewOpen(false);
+    setPreviewFile(null);
+    setIsExtractingSnapshot(false);
+    snapshotExtractRequestVersionRef.current += 1;
+    resetQuickRepairDraft();
+    setFormMode('create');
+    setCurrentEditId(null);
+  }, [canManageEquipmentArchive]);
+
+  const visibleEquipments = equipments.filter(canCurrentUserViewEquipment);
+  const quickRepairableEquipments = visibleEquipments.filter(canStartQuickRepairForEquipment);
+  const firstQuickRepairableEquipment = quickRepairableEquipments[0] || null;
+  const clinicalQuickRepairBlockMessage = firstQuickRepairableEquipment
+    ? ''
+    : visibleEquipments.length === 0
+      ? '当前科室暂无可报修的在册设备。'
+      : '本科室设备已有进行中的维修工单，请在现有工单中补充故障信息，避免重复派单。';
+  const visibleDepartments: string[] = ['全部科室', ...Array.from(new Set(visibleEquipments.map(eq => eq.dept))).filter((dept): dept is string => Boolean(dept))];
+  const assetScopeLabel = currentUser.role === 'medical_staff' ? '本科室' : '全院';
+  const formatDepartmentScopeLabel = (dept: string) => {
+    if (dept !== '全部科室') return dept;
+    return currentUser.role === 'medical_staff' ? '本科室' : '全部科室';
+  };
+  const categories = ['全部分类', '急救生命支持', '影像诊断', '检验分析', '手术治疗', '其他'];
+  const statusOptions = ['全部状态', '正常运行', '故障维修', '计量中', '已停用'];
+
+  // Filtered Equipment List taking simulated user into account
+  const filteredEquipments = visibleEquipments.filter(eq => {
+    const matchesSearch = eq.deviceName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          eq.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          eq.sn.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          eq.manufacturer.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          eq.dept.toLowerCase().includes(searchTerm.toLowerCase());
+
+    // Default department match
+    let matchesDept = selectedDept === '全部科室' || isSameDepartment(eq.dept, selectedDept);
+
+    // 临床医护人员登录并且开启了"仅看我科室设备"
+    if (currentUser.role === 'medical_staff' && onlyMyDept && currentUserDepartment) {
+      if (clinicalFilterMode === 'my_reported') {
+        // "本科室在修设备" -> 所在科室 + 处于故障维修状态 或 含有进行中的维修工单
+        const hasActiveRepairs = eq.status === '故障维修' || eq.maintenanceLogs.some(log => log.type === '维修' && log.status === '进行中');
+        if (!hasActiveRepairs) return false;
+      }
+      matchesDept = isSameDepartment(eq.dept, currentUserDepartment);
+    }
+
+    const matchesCategory = selectedCategory === '全部分类' || eq.category === selectedCategory;
+    const matchesStatus = selectedStatus === '全部状态' || eq.status === selectedStatus;
+
+    return matchesSearch && matchesDept && matchesCategory && matchesStatus;
+  });
+
+  const matrixFilteredEquipments = visibleEquipments.filter(e => {
+    const matchesDept = matrixSelectedDept === '全部科室' || isSameDepartment(e.dept, matrixSelectedDept);
+    const matchesCategory = matrixSelectedCategory === '全部分类' || e.category === matrixSelectedCategory;
+    const matchesStatus = matrixSelectedStatus === '全部状态' || e.status === matrixSelectedStatus;
+    const matchesSearch = !matrixSearchQuery.trim() ||
+      e.deviceName.toLowerCase().includes(matrixSearchQuery.toLowerCase()) ||
+      e.sn.toLowerCase().includes(matrixSearchQuery.toLowerCase()) ||
+      e.model.toLowerCase().includes(matrixSearchQuery.toLowerCase()) ||
+      e.manufacturer.toLowerCase().includes(matrixSearchQuery.toLowerCase());
+
+    return matchesDept && matchesCategory && matchesStatus && matchesSearch;
+  });
 
   // 启动系统相机扫描仪
   const startScannerCamera = async () => {
+    const requestVersion = scannerCameraRequestVersionRef.current + 1;
+    scannerCameraRequestVersionRef.current = requestVersion;
     setScannerCameraError(null);
     setIsScannerCameraActive(true);
     try {
@@ -747,6 +856,10 @@ export default function EquipmentArchives({
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'environment' }
         });
+        if (requestVersion !== scannerCameraRequestVersionRef.current || !isScannerModalOpen) {
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
         scannerStreamRef.current = stream;
         if (scannerVideoRef.current) {
           scannerVideoRef.current.srcObject = stream;
@@ -758,6 +871,7 @@ export default function EquipmentArchives({
         throw new Error('浏览器不支持媒体设备接口，或者处于 Iframe 沙箱中被限制了摄像头权限。');
       }
     } catch (err: any) {
+      if (requestVersion !== scannerCameraRequestVersionRef.current || !isScannerModalOpen) return;
       console.warn("Camera access failed, falling back to simulator: ", err);
       setScannerCameraError(err.message || '获取摄像头失败，已启用模拟扫描。');
     }
@@ -765,6 +879,7 @@ export default function EquipmentArchives({
 
   // 关闭系统相机
   const stopScannerCamera = () => {
+    scannerCameraRequestVersionRef.current += 1;
     if (scannerStreamRef.current) {
       scannerStreamRef.current.getTracks().forEach(track => track.stop());
       scannerStreamRef.current = null;
@@ -778,14 +893,13 @@ export default function EquipmentArchives({
   // 相机模态框开关生命周期监听
   useEffect(() => {
     if (isScannerModalOpen) {
+      setScannerMatchError(null);
       startScannerCamera();
     } else {
       stopScannerCamera();
     }
     return () => {
-      if (scannerStreamRef.current) {
-        scannerStreamRef.current.getTracks().forEach(track => track.stop());
-      }
+      stopScannerCamera();
     };
   }, [isScannerModalOpen]);
 
@@ -793,6 +907,7 @@ export default function EquipmentArchives({
   const handleScannedSn = (snCode: string) => {
     const snTrimmed = snCode.trim();
     if (!snTrimmed) return;
+    setScannerMatchError(null);
     
     const matched = equipments.find(eq => 
       eq.sn.trim().toLowerCase() === snTrimmed.toLowerCase() ||
@@ -800,8 +915,18 @@ export default function EquipmentArchives({
     );
 
     if (matched) {
+      const quickRepairBlockMessage = getQuickRepairBlockMessage(matched);
+      if (quickRepairBlockMessage) {
+        setScannerMatchError(
+          !canCurrentUserReportEquipment(matched)
+            ? `已识别设备【${matched.deviceName}】，但其归属科室为【${matched.dept}】。当前临床账号只能为【${currentUserDepartment}】设备发起扫码报修。`
+            : quickRepairBlockMessage
+        );
+        return;
+      }
+
       setSelectedId(matched.id);
-      setQuickRepairEquipId(matched.id);
+      resetQuickRepairDraft(matched.id);
       setIsScannerModalOpen(false);
       
       // 直接定位并自动填充报修工单
@@ -809,14 +934,21 @@ export default function EquipmentArchives({
       setQuickRepairUrgency('high'); // 扫码报修通常用于紧急的床旁或现场报修，默认置高
       setIsQuickRepairModalOpen(true);
     } else {
-      alert(`⚠️ 扫码匹配提示：\n未找到原厂SN序列号为 【${snTrimmed}】 的在册医疗设备档案。\n请核对设备标签或前往手动新增。`);
+      setScannerMatchError(`未找到原厂SN序列号为【${snTrimmed}】的在册医疗设备档案，请核对设备标签或前往手动新增。`);
     }
   };
 
   // Save to local storage whenever equipment state changes
   useEffect(() => {
-    localStorage.setItem('medical_equipment_data', JSON.stringify(equipments));
-  }, [equipments]);
+    if (equipmentRecords && isApplyingExternalEquipmentRecordsRef.current) {
+      if (equipments === equipmentRecords) {
+        isApplyingExternalEquipmentRecordsRef.current = false;
+      }
+      return;
+    }
+    localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(equipments));
+    onEquipmentRecordsChange?.(equipments);
+  }, [equipments, equipmentRecords, onEquipmentRecordsChange]);
 
   // Listen to deep linking events to select equipment
   useEffect(() => {
@@ -825,8 +957,28 @@ export default function EquipmentArchives({
       if (equipId) {
         const found = equipments.find(eq => eq.id === equipId || eq.sn === equipId);
         if (found) {
+          if (!canCurrentUserViewEquipment(found)) {
+            showArchiveToast({
+              type: 'warning',
+              message: `当前临床账号只能查看本科室设备：${currentUserDepartment}`
+            });
+            return;
+          }
+
           setSelectedId(found.id);
           setViewMode('inventory');
+          setMobileView('detail');
+          setSearchTerm('');
+          setSelectedCategory('全部分类');
+          setSelectedStatus('全部状态');
+          setFilterMenuOpen(null);
+          setClinicalFilterMode('all_dept');
+          if (currentUser.role === 'medical_staff' && currentUserDepartment) {
+            setSelectedDept(currentUserDepartment);
+            setOnlyMyDept(true);
+          } else {
+            setSelectedDept('全部科室');
+          }
           if (e.detail?.activeTab) {
             setActiveTab(e.detail.activeTab);
           }
@@ -837,87 +989,148 @@ export default function EquipmentArchives({
     return () => {
       window.removeEventListener('deep-link-equipment', handleDeepLinkEquipment);
     };
-  }, [equipments]);
+  }, [equipments, currentUser.id, currentUserDepartment]);
 
   // Keep selectedId valid in the filtered list when filters or roles change
   useEffect(() => {
-    if (filteredEquipments.length > 0) {
-      const isStillVisible = filteredEquipments.some(eq => eq.id === selectedId);
-      if (!isStillVisible) {
-        setSelectedId(filteredEquipments[0].id);
+    if (filteredEquipments.length === 0) {
+      if (selectedId) {
+        setSelectedId('');
       }
+      if (mobileView === 'detail') {
+        setMobileView('list');
+      }
+      return;
     }
-  }, [currentUser, onlyMyDept, clinicalFilterMode, selectedDept, selectedCategory, selectedStatus, searchTerm, equipments]);
 
-  const selectedEquipment = equipments.find(eq => eq.id === selectedId) || equipments[0];
+    const isStillVisible = filteredEquipments.some(eq => eq.id === selectedId);
+    if (!isStillVisible) {
+      setSelectedId(filteredEquipments[0].id);
+    }
+  }, [currentUser, onlyMyDept, clinicalFilterMode, selectedDept, selectedCategory, selectedStatus, searchTerm, equipments, selectedId, mobileView]);
 
-  // Refresh AI Chat context on device select change
+  const selectedEquipment = filteredEquipments.find(eq => eq.id === selectedId) || filteredEquipments[0] || null;
+  const currentDiagnosticSessionKey = getDiagnosticSessionKey(selectedEquipment, currentUser);
+  const quickRepairEquipment = equipments.find(eq => eq.id === quickRepairEquipId) || null;
+  const quickRepairSubmitBlockMessage = getQuickRepairBlockMessage(quickRepairEquipment);
+  const quickRepairSubmitDisabledReason = quickRepairSubmitBlockMessage || (!quickRepairDesc.trim() ? '请填写故障现象描述。' : '');
+  const canSubmitQuickRepair = !quickRepairSubmitDisabledReason;
+
+  const previewFileBelongsToSelectedEquipment = Boolean(
+    selectedEquipment && previewFile && selectedEquipment.attachments.some(file => file.id === previewFile.id)
+  );
+  const maintenanceLogBelongsToSelectedEquipment = Boolean(
+    selectedEquipment && viewMaintenanceLog && selectedEquipment.maintenanceLogs.some(log => log.id === viewMaintenanceLog.id)
+  );
+  const calibrationLogBelongsToSelectedEquipment = Boolean(
+    selectedEquipment && viewCalibrationLog && selectedEquipment.calibrationLogs.some(log => log.id === viewCalibrationLog.id)
+  );
+
   useEffect(() => {
-    if (selectedEquipment) {
-      setChatMessages([
-        { role: 'model', text: `您已选中【${selectedEquipment.deviceName}】(型号: ${selectedEquipment.model})。我可以协助您：\n1. 诊断可能出现的故障代码与排故方案。\n2. 提供该设备的年/季预防性维护 (PM) 技术大纲。\n3. 解答临床操作、计量检测规范或日常消毒疑问。` }
-      ]);
+    if (isPreviewOpen && !previewFileBelongsToSelectedEquipment) {
+      setIsPreviewOpen(false);
+      setPreviewFile(null);
+      setActivePreviewPage(1);
+      setIsExtractingSnapshot(false);
+      snapshotExtractRequestVersionRef.current += 1;
     }
-  }, [selectedId]);
+  }, [isPreviewOpen, previewFileBelongsToSelectedEquipment]);
 
-  // Unique lists for filtering dropdowns
-  const departments = ['全部科室', ...Array.from(new Set(equipments.map(eq => eq.dept)))];
-  const categories = ['全部分类', '急救生命支持', '影像诊断', '检验分析', '手术治疗', '其他'];
-  const statusOptions = ['全部状态', '正常运行', '故障维修', '计量中', '已停用'];
-
-  // Filtered Equipment List taking simulated user into account
-  const filteredEquipments = equipments.filter(eq => {
-    const matchesSearch = eq.deviceName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          eq.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          eq.sn.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          eq.manufacturer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          eq.dept.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    // Default department match
-    let matchesDept = selectedDept === '全部科室' || eq.dept === selectedDept;
-
-    // 临床医护人员登录并且开启了"仅看我科室设备"
-    if (currentUser.role === 'medical_staff' && onlyMyDept && currentUser.dept) {
-      if (clinicalFilterMode === 'my_reported') {
-        // "已经报修的设备" -> 所在科室 + 处于故障维修状态 或 含有进行中的维修工单
-        const hasActiveRepairs = eq.status === '故障维修' || eq.maintenanceLogs.some(log => log.type === '维修' && log.status === '进行中');
-        if (!hasActiveRepairs) return false;
-      }
-      matchesDept = eq.dept === currentUser.dept;
+  useEffect(() => {
+    if (viewMaintenanceLog && !maintenanceLogBelongsToSelectedEquipment) {
+      setViewMaintenanceLog(null);
     }
+    if (viewCalibrationLog && !calibrationLogBelongsToSelectedEquipment) {
+      setViewCalibrationLog(null);
+    }
+  }, [
+    viewMaintenanceLog,
+    viewCalibrationLog,
+    maintenanceLogBelongsToSelectedEquipment,
+    calibrationLogBelongsToSelectedEquipment
+  ]);
 
-    const matchesCategory = selectedCategory === '全部分类' || eq.category === selectedCategory;
-    const matchesStatus = selectedStatus === '全部状态' || eq.status === selectedStatus;
-    
-    return matchesSearch && matchesDept && matchesCategory && matchesStatus;
-  });
+  useEffect(() => {
+    if (!quickRepairEquipId) return;
+    const quickRepairEquipment = equipments.find(eq => eq.id === quickRepairEquipId);
+    if (quickRepairEquipment && canStartQuickRepairForEquipment(quickRepairEquipment)) return;
+
+    const fallbackEquipment = visibleEquipments.find(canStartQuickRepairForEquipment);
+    resetQuickRepairDraft(fallbackEquipment?.id || '');
+  }, [quickRepairEquipId, currentUser.id, currentUserDepartment, equipments, visibleEquipments]);
+
+  // Refresh AI Chat context on device and user change
+  useEffect(() => {
+    diagnosticChatSessionKeyRef.current = currentDiagnosticSessionKey;
+    chatRequestVersionRef.current += 1;
+    isChatSendingRef.current = false;
+    setIsChatSending(false);
+    setChatInput('');
+    setChatMessages([
+      { role: 'model', text: createDiagnosticWelcome(selectedEquipment, currentUser) }
+    ]);
+  }, [
+    currentDiagnosticSessionKey,
+    selectedEquipment?.deviceName,
+    selectedEquipment?.model,
+    selectedEquipment?.sn,
+    currentUser.role,
+    currentUserDepartment
+  ]);
+
+  // Unique list for filtering dropdowns
+  const departments = visibleDepartments;
 
   // Calculate Overall院 Dashboard stats
-  const totalAssetsValue = equipments.reduce((sum, eq) => sum + eq.purchaseCost, 0);
-  const totalEquipments = equipments.length;
-  const perfectRate = ((equipments.filter(eq => eq.status === '正常运行').length / totalEquipments) * 100).toFixed(1);
-  const troubleCount = equipments.filter(eq => eq.status === '故障维修').length;
-  const calibrationReminderCount = equipments.filter(eq => {
+  const totalAssetsValue = visibleEquipments.reduce((sum, eq) => sum + eq.purchaseCost, 0);
+  const totalEquipments = visibleEquipments.length;
+  const perfectRate = totalEquipments > 0 ? ((visibleEquipments.filter(eq => eq.status === '正常运行').length / totalEquipments) * 100).toFixed(1) : '0.0';
+  const troubleCount = visibleEquipments.filter(eq => eq.status === '故障维修').length;
+  const calibrationReminderCount = visibleEquipments.filter(eq => {
     if (!eq.calibrationRequired || !eq.nextCalibrationDate) return false;
-    const nextCal = new Date(eq.nextCalibrationDate).getTime();
-    const today = new Date('2026-07-01').getTime(); // Using static current time from environment metadata
-    const diffDays = (nextCal - today) / (1000 * 3600 * 24);
+    const diffDays = getDateDiffDaysFromToday(eq.nextCalibrationDate);
+    if (diffDays === null) return false;
     return diffDays >= 0 && diffDays <= 30; // Within 30 days
   }).length;
 
+  const deleteEquipmentAfterConfirmation = (id: string) => {
+    if (!canManageEquipmentArchive) {
+      showArchiveManageBlockedToast('档案作废删除');
+      return;
+    }
+
+    setEquipments(prevEquipments => {
+      const nextEquipments = prevEquipments.filter(eq => eq.id !== id);
+      localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));
+      return nextEquipments;
+    });
+  };
+
   // Handle Equipment deletion
   const handleDelete = (id: string) => {
-    if (window.confirm('您确定要永久删除该设备的全部档案、维保记录和附件吗？此操作不可撤销。')) {
-      const nextList = equipments.filter(eq => eq.id !== id);
-      setEquipments(nextList);
-      if (selectedId === id && nextList.length > 0) {
-        setSelectedId(nextList[0].id);
-      }
+    if (!canManageEquipmentArchive) {
+      showArchiveManageBlockedToast('档案作废删除');
+      return;
     }
+
+    const targetEquipment = equipments.find(eq => eq.id === id);
+    requestArchiveConfirmation({
+      id: 'delete-equipment',
+      title: '删除设备档案',
+      description: `确定要永久删除设备档案 ${targetEquipment?.deviceName || id} 及其维保记录、计量证书和附件吗？此操作不可撤销。`,
+      confirmLabel: '永久删除',
+      tone: 'danger',
+      onConfirm: () => deleteEquipmentAfterConfirmation(id)
+    });
   };
 
   // Open modal for Create
   const openCreateModal = () => {
+    if (!canManageEquipmentArchive) {
+      showArchiveManageBlockedToast('手动新增档案');
+      return;
+    }
+
     setFormMode('create');
     setCurrentEditId(null);
     setFormDeviceName('');
@@ -930,7 +1143,7 @@ export default function EquipmentArchives({
     setFormDept('放射科');
     setFormStatus('正常运行');
     setFormRiskLevel('中');
-    setFormPurchaseDate(new Date().toISOString().split('T')[0]);
+    setFormPurchaseDate(getLocalDateString());
     setFormPurchaseCost(0);
     setFormMaintenanceCycleDays(180);
     setFormCalibrationRequired(false);
@@ -944,6 +1157,11 @@ export default function EquipmentArchives({
 
   // Open modal for Edit
   const openEditModal = (eq: MedicalEquipment) => {
+    if (!canManageEquipmentArchive) {
+      showArchiveManageBlockedToast('修改设备档案');
+      return;
+    }
+
     setFormMode('edit');
     setCurrentEditId(eq.id);
     setFormDeviceName(eq.deviceName);
@@ -970,6 +1188,11 @@ export default function EquipmentArchives({
 
   // Open modal for cloning / quick duplicating
   const openCloneModal = (eq: MedicalEquipment) => {
+    if (!canManageEquipmentArchive) {
+      showArchiveManageBlockedToast('克隆复制档案');
+      return;
+    }
+
     setFormMode('create');
     setCurrentEditId(null);
     setFormDeviceName(eq.deviceName);
@@ -982,7 +1205,7 @@ export default function EquipmentArchives({
     setFormDept(eq.dept);
     setFormStatus('正常运行');
     setFormRiskLevel(eq.riskLevel);
-    setFormPurchaseDate(new Date().toISOString().split('T')[0]);
+    setFormPurchaseDate(getLocalDateString());
     setFormPurchaseCost(eq.purchaseCost);
     setFormMaintenanceCycleDays(eq.maintenanceCycleDays);
     setFormCalibrationRequired(eq.calibrationRequired);
@@ -997,19 +1220,26 @@ export default function EquipmentArchives({
   // Save Equipment Form
   const saveEquipmentForm = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageEquipmentArchive) {
+      showArchiveManageBlockedToast('保存设备档案');
+      return;
+    }
+
     if (!formDeviceName.trim() || !formModel.trim() || !formManufacturer.trim() || !formDept.trim()) {
-      alert('请完整填写基本档案中的必填项！');
+      showArchiveToast({
+        type: 'warning',
+        title: '档案信息未完整',
+        message: '请完整填写基本档案中的必填项！'
+      });
       return;
     }
 
     // Calc Next maintenance date automatically based on purchase date/last maintenance
-    const purchaseDateObj = new Date(formPurchaseDate);
-    const nextMaintenanceObj = new Date(purchaseDateObj.getTime() + formMaintenanceCycleDays * 24 * 60 * 60 * 1000);
-    const nextMaintenanceStr = nextMaintenanceObj.toISOString().split('T')[0];
+    const nextMaintenanceStr = addLocalDays(formPurchaseDate, formMaintenanceCycleDays);
 
     // Calc next calibration date
     const nextCalibrationStr = formCalibrationRequired 
-      ? new Date(purchaseDateObj.getTime() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+      ? addLocalDays(formPurchaseDate, 365)
       : undefined;
 
     if (formMode === 'create') {
@@ -1055,15 +1285,26 @@ export default function EquipmentArchives({
         };
       });
 
-      setEquipments([...newEqs, ...equipments]);
+      setEquipments(prevEquipments => {
+        const nextEquipments = [...newEqs, ...prevEquipments];
+        localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));
+        return nextEquipments;
+      });
       setSelectedId(newEqs[0].id);
       
       if (newEqs.length > 1) {
-        alert(`🎉 批量导入成功！已成功一键新增 ${newEqs.length} 台具有相同名称规格（型号：${formModel}）的设备档案。`);
+        showArchiveToast({
+          type: 'success',
+          title: '批量导入成功',
+          message: `已一键新增 ${newEqs.length} 台具有相同名称规格（型号：${formModel}）的设备档案。`
+        });
       }
     } else {
-      setEquipments(equipments.map(eq => {
-        if (eq.id === currentEditId) {
+      if (!currentEditId) return;
+      setEquipments(prevEquipments => {
+        const nextEquipments = prevEquipments.map(eq => {
+          if (eq.id !== currentEditId) return eq;
+
           return {
             ...eq,
             deviceName: formDeviceName,
@@ -1088,9 +1329,10 @@ export default function EquipmentArchives({
             productionLicenseNo: formProductionLicenseNo || undefined,
             photoUrl: formPhotoUrl || undefined
           };
-        }
-        return eq;
-      }));
+        });
+        localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));
+        return nextEquipments;
+      });
     }
     setIsFormModalOpen(false);
   };
@@ -1099,56 +1341,54 @@ export default function EquipmentArchives({
   const handleQuickRepairSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!quickRepairEquipId) {
-      alert('请选择需要报修的设备！');
+      showArchiveToast({
+        type: 'warning',
+        title: '请选择设备',
+        message: '请选择需要报修的设备！'
+      });
       return;
     }
     if (!quickRepairDesc.trim()) {
-      alert('请填写故障现象描述！');
+      showArchiveToast({
+        type: 'warning',
+        title: '故障描述为空',
+        message: '请填写故障现象描述！'
+      });
       return;
     }
 
     const targetEq = equipments.find(eq => eq.id === quickRepairEquipId);
     if (!targetEq) return;
+    const quickRepairBlockMessage = getQuickRepairBlockMessage(targetEq);
+    if (quickRepairBlockMessage) {
+      showArchiveToast({
+        type: 'warning',
+        message: quickRepairBlockMessage
+      });
+      return;
+    }
 
-    // Create a new maintenance log
-    const newLog: MaintenanceLog = {
-      id: 'm-log-' + Date.now(),
-      type: '维修',
-      date: new Date('2026-07-02').toISOString().split('T')[0], // matching local mock date 2026-07-02
-      technician: '未分派 (待响应)',
-      cost: 0,
-      description: `【一键快捷报修】紧急度: ${quickRepairUrgency === 'high' ? '高' : quickRepairUrgency === 'medium' ? '中' : '低'}。描述: ${quickRepairDesc}`,
-      status: '进行中',
-      workOrderNo: `WO-20260702-${Math.floor(1000 + Math.random() * 9000)}`,
-      faultPhenomenon: quickRepairDesc,
-      partsReplaced: '待查',
-      verifyPerson: currentUser.name
-    };
+    const workOrderNo = createQuickRepairRecord(targetEq, quickRepairDesc.trim(), quickRepairUrgency);
+    if (!workOrderNo) return;
 
-    // Update equipment list
-    const updatedEquipments = equipments.map(eq => {
-      if (eq.id === quickRepairEquipId) {
-        return {
-          ...eq,
-          status: '故障维修' as const,
-          maintenanceLogs: [newLog, ...(eq.maintenanceLogs || [])]
-        };
-      }
-      return eq;
-    });
-
-    setEquipments(updatedEquipments);
     setIsQuickRepairModalOpen(false);
-    setQuickRepairDesc('');
-    setQuickRepairUrgency('medium');
-    alert(`🎉 报修成功！已将设备【${targetEq.deviceName}】(SN: ${targetEq.sn}) 状态更新为“故障维修”，并已实时通知值班工程师，生成进行中维修工单。`);
+    resetQuickRepairDraft();
+    showArchiveToast({
+      type: 'success',
+      message: `报修成功：${targetEq.deviceName} 已同步生成主工单与档案维修记录 ${workOrderNo}`
+    });
   };
 
   // Add Log Entry (Maintenance)
   const handleAddMaintenanceLog = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!ensureCanManageEquipmentArchive('新增维保工单')) return;
     if (!newLogTechnician.trim() || !newLogDescription.trim()) {
-      alert('请填写技术员姓名与工作描述！');
+      showArchiveToast({
+        type: 'warning',
+        title: '维保信息未完整',
+        message: '请填写技术员姓名与工作描述！'
+      });
       return;
     }
 
@@ -1168,8 +1408,9 @@ export default function EquipmentArchives({
       pmChecklist: newLogType === '保养' ? newLogPmChecklist : []
     };
 
-    setEquipments(equipments.map(eq => {
-      if (eq.id === selectedId) {
+    setEquipments(prevEquipments => {
+      const nextEquipments = prevEquipments.map(eq => {
+        if (eq.id !== selectedId) return eq;
         // Also update equipment dates & status if relevant
         const updatedLogs = [log, ...eq.maintenanceLogs];
         const updatedStatus = log.status === '进行中' && log.type === '维修' ? '故障维修' : eq.status;
@@ -1178,13 +1419,14 @@ export default function EquipmentArchives({
           status: updatedStatus,
           lastMaintenanceDate: log.type === '保养' ? log.date : eq.lastMaintenanceDate,
           nextMaintenanceDate: log.type === '保养' 
-            ? new Date(new Date(log.date).getTime() + eq.maintenanceCycleDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+            ? addLocalDays(log.date, eq.maintenanceCycleDays)
             : eq.nextMaintenanceDate,
           maintenanceLogs: updatedLogs
         };
-      }
-      return eq;
-    }));
+      });
+      localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));
+      return nextEquipments;
+    });
 
     // Reset fields
     setNewLogDescription('');
@@ -1199,8 +1441,13 @@ export default function EquipmentArchives({
   // Add Calibration Log
   const handleAddCalibrationLog = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!ensureCanManageEquipmentArchive('登记计量证书')) return;
     if (!newCalAgency.trim() || !newCalCertificateNo.trim() || !newCalValidUntil) {
-      alert('请填写完整计量单位、证书编号及有效期！');
+      showArchiveToast({
+        type: 'warning',
+        title: '计量证书信息未完整',
+        message: '请填写完整计量单位、证书编号及有效期！'
+      });
       return;
     }
 
@@ -1218,8 +1465,9 @@ export default function EquipmentArchives({
       errorDescription: newCalErrorDescription || '各项检定物理指标良好，综合误差在法定合格允许公差范围内。'
     };
 
-    setEquipments(equipments.map(eq => {
-      if (eq.id === selectedId) {
+    setEquipments(prevEquipments => {
+      const nextEquipments = prevEquipments.map(eq => {
+        if (eq.id !== selectedId) return eq;
         return {
           ...eq,
           status: log.result === '合格' || log.result === '准用' ? '正常运行' : '计量中',
@@ -1227,9 +1475,10 @@ export default function EquipmentArchives({
           nextCalibrationDate: log.validUntil,
           calibrationLogs: [log, ...eq.calibrationLogs]
         };
-      }
-      return eq;
-    }));
+      });
+      localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));
+      return nextEquipments;
+    });
 
     // Reset fields
     setNewCalAgency('');
@@ -1241,39 +1490,92 @@ export default function EquipmentArchives({
     setIsLogModalOpen(false);
   };
 
-  // Delete Maintenance Log
-  const handleDeleteMaintenanceLog = (logId: string) => {
-    if (!window.confirm('您确定要永久删除此条维保履历记录吗？')) return;
-    setEquipments(equipments.map(eq => {
-      if (eq.id === selectedId) {
+  const deleteMaintenanceLogAfterConfirmation = (logId: string) => {
+    if (!ensureCanManageEquipmentArchive('删除维保履历记录')) return;
+    setEquipments(prevEquipments => {
+      const nextEquipments = prevEquipments.map(eq => {
+        if (eq.id !== selectedId) return eq;
         return {
           ...eq,
           maintenanceLogs: eq.maintenanceLogs.filter(log => log.id !== logId)
         };
-      }
-      return eq;
-    }));
+      });
+      localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));
+      return nextEquipments;
+    });
   };
 
-  // Delete Calibration Log
-  const handleDeleteCalibrationLog = (calId: string) => {
-    if (!window.confirm('您确定要永久删除此条法定计量强检记录及证书档案吗？')) return;
-    setEquipments(equipments.map(eq => {
-      if (eq.id === selectedId) {
+  // Delete Maintenance Log
+  const handleDeleteMaintenanceLog = (logId: string) => {
+    if (!ensureCanManageEquipmentArchive('删除维保履历记录')) return;
+    const targetLog = selectedEquipment?.maintenanceLogs.find(log => log.id === logId);
+    requestArchiveConfirmation({
+      id: 'delete-maintenance-log',
+      title: '删除维保履历',
+      description: `确定要永久删除这条维保履历${targetLog?.workOrderNo ? `（${targetLog.workOrderNo}）` : ''}吗？删除后设备维修审计链中将不再显示该记录。`,
+      confirmLabel: '删除履历',
+      tone: 'danger',
+      onConfirm: () => deleteMaintenanceLogAfterConfirmation(logId)
+    });
+  };
+
+  const deleteCalibrationLogAfterConfirmation = (calId: string) => {
+    if (!ensureCanManageEquipmentArchive('注销计量证书')) return;
+    setEquipments(prevEquipments => {
+      const nextEquipments = prevEquipments.map(eq => {
+        if (eq.id !== selectedId) return eq;
         return {
           ...eq,
           calibrationLogs: eq.calibrationLogs.filter(cal => cal.id !== calId)
         };
-      }
-      return eq;
-    }));
+      });
+      localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));
+      return nextEquipments;
+    });
+  };
+
+  // Delete Calibration Log
+  const handleDeleteCalibrationLog = (calId: string) => {
+    if (!ensureCanManageEquipmentArchive('注销计量证书')) return;
+    const targetCalibration = selectedEquipment?.calibrationLogs.find(cal => cal.id === calId);
+    requestArchiveConfirmation({
+      id: 'delete-calibration-log',
+      title: '删除计量证书记录',
+      description: `确定要永久删除这条法定计量/校准记录${targetCalibration?.certificateNo ? `（证书号：${targetCalibration.certificateNo}）` : ''}吗？此操作会从设备档案中移除对应证书追溯信息。`,
+      confirmLabel: '删除证书记录',
+      tone: 'danger',
+      onConfirm: () => deleteCalibrationLogAfterConfirmation(calId)
+    });
+  };
+
+  const handleDeleteExtractedSnapshot = (snapshotId: string) => {
+    if (!ensureCanManageEquipmentArchive('解除技术手册快照关联')) return;
+    if (!selectedEquipment) return;
+    const targetEquipmentId = selectedEquipment.id;
+
+    setEquipments(prevEquipments => {
+      const nextEquipments = prevEquipments.map(eq => {
+        if (eq.id !== targetEquipmentId) return eq;
+        return {
+          ...eq,
+          extractedSnapshots: (eq.extractedSnapshots || []).filter(s => s.id !== snapshotId)
+        };
+      });
+      localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));
+      return nextEquipments;
+    });
   };
 
   // Add Attachment Item
   const handleAddAttachment = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!ensureCanManageEquipmentArchive('上传资料附件')) return;
     if (!newAttachName.trim()) {
-      alert('请填写资料附件名称！');
+      showArchiveToast({
+        type: 'warning',
+        title: '附件名称为空',
+        message: '请填写资料附件名称！'
+      });
       return;
     }
 
@@ -1282,18 +1584,20 @@ export default function EquipmentArchives({
       name: newAttachName + (newAttachName.includes('.') ? '' : '.pdf'),
       type: newAttachType,
       size: newAttachSize || '2.0 MB',
-      uploadDate: new Date().toISOString().split('T')[0]
+      uploadDate: getLocalDateString()
     };
 
-    setEquipments(equipments.map(eq => {
-      if (eq.id === selectedId) {
+    setEquipments(prevEquipments => {
+      const nextEquipments = prevEquipments.map(eq => {
+        if (eq.id !== selectedId) return eq;
         return {
           ...eq,
           attachments: [...eq.attachments, attach]
         };
-      }
-      return eq;
-    }));
+      });
+      localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));
+      return nextEquipments;
+    });
 
     setNewAttachName('');
     setIsAttachmentModalOpen(false);
@@ -1301,8 +1605,8 @@ export default function EquipmentArchives({
 
   // AI OCR Parser simulation with presets
   const runPresetOcr = (presetNum: number) => {
-    setIsAnalyzing(true);
-    setAnalyzerError(null);
+    const requestVersion = beginArchiveAiAnalyze('AI 扫码入库');
+    if (requestVersion === null) return;
     let sampleText = '';
     
     if (presetNum === 1) {
@@ -1331,6 +1635,7 @@ Clinical class: Life-saving respiratory device`;
     // Call the server Gemini analyze endpoint
     analyzeGeminiContent({ textContext: sampleText })
       .then(result => {
+        if (!isArchiveAiAnalyzeCurrent(requestVersion)) return;
         setIsAnalyzing(false);
         if (result.error) {
           setAnalyzerError(result.error);
@@ -1346,7 +1651,7 @@ Clinical class: Life-saving respiratory device`;
           setFormCalibrationRequired(data.calibrationRequired || false);
           setFormRiskLevel(data.riskLevel || '中');
           setFormDept('放射科');
-          setFormPurchaseDate(new Date().toISOString().split('T')[0]);
+          setFormPurchaseDate(getLocalDateString());
           setFormPurchaseCost(45000); // Placeholder cost
           setFormStatus('正常运行');
           
@@ -1356,6 +1661,7 @@ Clinical class: Life-saving respiratory device`;
         }
       })
       .catch(err => {
+        if (!isArchiveAiAnalyzeCurrent(requestVersion)) return;
         setIsAnalyzing(false);
         setAnalyzerError(err.message || '分析时发生网络错误');
       });
@@ -1364,14 +1670,19 @@ Clinical class: Life-saving respiratory device`;
   // Run Custom Text OCR or Image upload OCR via Gemini API
   const handleCustomOcrAnalyze = () => {
     if (!aiInputText.trim()) {
-      alert('请输入铭牌描述、规格单据文本或上传附件描述！');
+      showArchiveToast({
+        type: 'warning',
+        title: '缺少解析文本',
+        message: '请输入铭牌描述、规格单据文本或上传附件描述！'
+      });
       return;
     }
-    setIsAnalyzing(true);
-    setAnalyzerError(null);
+    const requestVersion = beginArchiveAiAnalyze('AI 扫码入库');
+    if (requestVersion === null) return;
 
     analyzeGeminiContent({ textContext: aiInputText }, 'AI 服务处理异常')
       .then(result => {
+        if (!isArchiveAiAnalyzeCurrent(requestVersion)) return;
         setIsAnalyzing(false);
         if (result.error) {
           setAnalyzerError(result.error);
@@ -1386,7 +1697,7 @@ Clinical class: Life-saving respiratory device`;
           setFormCalibrationRequired(data.calibrationRequired || false);
           setFormRiskLevel(data.riskLevel || '中');
           setFormDept('医学装备科');
-          setFormPurchaseDate(new Date().toISOString().split('T')[0]);
+          setFormPurchaseDate(getLocalDateString());
           setFormPurchaseCost(0);
           setFormStatus('正常运行');
 
@@ -1396,6 +1707,7 @@ Clinical class: Life-saving respiratory device`;
         }
       })
       .catch(err => {
+        if (!isArchiveAiAnalyzeCurrent(requestVersion)) return;
         setIsAnalyzing(false);
         setAnalyzerError(err.message || '通信故障，请稍后再试');
       });
@@ -1403,8 +1715,12 @@ Clinical class: Life-saving respiratory device`;
 
   // Chat with AI Diagnostician Expert
   const sendChatMessage = () => {
-    if (!chatInput.trim() || !selectedEquipment) return;
+    if (!chatInput.trim() || !selectedEquipment || isChatSendingRef.current) return;
+    isChatSendingRef.current = true;
     const userMsg = chatInput;
+    const requestVersion = chatRequestVersionRef.current;
+    const requestSessionKey = currentDiagnosticSessionKey;
+    diagnosticChatSessionKeyRef.current = currentDiagnosticSessionKey;
     setChatInput('');
     
     const newHistory = [...chatMessages, { role: 'user' as const, text: userMsg }];
@@ -1422,6 +1738,8 @@ Clinical class: Life-saving respiratory device`;
       messageHistory: formattedHistory
     })
       .then(result => {
+        if (requestVersion !== chatRequestVersionRef.current || requestSessionKey !== diagnosticChatSessionKeyRef.current) return;
+        isChatSendingRef.current = false;
         setIsChatSending(false);
         if (result.text) {
           setChatMessages([...newHistory, { role: 'model', text: result.text }]);
@@ -1430,6 +1748,8 @@ Clinical class: Life-saving respiratory device`;
         }
       })
       .catch(err => {
+        if (requestVersion !== chatRequestVersionRef.current || requestSessionKey !== diagnosticChatSessionKeyRef.current) return;
+        isChatSendingRef.current = false;
         setIsChatSending(false);
         setChatMessages([...newHistory, { role: 'model', text: `[错误] 无法连接到 AI 诊断服务端: ${err.message}` }]);
       });
@@ -1437,11 +1757,12 @@ Clinical class: Life-saving respiratory device`;
 
   // Process OCR files (images of nameplates, invoices, labels)
   const processOcrFile = (file: File) => {
-    setIsAnalyzing(true);
-    setAnalyzerError(null);
+    const requestVersion = beginArchiveAiAnalyze('AI 扫码入库');
+    if (requestVersion === null) return;
 
     const reader = new FileReader();
     reader.onload = function(event) {
+      if (!isArchiveAiAnalyzeCurrent(requestVersion)) return;
       const base64String = event.target?.result as string;
       if (!base64String) {
         setIsAnalyzing(false);
@@ -1459,6 +1780,7 @@ Clinical class: Life-saving respiratory device`;
         textContext: `This is an uploaded file name: ${file.name}`
       })
         .then(result => {
+          if (!isArchiveAiAnalyzeCurrent(requestVersion)) return;
           setIsAnalyzing(false);
           if (result.error) {
             setAnalyzerError(result.error);
@@ -1473,7 +1795,7 @@ Clinical class: Life-saving respiratory device`;
             setFormCalibrationRequired(parsed.calibrationRequired || false);
             setFormRiskLevel(parsed.riskLevel || '中');
             setFormDept('医学装备科');
-            setFormPurchaseDate(new Date().toISOString().split('T')[0]);
+            setFormPurchaseDate(getLocalDateString());
             setFormPurchaseCost(0);
             setFormStatus('正常运行');
 
@@ -1483,6 +1805,7 @@ Clinical class: Life-saving respiratory device`;
           }
         })
         .catch(err => {
+          if (!isArchiveAiAnalyzeCurrent(requestVersion)) return;
           setIsAnalyzing(false);
           setAnalyzerError(err.message || '铭牌图像智能解析失败');
         });
@@ -1500,6 +1823,7 @@ Clinical class: Life-saving respiratory device`;
 
   // Process selected or dropped attachment files
   const processAttachFile = (file: File) => {
+    if (!ensureCanManageEquipmentArchive('上传资料附件')) return;
     setNewAttachName(file.name);
     
     // Auto calculate formatted size
@@ -1534,86 +1858,295 @@ Clinical class: Life-saving respiratory device`;
 
   // Simulated Instant Actions (e.g. print QR, quick error reporting)
   const handlePrintQR = () => {
-    alert(`[指令发送成功] 已向科室标签打印机(Zebra ZD888) 发送打印指令。\n设备名：${selectedEquipment.deviceName}\n编号：${selectedEquipment.id}\n规格：${selectedEquipment.model}`);
+    if (!ensureCanManageEquipmentArchive('打印物联二维码标签')) return;
+    showArchiveToast({
+      type: 'success',
+      title: '打印指令已发送',
+      message: `已向科室标签打印机(Zebra ZD888)发送打印指令。设备名：${selectedEquipment.deviceName}；编号：${selectedEquipment.id}；规格：${selectedEquipment.model}`
+    });
+  };
+
+  const createQuickRepairRecord = (
+    targetEq: MedicalEquipment,
+    description: string,
+    urgency: 'low' | 'medium' | 'high'
+  ) => {
+    const quickRepairBlockMessage = getQuickRepairBlockMessage(targetEq);
+    if (quickRepairBlockMessage) {
+      showArchiveToast({
+        type: 'warning',
+        message: quickRepairBlockMessage
+      });
+      return '';
+    }
+
+    const today = getLocalDateString();
+    const latestEquipments = parseStoredEquipmentList(localStorage.getItem(EQUIPMENT_STORAGE_KEY)).equipments;
+    const workOrderNo = createQuickRepairWorkOrderNo(latestEquipments, today);
+    const parentAccepted = onQuickRepairCreated?.({
+      equipment: targetEq,
+      description,
+      urgency,
+      workOrderNo
+    });
+
+    if (parentAccepted === false) {
+      showArchiveToast({
+        type: 'warning',
+        message: `当前登录身份无法同步该设备主工单，请确认设备归属科室：${targetEq.dept}`
+      });
+      return '';
+    }
+
+    const postParentEquipments = parseStoredEquipmentList(localStorage.getItem(EQUIPMENT_STORAGE_KEY)).equipments;
+    const freshTargetEq = postParentEquipments.find(eq => eq.id === targetEq.id);
+    const freshQuickRepairBlockMessage = getQuickRepairBlockMessage(freshTargetEq || null);
+    if (!freshTargetEq || freshQuickRepairBlockMessage) {
+      showArchiveToast({
+        type: 'warning',
+        message: freshQuickRepairBlockMessage || `设备【${targetEq.deviceName}】已不在当前可报修范围，请刷新档案后重试。`
+      });
+      return '';
+    }
+
+    const repairLog: MaintenanceLog = {
+      id: 'm-log-' + Date.now(),
+      type: '维修',
+      date: today,
+      technician: '未分派 (待响应)',
+      cost: 0,
+      description: `【一键快捷报修】紧急度: ${urgency === 'high' ? '高' : urgency === 'medium' ? '中' : '低'}。描述: ${description}`,
+      status: '进行中',
+      workOrderNo,
+      faultPhenomenon: description,
+      partsReplaced: '待查',
+      verifyPerson: currentUser.name
+    };
+
+    const nextEquipments = postParentEquipments.map(eq => {
+      if (eq.id !== freshTargetEq.id) return eq;
+
+      return {
+        ...eq,
+        status: '故障维修',
+        maintenanceLogs: [repairLog, ...(eq.maintenanceLogs || [])]
+      };
+    });
+    localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));
+    setEquipments(nextEquipments);
+
+    return workOrderNo;
+  };
+
+  const quickRepairAfterConfirmation = (equipment: MedicalEquipment) => {
+    const quickRepairBlockMessage = getQuickRepairBlockMessage(equipment);
+    if (quickRepairBlockMessage) {
+      showArchiveToast({
+        type: 'warning',
+        message: quickRepairBlockMessage
+      });
+      return;
+    }
+
+    const description = '科室通过快速报修渠道紧急申报，描述：设备发生突发性故障，无法正常开机或运行中断。';
+    const urgency: 'medium' | 'high' = equipment.category === '急救生命支持' || equipment.riskLevel === '高' ? 'high' : 'medium';
+    const workOrderNo = createQuickRepairRecord(equipment, description, urgency);
+    if (!workOrderNo) return;
+
+    showArchiveToast({
+      type: 'success',
+      message: `报修成功：${equipment.deviceName} 已同步生成主工单与档案维修记录 ${workOrderNo}`
+    });
   };
 
   const handleQuickRepair = () => {
-    if (window.confirm(`确认要将设备 【${selectedEquipment.deviceName}】 的状态更改为“故障维修”并紧急派单至医学装备科吗？`)) {
-      setEquipments(equipments.map(eq => {
-        if (eq.id === selectedEquipment.id) {
-          const repairLog: MaintenanceLog = {
-            id: `log-${Math.floor(1000 + Math.random() * 9000)}`,
-            type: '维修',
-            date: new Date().toISOString().split('T')[0],
-            technician: '待派单',
-            description: '科室通过快速报修渠道紧急申报，描述：设备发生突发性故障，无法正常开机或运行中断。',
-            cost: 0,
-            status: '进行中'
-          };
-          return {
-            ...eq,
-            status: '故障维修',
-            maintenanceLogs: [repairLog, ...eq.maintenanceLogs]
-          };
-        }
-        return eq;
-      }));
-      alert('已成功生成紧急维修工单，维保进度已同步！');
+    const quickRepairBlockMessage = getQuickRepairBlockMessage(selectedEquipment);
+    if (quickRepairBlockMessage) {
+      showArchiveToast({
+        type: 'warning',
+        message: quickRepairBlockMessage
+      });
+      return;
     }
+
+    requestArchiveConfirmation({
+      id: 'quick-repair',
+      title: '确认快捷报修',
+      description: `确认要将设备【${selectedEquipment.deviceName}】状态更改为“故障维修”，并紧急派单至医学装备科吗？系统会同步生成主工单和档案维修记录。`,
+      confirmLabel: '确认报修派单',
+      onConfirm: () => quickRepairAfterConfirmation(selectedEquipment)
+    });
   };
 
   // Simulated download or direct file link clicks
   const triggerDownloadFile = (file: Attachment) => {
-    alert(`[安全原档下载] 正在安全信道解密调阅医疗器械原始技术文档：${file.name} (大小: ${file.size})`);
+    if (!ensureCanManageEquipmentArchive('下载技术资料原档')) return;
+    showArchiveToast({
+      type: 'info',
+      title: '安全原档下载',
+      message: `正在安全信道解密调阅医疗器械原始技术文档：${file.name}（大小：${file.size}）`
+    });
   };
 
   const handleExtractSnapshot = (page: PreviewPage) => {
+    if (!ensureCanManageEquipmentArchive('提取技术手册快照')) return;
     if (!previewFile || !selectedEquipment) return;
+    const requestVersion = snapshotExtractRequestVersionRef.current + 1;
+    snapshotExtractRequestVersionRef.current = requestVersion;
+    const targetEquipmentId = selectedEquipment.id;
+    const targetFileId = previewFile.id;
+    const targetFileName = previewFile.name;
+    const targetPageNum = page.pageNum;
     setIsExtractingSnapshot(true);
     
     // Simulate high-tech AI extraction with a realistic timeout
     setTimeout(() => {
+      if (requestVersion !== snapshotExtractRequestVersionRef.current) return;
+      if (!canManageEquipmentArchiveRef.current) {
+        setIsExtractingSnapshot(false);
+        return;
+      }
+
       const newSnapshot = {
         id: 'snap-' + Date.now(),
-        pageNum: page.pageNum,
+        pageNum: targetPageNum,
         title: page.title,
         imageUrl: page.diagramType, // Stores visual representation type
-        extractedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
-        sourceFileName: previewFile.name,
-        notes: `从《${previewFile.name}》第 ${page.pageNum} 页中智能提取。已完成高精度 OCR 元数据索引，核心规范包含:「${page.lines[0] || ''}」。已被临床工程师确认为该医学装备的核心技术参考与合规判据。`
+        extractedAt: getLocalDateTimeString(),
+        sourceFileName: targetFileName,
+        notes: `从《${targetFileName}》第 ${targetPageNum} 页中智能提取。已完成高精度 OCR 元数据索引，核心规范包含:「${page.lines[0] || ''}」。已被临床工程师确认为该医学装备的核心技术参考与合规判据。`
       };
 
       // Update equipment list state
-      setEquipments(equipments.map(eq => {
-        if (eq.id === selectedEquipment.id) {
+      let snapshotWasApplied = false;
+      let snapshotWasDuplicate = false;
+      setEquipments(prevEquipments => {
+        const latestTargetEquipment = prevEquipments.find(eq => eq.id === targetEquipmentId);
+        const targetFileStillExists = latestTargetEquipment?.attachments.some(file => file.id === targetFileId);
+        if (!latestTargetEquipment || !targetFileStillExists) {
+          return prevEquipments;
+        }
+        snapshotWasApplied = true;
+
+        const nextEquipments = prevEquipments.map(eq => {
+          if (eq.id !== targetEquipmentId) return eq;
+
           const existingSnapshots = eq.extractedSnapshots || [];
           // Avoid duplicating same page snapshot
-          if (existingSnapshots.some(s => s.sourceFileName === previewFile.name && s.pageNum === page.pageNum)) {
-            alert('提示：该技术手册页快照已提取过，系统已自动重构其高阶关联指引并置顶！');
+          if (existingSnapshots.some(s => s.sourceFileName === targetFileName && s.pageNum === targetPageNum)) {
+            snapshotWasDuplicate = true;
             return {
               ...eq,
-              extractedSnapshots: [newSnapshot, ...existingSnapshots.filter(s => !(s.sourceFileName === previewFile.name && s.pageNum === page.pageNum))]
+              extractedSnapshots: [newSnapshot, ...existingSnapshots.filter(s => !(s.sourceFileName === targetFileName && s.pageNum === targetPageNum))]
             };
           }
           return {
             ...eq,
             extractedSnapshots: [newSnapshot, ...existingSnapshots]
           };
-        }
-        return eq;
-      }));
+        });
+
+        localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(nextEquipments));
+        return nextEquipments;
+      });
 
       setIsExtractingSnapshot(false);
-      alert(`🎉 成功从《${previewFile.name}》中提取第 ${page.pageNum} 页作为设备关联快照！此快照已与主技术档案完成高阶可信映射。`);
+      if (snapshotWasDuplicate) {
+        showArchiveToast({
+          type: 'info',
+          title: '快照已重新置顶',
+          message: '该技术手册页快照已提取过，系统已自动重构其高阶关联指引并置顶。'
+        });
+        return;
+      }
+      if (snapshotWasApplied) {
+        showArchiveToast({
+          type: 'success',
+          title: '快照提取成功',
+          message: `已从《${targetFileName}》中提取第 ${targetPageNum} 页作为设备关联快照，并与主技术档案完成可信映射。`
+        });
+      }
     }, 800);
   };
 
   return (
     <div id="app_root" className="flex flex-col h-screen h-[100dvh] w-full bg-[#F0F2F5] p-2 sm:p-3 md:p-6 pb-16 md:pb-6 overflow-hidden font-sans">
+      {archiveToast && (
+        <div className={`fixed top-4 right-4 z-40 max-w-sm rounded-xl border bg-white px-4 py-3 shadow-xl flex items-start gap-2.5 ${
+          archiveToast.type === 'success'
+            ? 'border-emerald-200 shadow-emerald-900/10'
+            : archiveToast.type === 'info'
+              ? 'border-blue-200 shadow-blue-900/10'
+              : 'border-amber-200 shadow-amber-900/10'
+        }`}>
+          {archiveToast.type === 'success' ? (
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
+          ) : archiveToast.type === 'info' ? (
+            <Info className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+          ) : (
+            <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+          )}
+          <div>
+            <p className={`text-xs font-black ${
+              archiveToast.type === 'success'
+                ? 'text-emerald-800'
+                : archiveToast.type === 'info'
+                  ? 'text-blue-800'
+                  : 'text-amber-800'
+            }`}>
+              {archiveToast.title || (archiveToast.type === 'success' ? '操作已完成' : archiveToast.type === 'info' ? '操作提示' : '操作权限提醒')}
+            </p>
+            <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">{archiveToast.message}</p>
+          </div>
+        </div>
+      )}
+
+      {archiveConfirmation && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center z-[85] p-4 animate-fade-in" id="archive-confirmation-modal">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-sm w-full overflow-hidden">
+            <div className="bg-slate-900 text-white px-5 py-4 flex items-center gap-2.5">
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                archiveConfirmation.tone === 'danger' ? 'bg-rose-500/15 text-rose-300' : 'bg-emerald-500/15 text-emerald-300'
+              }`}>
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-sm font-extrabold leading-tight">{archiveConfirmation.title}</h3>
+                <p className="text-[10px] text-slate-400 mt-0.5">设备档案操作需确认后继续</p>
+              </div>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <p className="text-xs text-slate-600 leading-relaxed">{archiveConfirmation.description}</p>
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={handleCancelArchiveConfirmation}
+                  className="px-3.5 py-2 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                  id="btn-archive-confirm-cancel"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmArchiveAction}
+                  className={`px-3.5 py-2 rounded-lg text-xs font-bold text-white transition cursor-pointer shadow-sm ${
+                    archiveConfirmation.tone === 'danger'
+                      ? 'bg-rose-600 hover:bg-rose-500 active:bg-rose-700'
+                      : 'bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700'
+                  }`}
+                  id="btn-archive-confirm-action"
+                >
+                  {archiveConfirmation.confirmLabel}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Top Header Section */}
-      <header id="header_section" className="flex flex-col lg:flex-row lg:items-center lg:justify-between bg-white px-3 md:px-6 py-2.5 md:py-4 rounded-xl shadow-sm mb-3 md:mb-6 border border-slate-200 gap-2.5">
-        <div className="flex items-center justify-between w-full lg:w-auto gap-4">
+      <header id="header_section" className="flex flex-col 2xl:flex-row 2xl:items-center 2xl:justify-between bg-white px-3 md:px-6 py-2.5 md:py-4 rounded-xl shadow-sm mb-3 md:mb-6 border border-slate-200 gap-2.5">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between w-full 2xl:w-auto min-w-0 gap-2.5 md:gap-4">
           <div className="flex items-center gap-2.5 md:gap-4">
             <div className="bg-blue-600 p-1.5 md:p-2.5 rounded-lg text-white flex-shrink-0">
               <Activity className="w-4 h-4 md:w-6 md:h-6 animate-pulse" />
@@ -1633,7 +2166,7 @@ Clinical class: Life-saving respiratory device`;
           </div>
 
           {/* View Mode Switcher */}
-          <div className="flex bg-slate-100 p-0.5 md:p-1 rounded-lg border border-slate-200/60 flex-shrink-0">
+          <div className="flex bg-slate-100 p-0.5 md:p-1 rounded-lg border border-slate-200/60 flex-shrink-0 overflow-x-auto max-w-full">
             <button
               onClick={() => setViewMode('inventory')}
               className={`px-2 py-1 md:px-2.5 md:py-1.5 text-[11px] md:text-xs font-bold rounded-md flex items-center gap-1 md:gap-1.5 transition-all cursor-pointer ${
@@ -1682,32 +2215,42 @@ Clinical class: Life-saving respiratory device`;
           
           {/* Quick action buttons on mobile next to title */}
           <div className="flex items-center gap-1.5 lg:hidden">
-            <button 
-              onClick={() => setIsAiParserOpen(true)}
-              className="flex items-center justify-center bg-gradient-to-r from-violet-600 to-indigo-600 text-white p-2 rounded-lg text-xs font-medium hover:from-violet-700 hover:to-indigo-700 shadow-md shadow-indigo-100 transition-all"
-              title="AI 扫码入库"
-            >
-              <Sparkles className="w-4 h-4" />
-            </button>
-            <button 
-              onClick={() => setIsDossierModalOpen(true)}
-              className="flex items-center justify-center bg-slate-800 text-white p-2 rounded-lg text-xs font-medium hover:bg-slate-900 transition-colors shadow-sm"
-              title="导出PDF档案"
-            >
-              <Printer className="w-4 h-4" />
-            </button>
-            <button 
-              onClick={openCreateModal}
-              className="flex items-center justify-center bg-blue-600 text-white p-2 rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors shadow-sm shadow-blue-100"
-              title="手动新增"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
+            {canManageEquipmentArchive && (
+              <button
+                onClick={() => setIsAiParserOpen(true)}
+                className="flex items-center justify-center bg-gradient-to-r from-violet-600 to-indigo-600 text-white p-2 rounded-lg text-xs font-medium hover:from-violet-700 hover:to-indigo-700 shadow-md shadow-indigo-100 transition-all"
+                title="AI 扫码入库"
+              >
+                <Sparkles className="w-4 h-4" />
+              </button>
+            )}
+            {canManageEquipmentArchive ? (
+              <button
+                onClick={() => setIsDossierModalOpen(true)}
+                className="flex items-center justify-center bg-slate-800 text-white p-2 rounded-lg text-xs font-medium hover:bg-slate-900 transition-colors shadow-sm"
+                title="导出PDF档案"
+              >
+                <Printer className="w-4 h-4" />
+              </button>
+            ) : (
+              <span className="flex items-center justify-center bg-slate-100 text-slate-500 p-2 rounded-lg text-[10px] font-bold border border-slate-200">
+                只读
+              </span>
+            )}
+            {canManageEquipmentArchive && (
+              <button
+                onClick={openCreateModal}
+                className="flex items-center justify-center bg-blue-600 text-white p-2 rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors shadow-sm shadow-blue-100"
+                title="手动新增"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
         
         {/* Dynamic Filters & Search Panel */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full lg:w-auto">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full 2xl:w-auto 2xl:flex-shrink-0">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
             <input 
@@ -1715,41 +2258,59 @@ Clinical class: Life-saving respiratory device`;
               placeholder="搜索设备、SN号、生产商、科室..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="bg-slate-100 text-slate-800 border-none rounded-lg pl-9 pr-4 py-2 text-xs md:text-sm w-full lg:w-72 focus:outline-none focus:ring-2 focus:ring-blue-500 font-sans"
+              className="bg-slate-100 text-slate-800 border-none rounded-lg pl-9 pr-4 py-2 text-xs md:text-sm w-full 2xl:w-72 focus:outline-none focus:ring-2 focus:ring-blue-500 font-sans"
             />
           </div>
 
           <div className="hidden lg:flex items-center gap-2">
-            <button 
-              onClick={() => setIsAiParserOpen(true)}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white px-3.5 py-2 rounded-lg text-xs md:text-sm font-medium hover:from-violet-700 hover:to-indigo-700 shadow-md shadow-indigo-100 transition-all whitespace-nowrap"
-              title="通过智能OCR识别设备铭牌或单据发票自动入库"
-            >
-              <Sparkles className="w-4 h-4" />
-              <span>AI 扫码入库</span>
-            </button>
+            {canManageEquipmentArchive && (
+              <button
+                onClick={() => setIsAiParserOpen(true)}
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white px-3.5 py-2 rounded-lg text-xs md:text-sm font-medium hover:from-violet-700 hover:to-indigo-700 shadow-md shadow-indigo-100 transition-all whitespace-nowrap"
+                title="通过智能OCR识别设备铭牌或单据发票自动入库"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>AI 扫码入库</span>
+              </button>
+            )}
 
-            <button 
-              onClick={() => setIsDossierModalOpen(true)}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-slate-800 text-white px-3.5 py-2 rounded-lg text-xs md:text-sm font-bold hover:bg-slate-900 transition-colors shadow-sm whitespace-nowrap"
-              title="导出当前选中设备技术档案为 PDF / 打印"
-            >
-              <Printer className="w-4 h-4" />
-              <span>导出PDF档案</span>
-            </button>
+            {canManageEquipmentArchive ? (
+              <button
+                onClick={() => setIsDossierModalOpen(true)}
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-slate-800 text-white px-3.5 py-2 rounded-lg text-xs md:text-sm font-bold hover:bg-slate-900 transition-colors shadow-sm whitespace-nowrap"
+                title="导出当前选中设备技术档案为 PDF / 打印"
+              >
+                <Printer className="w-4 h-4" />
+                <span>导出PDF档案</span>
+              </button>
+            ) : (
+              <span className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-slate-100 text-slate-500 px-3.5 py-2 rounded-lg text-xs md:text-sm font-bold border border-slate-200 whitespace-nowrap">
+                临床只读档案
+              </span>
+            )}
 
-            <button 
-              onClick={openCreateModal}
-              className="flex-1 sm:flex-initial flex items-center justify-center bg-blue-600 text-white px-3.5 py-2 rounded-lg text-xs md:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm shadow-blue-100 whitespace-nowrap"
-            >
-              + 手动新增
-            </button>
+            {canManageEquipmentArchive && (
+              <button
+                onClick={openCreateModal}
+                className="flex-1 sm:flex-initial flex items-center justify-center bg-blue-600 text-white px-3.5 py-2 rounded-lg text-xs md:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm shadow-blue-100 whitespace-nowrap"
+              >
+                + 手动新增
+              </button>
+            )}
           </div>
         </div>
       </header>
 
       {/* Main Grid Content Container */}
-      <main id="main_container" className="flex-1 min-h-0 relative flex flex-col">
+      <main
+        id="main_container"
+        ref={mainContainerRef}
+        className={`flex-1 min-h-0 relative flex flex-col pb-20 md:pb-0 ${
+          viewMode === 'list' || viewMode === 'matrix'
+            ? 'overflow-y-auto overflow-x-hidden pr-1 custom-scrollbar'
+            : 'overflow-hidden'
+        }`}
+      >
         {viewMode === 'inventory' ? (
           <div className="grid grid-cols-12 gap-3 md:gap-6 flex-1 min-h-0 w-full">
         
@@ -1793,7 +2354,7 @@ Clinical class: Life-saving respiratory device`;
                     <span className="text-[11px] font-black">临床医护快捷面板</span>
                   </div>
                   <span className="text-[9px] font-black bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded">
-                    {currentUser.dept}
+                    {currentUserDepartment}
                   </span>
                 </div>
                 
@@ -1818,8 +2379,8 @@ Clinical class: Life-saving respiratory device`;
                         : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                     }`}
                   >
-                    <span>🚨 我已报修设备</span>
-                    {equipments.filter(eq => eq.dept === currentUser.dept && (eq.status === '故障维修' || eq.maintenanceLogs.some(log => log.type === '维修' && log.status === '进行中'))).length > 0 && (
+                    <span>🚨 本科室在修设备</span>
+                    {visibleEquipments.filter(eq => eq.status === '故障维修' || eq.maintenanceLogs.some(log => log.type === '维修' && log.status === '进行中')).length > 0 && (
                       <span className="absolute -top-1 -right-1 flex h-2 w-2">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
@@ -1829,15 +2390,29 @@ Clinical class: Life-saving respiratory device`;
                 </div>
 
                 <button
+                  id="btn-clinical-open-quick-repair"
+                  aria-label="打开本科室故障一键快捷上报"
                   type="button"
+                  disabled={!firstQuickRepairableEquipment}
+                  title={firstQuickRepairableEquipment ? '打开本科室故障一键快捷上报' : clinicalQuickRepairBlockMessage}
                   onClick={() => {
-                    const firstDeptEq = equipments.find(eq => eq.dept === currentUser.dept);
-                    setQuickRepairEquipId(firstDeptEq ? firstDeptEq.id : '');
+                    if (!firstQuickRepairableEquipment) {
+                      showArchiveToast({
+                        type: 'warning',
+                        message: clinicalQuickRepairBlockMessage
+                      });
+                      return;
+                    }
+                    resetQuickRepairDraft(firstQuickRepairableEquipment.id);
                     setIsQuickRepairModalOpen(true);
                   }}
-                  className="w-full py-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded text-[10px] font-black shadow-sm flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  className={`w-full py-1.5 rounded text-[10px] font-black shadow-sm flex items-center justify-center gap-1.5 transition-colors ${
+                    firstQuickRepairableEquipment
+                      ? 'bg-rose-500 hover:bg-rose-600 text-white cursor-pointer'
+                      : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                  }`}
                 >
-                  <AlertTriangle className="w-3 h-3 text-white" />
+                  <AlertTriangle className={`w-3 h-3 ${firstQuickRepairableEquipment ? 'text-white' : 'text-slate-400'}`} />
                   <span>本科室故障一键快捷上报</span>
                 </button>
 
@@ -1850,7 +2425,7 @@ Clinical class: Life-saving respiratory device`;
                       onChange={(e) => setOnlyMyDept(e.target.checked)}
                       className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5 cursor-pointer"
                     />
-                    <span className="font-bold text-blue-800">仅看本科室设备 ({currentUser.dept})</span>
+                    <span className="font-bold text-blue-800">仅看本科室设备 ({currentUserDepartment})</span>
                   </label>
                 </div>
               </div>
@@ -1865,7 +2440,7 @@ Clinical class: Life-saving respiratory device`;
                   onClick={() => setFilterMenuOpen(filterMenuOpen === 'dept' ? null : 'dept')}
                   className={`w-full flex items-center justify-between text-[11px] bg-slate-50 border border-slate-200 hover:bg-slate-100 rounded-lg px-2 py-2 text-slate-700 outline-none transition-all ${filterMenuOpen === 'dept' ? 'ring-2 ring-blue-500 border-transparent bg-white shadow-sm' : ''}`}
                 >
-                  <span className="truncate font-medium">{selectedDept}</span>
+                  <span className="truncate font-medium">{formatDepartmentScopeLabel(selectedDept)}</span>
                   <ChevronDown className="w-3 h-3 text-slate-400 flex-shrink-0 ml-0.5" />
                 </button>
                 {filterMenuOpen === 'dept' && (
@@ -1883,7 +2458,7 @@ Clinical class: Life-saving respiratory device`;
                           }}
                           className={`w-full text-left px-3.5 py-3 md:py-2 text-[12px] md:text-[11px] flex items-center justify-between transition-colors hover:bg-slate-50 ${selectedDept === d ? 'text-blue-600 font-bold bg-blue-50/50' : 'text-slate-700'}`}
                         >
-                          <span>{d}</span>
+                          <span>{formatDepartmentScopeLabel(d)}</span>
                           {selectedDept === d && <Check className="w-3.5 h-3.5 text-blue-600" />}
                         </button>
                       ))}
@@ -1965,7 +2540,7 @@ Clinical class: Life-saving respiratory device`;
             <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
               {filteredEquipments.length === 0 ? (
                 <div className="text-center py-12 text-slate-400 text-xs">
-                  <p className="mb-3">没有找到符合条件的设备</p>
+                  <p className="mb-3">没有找到符合条件的设备，右侧详情已同步清空</p>
                   <button
                     type="button"
                     onClick={() => {
@@ -2007,10 +2582,10 @@ Clinical class: Life-saving respiratory device`;
                   // 2. Calculate Calibration status
                   let calibStatus: { status: 'none' | 'expired' | 'expiring' | 'valid'; text: string; diffDays?: number } = { status: 'none', text: '免强检' };
                   if (eq.calibrationRequired && eq.nextCalibrationDate) {
-                    const calibDate = new Date(eq.nextCalibrationDate).getTime();
-                    const today = new Date('2026-07-01').getTime();
-                    const diffDays = (calibDate - today) / (1000 * 3600 * 24);
-                    if (diffDays < 0) {
+                    const diffDays = getDateDiffDaysFromToday(eq.nextCalibrationDate);
+                    if (diffDays === null) {
+                      calibStatus = { status: 'none', text: '日期异常' };
+                    } else if (diffDays < 0) {
                       calibStatus = { status: 'expired', text: '计量超期', diffDays: Math.floor(Math.abs(diffDays)) };
                     } else if (diffDays <= 30) {
                       calibStatus = { status: 'expiring', text: '计量临期', diffDays: Math.floor(diffDays) };
@@ -2025,10 +2600,22 @@ Clinical class: Life-saving respiratory device`;
                   return (
                     <div 
                       key={eq.id}
+                      id={`equipment-card-${eq.id}`}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`打开设备档案：${eq.deviceName}，${eq.dept}，${eq.status}`}
                       onClick={() => {
                         setSelectedId(eq.id);
                         setMobileView('detail');
                         setViewMode('inventory');
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setSelectedId(eq.id);
+                          setMobileView('detail');
+                          setViewMode('inventory');
+                        }
                       }}
                       className={`p-3 rounded-xl border text-left cursor-pointer transition-all flex gap-3 items-start relative ${
                         isSelected 
@@ -2142,7 +2729,7 @@ Clinical class: Life-saving respiratory device`;
         </aside>
 
         {/* MIDDLE COLUMN: Selected Equipment Detailed Dossier Sheet */}
-        <section id="middle_detailed_column" className={`col-span-12 md:col-span-6 ${mobileView === 'detail' ? 'flex' : 'hidden md:flex'} bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-full min-h-0 overflow-hidden`}>
+        <section id="middle_detailed_column" className={`col-span-12 md:col-span-6 ${mobileView === 'detail' ? 'flex' : 'hidden md:flex'} bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-full min-h-0 overflow-y-auto md:overflow-hidden pb-20 md:pb-0 custom-scrollbar`}>
           
           {selectedEquipment ? (
             <>
@@ -2156,8 +2743,16 @@ Clinical class: Life-saving respiratory device`;
                     <span>返回设备列表</span>
                   </button>
                   <button
+                    id="btn-mobile-archive-scan-repair"
+                    aria-label="移动端扫码报修当前设备"
                     onClick={() => setIsScannerModalOpen(true)}
-                    className="flex items-center gap-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm active:scale-95 transition-all"
+                    disabled={!canStartQuickRepairForEquipment(selectedEquipment)}
+                    title={canStartQuickRepairForEquipment(selectedEquipment) ? '调用相机扫描SN码快速填充报修' : getQuickRepairBlockMessage(selectedEquipment)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm active:scale-95 transition-all ${
+                      canStartQuickRepairForEquipment(selectedEquipment)
+                        ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white'
+                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    }`}
                   >
                     <QrCode className="w-3.5 h-3.5" />
                     <span>📷 扫码报修</span>
@@ -2195,8 +2790,10 @@ Clinical class: Life-saving respiratory device`;
                     {/* Compact Interactive QR Code Tag inside middle column header */}
                     <div 
                       onClick={handlePrintQR}
-                      className="w-11 h-11 bg-white p-1 border border-slate-200 hover:border-blue-400 rounded-lg flex items-center justify-center shadow-2xs flex-shrink-0 cursor-pointer group relative transition-all"
-                      title="点击打印二维码物联标签"
+                      className={`w-11 h-11 bg-white p-1 border border-slate-200 rounded-lg flex items-center justify-center shadow-2xs flex-shrink-0 group relative transition-all ${
+                        canManageEquipmentArchive ? 'hover:border-blue-400 cursor-pointer' : 'cursor-not-allowed opacity-80'
+                      }`}
+                      title={canManageEquipmentArchive ? '点击打印二维码物联标签' : '临床只读：二维码打印由医学装备科工程师执行'}
                     >
                       <img 
                         src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(
@@ -2207,7 +2804,9 @@ Clinical class: Life-saving respiratory device`;
                       />
                       {/* Hover Indicator overlay */}
                       <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-lg">
-                        <span className="text-[8px] text-white font-bold bg-black/60 px-1 py-0.5 rounded">打印</span>
+                        <span className="text-[8px] text-white font-bold bg-black/60 px-1 py-0.5 rounded">
+                          {canManageEquipmentArchive ? '打印' : '只读'}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -2215,10 +2814,10 @@ Clinical class: Life-saving respiratory device`;
               </div>
 
               {/* Dynamic Information Navigation Tabs */}
-              <div className="flex overflow-x-auto whitespace-nowrap scrollbar-none border-b border-slate-100 px-3 sm:px-6 bg-slate-50/10">
+              <div className="relative z-10 flex flex-wrap md:flex-nowrap gap-x-1 md:gap-x-0 overflow-visible md:overflow-x-auto whitespace-normal md:whitespace-nowrap scrollbar-none border-b border-slate-100 px-3 sm:px-6 bg-slate-50/10">
                 <button 
                   onClick={() => setActiveTab('basic')}
-                  className={`py-2.5 px-3 md:py-3 md:px-4 text-[11px] sm:text-xs font-semibold border-b-2 transition-colors flex-shrink-0 ${
+                  className={`relative z-10 min-h-11 flex-1 basis-[calc(50%-0.125rem)] md:flex-none md:basis-auto py-2.5 px-3 md:py-3 md:px-4 text-[11px] sm:text-xs font-semibold border-b-2 transition-colors flex items-center justify-center md:justify-start flex-shrink-0 touch-manipulation cursor-pointer ${
                     activeTab === 'basic' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'
                   }`}
                 >
@@ -2226,7 +2825,7 @@ Clinical class: Life-saving respiratory device`;
                 </button>
                 <button 
                   onClick={() => setActiveTab('maintenance')}
-                  className={`py-2.5 px-3 md:py-3 md:px-4 text-[11px] sm:text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 flex-shrink-0 ${
+                  className={`relative z-10 min-h-11 flex-1 basis-[calc(50%-0.125rem)] md:flex-none md:basis-auto py-2.5 px-3 md:py-3 md:px-4 text-[11px] sm:text-xs font-semibold border-b-2 transition-colors flex items-center justify-center md:justify-start gap-1.5 flex-shrink-0 touch-manipulation cursor-pointer ${
                     activeTab === 'maintenance' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'
                   }`}
                 >
@@ -2237,7 +2836,7 @@ Clinical class: Life-saving respiratory device`;
                 </button>
                 <button 
                   onClick={() => setActiveTab('calibration')}
-                  className={`py-2.5 px-3 md:py-3 md:px-4 text-[11px] sm:text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 flex-shrink-0 ${
+                  className={`relative z-10 min-h-11 flex-1 basis-[calc(50%-0.125rem)] md:flex-none md:basis-auto py-2.5 px-3 md:py-3 md:px-4 text-[11px] sm:text-xs font-semibold border-b-2 transition-colors flex items-center justify-center md:justify-start gap-1.5 flex-shrink-0 touch-manipulation cursor-pointer ${
                     activeTab === 'calibration' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'
                   }`}
                 >
@@ -2248,7 +2847,7 @@ Clinical class: Life-saving respiratory device`;
                 </button>
                 <button 
                   onClick={() => setActiveTab('attachments')}
-                  className={`py-2.5 px-3 md:py-3 md:px-4 text-[11px] sm:text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 flex-shrink-0 ${
+                  className={`relative z-10 min-h-11 flex-1 basis-[calc(50%-0.125rem)] md:flex-none md:basis-auto py-2.5 px-3 md:py-3 md:px-4 text-[11px] sm:text-xs font-semibold border-b-2 transition-colors flex items-center justify-center md:justify-start gap-1.5 flex-shrink-0 touch-manipulation cursor-pointer ${
                     activeTab === 'attachments' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'
                   }`}
                 >
@@ -2259,19 +2858,19 @@ Clinical class: Life-saving respiratory device`;
                 </button>
                 <button 
                   onClick={() => setActiveTab('tickets')}
-                  className={`py-2.5 px-3 md:py-3 md:px-4 text-[11px] sm:text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 flex-shrink-0 ${
+                  className={`relative z-10 min-h-11 flex-1 basis-[calc(50%-0.125rem)] md:flex-none md:basis-auto py-2.5 px-3 md:py-3 md:px-4 text-[11px] sm:text-xs font-semibold border-b-2 transition-colors flex items-center justify-center md:justify-start gap-1.5 flex-shrink-0 touch-manipulation cursor-pointer ${
                     activeTab === 'tickets' ? 'border-emerald-600 text-emerald-600 font-bold' : 'border-transparent text-slate-500 hover:text-slate-800'
                   }`}
                 >
                   🔔 相关工单
                   <span className="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 rounded-full font-bold font-mono">
-                    {tasks.filter(t => t.deviceId === selectedEquipment.id || t.deviceId === selectedEquipment.sn || (t.deviceName === selectedEquipment.deviceName && t.department === selectedEquipment.dept)).length}
+                    {getRelatedTasksForEquipment(selectedEquipment).length}
                   </span>
                 </button>
               </div>
 
               {/* Central Details Scrollable Body */}
-              <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 space-y-4 md:space-y-6">
+              <div className="flex-none md:flex-1 md:min-h-0 overflow-x-hidden overflow-y-visible md:overflow-y-auto p-3 sm:p-4 md:p-6 space-y-4 md:space-y-6 pb-4 md:pb-6 custom-scrollbar">
                 
                 {/* 1. Basic Technical Archives Tab */}
                 {activeTab === 'basic' && (
@@ -2311,7 +2910,9 @@ Clinical class: Life-saving respiratory device`;
                             <div className="h-[160px] bg-slate-100/50 border border-dashed border-slate-300 rounded-lg text-center flex flex-col items-center justify-center p-4">
                               <Activity className="w-6 h-6 text-slate-300 mb-1" />
                               <p className="text-[11px] text-slate-500 font-bold">暂未绑定外观照片</p>
-                              <p className="text-[9px] text-slate-400 mt-0.5">可点击“修改档案”录入</p>
+                              <p className="text-[9px] text-slate-400 mt-0.5">
+                                {canManageEquipmentArchive ? '可点击“修改档案”录入' : '如需补录请联系医学装备科'}
+                              </p>
                             </div>
                           )}
                         </div>
@@ -2319,9 +2920,11 @@ Clinical class: Life-saving respiratory device`;
                         {/* QR Code Section */}
                         <div className="flex flex-col items-center justify-center bg-white border border-slate-200 rounded-lg p-3 shadow-xs h-[160px]">
                           <div 
-                            className="w-24 h-24 bg-slate-50 p-1 border border-slate-100 rounded flex items-center justify-center shadow-inner relative group cursor-pointer" 
+                            className={`w-24 h-24 bg-slate-50 p-1 border border-slate-100 rounded flex items-center justify-center shadow-inner relative group ${
+                              canManageEquipmentArchive ? 'cursor-pointer' : 'cursor-not-allowed opacity-85'
+                            }`}
                             onClick={handlePrintQR} 
-                            title="点击向打印机发送标签打印指令"
+                            title={canManageEquipmentArchive ? '点击向打印机发送标签打印指令' : '临床只读：二维码打印由医学装备科工程师执行'}
                           >
                             <img 
                               src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(
@@ -2331,7 +2934,9 @@ Clinical class: Life-saving respiratory device`;
                               className="w-full h-full rounded"
                             />
                             <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded">
-                              <span className="text-[9px] text-white font-bold bg-black/60 px-1.5 py-0.5 rounded">打印标签</span>
+                              <span className="text-[9px] text-white font-bold bg-black/60 px-1.5 py-0.5 rounded">
+                                {canManageEquipmentArchive ? '打印标签' : '只读查看'}
+                              </span>
                             </div>
                           </div>
                           <p className="text-[10px] font-bold text-slate-700 mt-2 truncate max-w-full text-center">{selectedEquipment.id.toUpperCase()}</p>
@@ -2469,7 +3074,7 @@ Clinical class: Life-saving respiratory device`;
                             <div className="mt-3 p-2.5 bg-rose-50 border border-rose-200/50 rounded-lg text-[11px] text-rose-800 flex items-start gap-2">
                               <AlertTriangle className="w-4 h-4 text-rose-500 flex-shrink-0 mt-0.5" />
                               <p className="leading-normal col-span-2">
-                                <strong>⚠️ 资质缺失警告：</strong> 该设备尚未登记医疗器械注册证号。根据《医疗器械监督管理条例》，无合格准入证号的器械在临床科室运行存在重度法律违规风险，请点击下方 “修改档案” 按钮立即补录。
+                                <strong>⚠️ 资质缺失警告：</strong> 该设备尚未登记医疗器械注册证号。根据《医疗器械监督管理条例》，无合格准入证号的器械在临床科室运行存在重度法律违规风险，{canManageEquipmentArchive ? '请点击下方 “修改档案” 按钮立即补录。' : '请联系医学装备科尽快补录并核验。'}
                               </p>
                             </div>
                           );
@@ -2544,15 +3149,23 @@ Clinical class: Life-saving respiratory device`;
                     <div className="flex justify-between items-center">
                       <div className="flex flex-col">
                         <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider">维保全履历跟踪</h4>
-                        <p className="text-[10px] text-slate-400 mt-0.5">点击任意维保卡片可查看并打印标准电子派工单</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">
+                          {canManageEquipmentArchive ? '点击任意维保卡片可查看并打印标准电子派工单' : '点击任意维保卡片可只读查验标准电子派工单'}
+                        </p>
                       </div>
-                      <button 
-                        onClick={() => { setLogType('维保'); setIsLogModalOpen(true); }}
-                        className="text-xs text-blue-600 font-bold hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-2.5 py-1.5 rounded-lg border border-blue-100 hover:border-blue-200 transition-all shadow-2xs"
-                      >
-                        <PlusCircle className="w-3.5 h-3.5" />
-                        <span>新增维保工单</span>
-                      </button>
+                      {canManageEquipmentArchive ? (
+                        <button
+                          onClick={() => { setLogType('维保'); setIsLogModalOpen(true); }}
+                          className="text-xs text-blue-600 font-bold hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-2.5 py-1.5 rounded-lg border border-blue-100 hover:border-blue-200 transition-all shadow-2xs"
+                        >
+                          <PlusCircle className="w-3.5 h-3.5" />
+                          <span>新增维保工单</span>
+                        </button>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 bg-slate-100 border border-slate-200 px-2 py-1 rounded-md">
+                          临床只读履历
+                        </span>
+                      )}
                     </div>
 
                     <BudgetStackedChart 
@@ -2576,7 +3189,17 @@ Clinical class: Life-saving respiratory device`;
                             </div>
                             
                             <div 
+                              id={`maintenance-log-${log.workOrderNo || log.id}`}
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`打开维保履历：${log.workOrderNo || log.id}，${log.type}，${log.status}`}
                               onClick={() => setViewMaintenanceLog(log)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  setViewMaintenanceLog(log);
+                                }
+                              }}
                               className="bg-white hover:bg-slate-50/75 p-4 rounded-xl border border-slate-200 hover:border-blue-400 cursor-pointer shadow-2xs hover:shadow-xs group transition-all duration-200"
                             >
                               <div className="flex justify-between items-start gap-4">
@@ -2609,17 +3232,18 @@ Clinical class: Life-saving respiratory device`;
                                 <div className="text-right flex-shrink-0 flex flex-col items-end">
                                   <div className="flex items-center gap-1.5">
                                     <span className="font-mono font-bold text-slate-800">¥{log.cost}</span>
-                                    {/* Stop propagation so delete button click doesn't trigger the view modal */}
-                                    <button 
-                                      onClick={(e) => { 
-                                        e.stopPropagation(); 
-                                        handleDeleteMaintenanceLog(log.id); 
-                                      }}
-                                      className="md:opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded transition-all"
-                                      title="删除此工单"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
+                                    {canManageEquipmentArchive && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDeleteMaintenanceLog(log.id);
+                                        }}
+                                        className="md:opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded transition-all"
+                                        title="删除此工单"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
                                   </div>
                                   <p className="text-[9px] text-slate-400 font-mono mt-1">{log.date}</p>
                                 </div>
@@ -2653,7 +3277,7 @@ Clinical class: Life-saving respiratory device`;
                         <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider">法定计量强检记录</h4>
                         <p className="text-[10px] text-slate-400 mt-0.5">国家质监总局要求: 强检目录设备必须100%持证运转并张贴绿标</p>
                       </div>
-                      {selectedEquipment.calibrationRequired ? (
+                      {selectedEquipment.calibrationRequired && canManageEquipmentArchive ? (
                         <button 
                           onClick={() => { setLogType('计量'); setIsLogModalOpen(true); }}
                           className="text-xs text-emerald-600 font-bold hover:text-emerald-700 flex items-center gap-1 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-100 hover:border-emerald-200 transition-all shadow-2xs"
@@ -2664,7 +3288,7 @@ Clinical class: Life-saving respiratory device`;
                       ) : (
                         <span className="text-[9px] text-slate-400 bg-slate-100 border border-slate-200 px-2 py-1 rounded-md flex items-center gap-1">
                           <Info className="w-3 h-3 text-slate-400" />
-                          <span>本台非强检类设备</span>
+                          <span>{selectedEquipment.calibrationRequired ? '临床只读证书' : '本台非强检类设备'}</span>
                         </span>
                       )}
                     </div>
@@ -2678,7 +3302,16 @@ Clinical class: Life-saving respiratory device`;
                         {selectedEquipment.calibrationLogs.map((cal) => (
                           <div 
                             key={cal.id} 
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`打开计量证书：${cal.certificateNo}，${cal.result}，有效期至${cal.validUntil}`}
                             onClick={() => setViewCalibrationLog(cal)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                setViewCalibrationLog(cal);
+                              }
+                            }}
                             className="p-4 bg-white hover:bg-slate-50/75 rounded-xl border border-slate-200 hover:border-emerald-400 cursor-pointer shadow-2xs hover:shadow-xs group transition-all duration-200 flex justify-between items-start gap-4"
                           >
                             <div className="space-y-1.5">
@@ -2719,16 +3352,18 @@ Clinical class: Life-saving respiratory device`;
                                 </span>
                               </div>
                               
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteCalibrationLog(cal.id);
-                                }}
-                                className="md:opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded transition-all mt-1"
-                                title="注销此证书"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              {canManageEquipmentArchive && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteCalibrationLog(cal.id);
+                                  }}
+                                  className="md:opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded transition-all mt-1"
+                                  title="注销此证书"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -2786,13 +3421,19 @@ Clinical class: Life-saving respiratory device`;
                     <div className="space-y-5">
                       <div className="flex justify-between items-center">
                         <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">电子技术档案归档</h4>
-                        <button 
-                          onClick={() => setIsAttachmentModalOpen(true)}
-                          className="text-xs text-blue-600 font-bold hover:underline flex items-center gap-1 cursor-pointer"
-                        >
-                          <PlusCircle className="w-4 h-4" />
-                          <span>上传资料附件</span>
-                        </button>
+                        {canManageEquipmentArchive ? (
+                          <button
+                            onClick={() => setIsAttachmentModalOpen(true)}
+                            className="text-xs text-blue-600 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                          >
+                            <PlusCircle className="w-4 h-4" />
+                            <span>上传资料附件</span>
+                          </button>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 bg-slate-100 border border-slate-200 px-2 py-1 rounded-md">
+                            临床只读附件
+                          </span>
+                        )}
                       </div>
 
                       {/* 📊 档案完整度智能质检与组成占比看板 */}
@@ -3031,10 +3672,21 @@ Clinical class: Life-saving respiratory device`;
                           {selectedEquipment.attachments.map((file) => (
                             <div 
                               key={file.id} 
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`预览技术附件：${file.name}，${file.size}`}
                               onClick={() => {
                                 setPreviewFile(file);
                                 setActivePreviewPage(1);
                                 setIsPreviewOpen(true);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  setPreviewFile(file);
+                                  setActivePreviewPage(1);
+                                  setIsPreviewOpen(true);
+                                }
                               }}
                               className="p-3.5 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-200 cursor-pointer transition-all flex items-center gap-3.5 group"
                             >
@@ -3094,24 +3746,18 @@ Clinical class: Life-saving respiratory device`;
                                     <span>提取时间：{snap.extractedAt}</span>
                                   </div>
                                 </div>
-                                <button 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setEquipments(equipments.map(eq => {
-                                      if (eq.id === selectedEquipment.id) {
-                                        return {
-                                          ...eq,
-                                          extractedSnapshots: (eq.extractedSnapshots || []).filter(s => s.id !== snap.id)
-                                        };
-                                      }
-                                      return eq;
-                                    }));
-                                  }}
-                                  className="md:opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all absolute top-2 right-2 cursor-pointer"
-                                  title="解除快照关联"
-                                >
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
+                                {canManageEquipmentArchive && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteExtractedSnapshot(snap.id);
+                                    }}
+                                    className="md:opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all absolute top-2 right-2 cursor-pointer"
+                                    title="解除快照关联"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -3119,20 +3765,28 @@ Clinical class: Life-saving respiratory device`;
                       )}
                       
                       {/* Simulated Attachment drag/drop info */}
-                      <div 
-                        onClick={() => setIsAttachmentModalOpen(true)}
-                        className="border-2 border-dashed border-slate-200 hover:border-blue-400 p-6 rounded-xl text-center text-xs text-slate-400 cursor-pointer transition-all bg-slate-50/20"
-                      >
-                        <FileUp className="w-7 h-7 mx-auto mb-2 text-slate-300" />
-                        <p className="text-slate-600 font-semibold">拖拽任何相关的说明书、合格证PDF至此处</p>
-                        <p className="text-[10px] text-slate-400 mt-1">支持最大 50MB 的 PDF/Word/JPG 文档格式，自动建立系统索引</p>
-                      </div>
+                      {canManageEquipmentArchive ? (
+                        <div
+                          onClick={() => setIsAttachmentModalOpen(true)}
+                          className="border-2 border-dashed border-slate-200 hover:border-blue-400 p-6 rounded-xl text-center text-xs text-slate-400 cursor-pointer transition-all bg-slate-50/20"
+                        >
+                          <FileUp className="w-7 h-7 mx-auto mb-2 text-slate-300" />
+                          <p className="text-slate-600 font-semibold">拖拽任何相关的说明书、合格证PDF至此处</p>
+                          <p className="text-[10px] text-slate-400 mt-1">支持最大 50MB 的 PDF/Word/JPG 文档格式，自动建立系统索引</p>
+                        </div>
+                      ) : (
+                        <div className="border border-dashed border-slate-200 bg-slate-50/60 p-5 rounded-xl text-center text-xs text-slate-500">
+                          <FileText className="w-6 h-6 mx-auto mb-2 text-slate-300" />
+                          <p className="font-semibold">临床端可查看已归档技术资料</p>
+                          <p className="text-[10px] text-slate-400 mt-1">新增、删除或提取档案快照请联系医学装备科工程师。</p>
+                        </div>
+                      )}
                     </div>
                   );
                 })()}
 
                 {activeTab === 'tickets' && (() => {
-                  const relatedTasks = tasks.filter(t => t.deviceId === selectedEquipment.id || t.deviceId === selectedEquipment.sn || (t.deviceName === selectedEquipment.deviceName && t.department === selectedEquipment.dept));
+                  const relatedTasks = getRelatedTasksForEquipment(selectedEquipment);
                   return (
                     <div className="space-y-4">
                       <div className="flex justify-between items-center pb-2 border-b border-slate-100">
@@ -3145,11 +3799,25 @@ Clinical class: Life-saving respiratory device`;
                         </div>
                         <button 
                           onClick={() => {
+                            const quickRepairBlockMessage = getQuickRepairBlockMessage(selectedEquipment);
+                            if (quickRepairBlockMessage) {
+                              showArchiveToast({
+                                type: 'warning',
+                                message: quickRepairBlockMessage
+                              });
+                              return;
+                            }
                             if (onReportRepairFromEquip) {
                               onReportRepairFromEquip(selectedEquipment);
                             }
                           }}
-                          className="px-2.5 py-1.5 text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
+                          disabled={!canStartQuickRepairForEquipment(selectedEquipment)}
+                          title={canStartQuickRepairForEquipment(selectedEquipment) ? '一键发起智能报修' : getQuickRepairBlockMessage(selectedEquipment)}
+                          className={`px-2.5 py-1.5 text-[11px] font-bold rounded-lg flex items-center gap-1.5 shadow-sm transition-all ${
+                            canStartQuickRepairForEquipment(selectedEquipment)
+                              ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer'
+                              : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                          }`}
                         >
                           <PlusCircle className="w-3.5 h-3.5" />
                           <span>一键发起智能报修</span>
@@ -3167,7 +3835,7 @@ Clinical class: Life-saving respiratory device`;
                           {relatedTasks.map(ticket => {
                             let statusColor = 'bg-slate-100 text-slate-800';
                             if (ticket.status === '待确认') statusColor = 'bg-amber-100 text-amber-800 border border-amber-200';
-                            else if (ticket.status === '已完成' || ticket.status === '已归档') statusColor = 'bg-emerald-100 text-emerald-800 border border-emerald-200';
+                            else if (['已完成', '已归档', '已关闭'].includes(ticket.status)) statusColor = 'bg-emerald-100 text-emerald-800 border border-emerald-200';
                             else statusColor = 'bg-blue-100 text-blue-800 border border-blue-200';
 
                             return (
@@ -3218,57 +3886,83 @@ Clinical class: Life-saving respiratory device`;
               </div>
 
               {/* Action Toolbar Footer in Details Sheet */}
-              <div id="equipment_details_actions" className="p-2.5 sm:p-4 bg-slate-50 border-t border-slate-200/80 flex justify-between items-center gap-2 md:gap-3">
-                <button 
-                  onClick={() => handleDelete(selectedEquipment.id)}
-                  className="px-2.5 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-rose-200 rounded-lg transition-colors flex items-center justify-center gap-1 flex-shrink-0"
-                  title="作废删除档案"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  <span className="hidden sm:inline">作废删除</span>
-                </button>
+              <div id="equipment_details_actions" className="p-2 md:p-4 bg-slate-50 border-t border-slate-200/80 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 md:gap-3 overflow-visible shrink-0">
+                {canManageEquipmentArchive ? (
+                  <button
+                    onClick={() => handleDelete(selectedEquipment.id)}
+                    className="w-full sm:w-auto px-2.5 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-rose-200 rounded-lg transition-colors flex items-center justify-center gap-1 flex-shrink-0"
+                    title="作废删除档案"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>作废删除</span>
+                  </button>
+                ) : (
+                  <div className="text-[10px] text-slate-400 font-medium hidden sm:block">
+                    临床只读档案
+                  </div>
+                )}
 
-                <div className="flex items-center gap-1.5 sm:gap-3 flex-1 sm:flex-initial justify-end min-w-0">
-                  <button 
-                    onClick={handlePrintQR}
-                    className="p-2 sm:px-4 sm:py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-600 hover:bg-white bg-slate-50 flex items-center justify-center gap-1.5 transition-all flex-shrink-0"
-                    title="打印物联二维码"
-                  >
-                    <QrCode className="w-4 h-4" />
-                    <span className="hidden md:inline">打印二维码</span>
-                  </button>
-                  <button 
-                    onClick={() => openEditModal(selectedEquipment)}
-                    className="p-2 sm:px-4 sm:py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-600 hover:bg-white bg-slate-50 flex items-center justify-center gap-1.5 transition-all flex-shrink-0"
-                    title="修改档案信息"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                    <span className="hidden md:inline">修改档案</span>
-                  </button>
-                  <button 
-                    onClick={() => openCloneModal(selectedEquipment)}
-                    className="p-2 sm:px-4 sm:py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-600 hover:bg-white bg-slate-50 flex items-center justify-center gap-1.5 transition-all flex-shrink-0"
-                    title="复制当前设备规格建立新档案"
-                  >
-                    <Copy className="w-4 h-4 text-violet-600" />
-                    <span className="hidden md:inline">克隆复制</span>
-                  </button>
-                  <button 
-                    onClick={() => setIsScannerModalOpen(true)}
-                    className="px-2.5 py-2 sm:px-4 sm:py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white rounded-lg text-xs font-bold shadow-sm shadow-indigo-100 flex items-center justify-center gap-1.5 transition-all flex-1 sm:flex-initial text-center whitespace-nowrap"
-                    title="调用相机扫描SN码快速填充报修"
-                  >
-                    <QrCode className="w-4 h-4 flex-shrink-0 animate-pulse" />
-                    <span>扫码报修</span>
-                  </button>
-                  <button 
-                    onClick={handleQuickRepair}
-                    className="px-2.5 py-2 sm:px-4 sm:py-2 bg-blue-600 text-white rounded-lg text-xs font-bold shadow-sm shadow-blue-200 hover:bg-blue-700 flex items-center justify-center gap-1.5 transition-all flex-1 sm:flex-initial text-center whitespace-nowrap"
-                    title="立即一键报修"
-                  >
-                    <Wrench className="w-4 h-4 flex-shrink-0" />
-                    <span>一键报修</span>
-                  </button>
+                <div className="flex flex-col sm:flex-row flex-wrap sm:flex-nowrap items-stretch sm:items-center gap-2 sm:gap-3 flex-1 sm:flex-initial justify-end min-w-0 w-full sm:w-auto">
+                  {canManageEquipmentArchive && (
+                    <div className="grid grid-cols-3 sm:flex items-center gap-1.5 sm:gap-3 w-full sm:w-auto">
+                      <button 
+                        onClick={handlePrintQR}
+                        className="min-h-9 p-2 sm:px-4 sm:py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-600 hover:bg-white bg-slate-50 flex items-center justify-center gap-1.5 transition-all flex-shrink-0"
+                        title="打印物联二维码"
+                      >
+                        <QrCode className="w-4 h-4" />
+                        <span className="hidden md:inline">打印二维码</span>
+                      </button>
+                      <button
+                        onClick={() => openEditModal(selectedEquipment)}
+                        className="min-h-9 p-2 sm:px-4 sm:py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-600 hover:bg-white bg-slate-50 flex items-center justify-center gap-1.5 transition-all flex-shrink-0"
+                        title="修改档案信息"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                        <span className="hidden md:inline">修改档案</span>
+                      </button>
+                      <button
+                        onClick={() => openCloneModal(selectedEquipment)}
+                        className="min-h-9 p-2 sm:px-4 sm:py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-600 hover:bg-white bg-slate-50 flex items-center justify-center gap-1.5 transition-all flex-shrink-0"
+                        title="复制当前设备规格建立新档案"
+                      >
+                        <Copy className="w-4 h-4 text-violet-600" />
+                        <span className="hidden md:inline">克隆复制</span>
+                      </button>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-2 w-full sm:w-auto">
+                    <button
+                      id="btn-archive-scan-repair"
+                      aria-label="扫码报修当前设备"
+                      onClick={() => setIsScannerModalOpen(true)}
+                      disabled={!canStartQuickRepairForEquipment(selectedEquipment)}
+                      className={`px-2.5 py-2 sm:px-4 sm:py-2 rounded-lg text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 transition-all flex-1 sm:flex-initial text-center whitespace-nowrap ${
+                        canStartQuickRepairForEquipment(selectedEquipment)
+                          ? 'bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white shadow-indigo-100'
+                          : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                      }`}
+                      title={canStartQuickRepairForEquipment(selectedEquipment) ? '调用相机扫描SN码快速填充报修' : getQuickRepairBlockMessage(selectedEquipment)}
+                    >
+                      <QrCode className="w-4 h-4 flex-shrink-0 animate-pulse" />
+                      <span>扫码报修</span>
+                    </button>
+                    <button
+                      id="btn-archive-instant-repair"
+                      aria-label="一键报修当前设备"
+                      onClick={handleQuickRepair}
+                      disabled={!canStartQuickRepairForEquipment(selectedEquipment)}
+                      className={`px-2.5 py-2 sm:px-4 sm:py-2 rounded-lg text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 transition-all flex-1 sm:flex-initial text-center whitespace-nowrap ${
+                        canStartQuickRepairForEquipment(selectedEquipment)
+                          ? 'bg-blue-600 text-white shadow-blue-200 hover:bg-blue-700'
+                          : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                      }`}
+                      title={canStartQuickRepairForEquipment(selectedEquipment) ? '立即一键报修' : getQuickRepairBlockMessage(selectedEquipment)}
+                    >
+                      <Wrench className="w-4 h-4 flex-shrink-0" />
+                      <span>一键报修</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </>
@@ -3276,13 +3970,15 @@ Clinical class: Life-saving respiratory device`;
             <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-8">
               <HardDrive className="w-16 h-16 text-slate-200 mb-3 animate-bounce" />
               <p className="font-bold text-slate-500">未选中任何设备档案</p>
-              <p className="text-xs text-slate-400 mt-1">请从左侧列表点击选择，或点击 AI 扫码入库新增设备。</p>
+              <p className="text-xs text-slate-400 mt-1">
+                {canManageEquipmentArchive ? '请从左侧列表点击选择，或点击 AI 扫码入库新增设备。' : '请从左侧本科室设备列表点击选择。'}
+              </p>
             </div>
           )}
         </section>
 
         {/* RIGHT COLUMN: Real-time QR Card & AI Clinical Engineering Diagnostic Assistant */}
-        <aside id="right_column_panel" className={`col-span-12 md:col-span-3 ${mobileView === 'ai' ? 'flex' : 'hidden md:flex'} flex-col gap-4 md:gap-6 h-full min-h-0`}>
+        <aside id="right_column_panel" className={`col-span-12 md:col-span-3 ${mobileView === 'ai' ? 'fixed inset-x-3 top-48 bottom-20 z-20 flex' : 'hidden md:flex'} md:static md:inset-auto md:z-auto flex-col gap-4 md:gap-6 min-h-0 md:h-full`}>
           
 
 
@@ -3374,7 +4070,7 @@ Clinical class: Life-saving respiratory device`;
         ) : viewMode === 'calendar' ? (
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-full min-h-0 overflow-hidden w-full flex-1">
             <MaintenanceCalendar
-              equipments={equipments}
+              equipments={visibleEquipments}
               setEquipments={setEquipments}
               selectedId={selectedId}
               setSelectedId={setSelectedId}
@@ -3401,19 +4097,7 @@ Clinical class: Life-saving respiratory device`;
                 <div>
                   <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest">筛选后在册设备</p>
                   <p className="text-sm md:text-xl font-black text-slate-800">
-                    {
-                      equipments.filter(e => {
-                        const matchesDept = matrixSelectedDept === '全部科室' || e.dept === matrixSelectedDept;
-                        const matchesCategory = matrixSelectedCategory === '全部分类' || e.category === matrixSelectedCategory;
-                        const matchesStatus = matrixSelectedStatus === '全部状态' || e.status === matrixSelectedStatus;
-                        const matchesSearch = !matrixSearchQuery.trim() || 
-                          e.deviceName.toLowerCase().includes(matrixSearchQuery.toLowerCase()) ||
-                          e.sn.toLowerCase().includes(matrixSearchQuery.toLowerCase()) ||
-                          e.model.toLowerCase().includes(matrixSearchQuery.toLowerCase()) ||
-                          e.manufacturer.toLowerCase().includes(matrixSearchQuery.toLowerCase());
-                        return matchesDept && matchesCategory && matchesStatus && matchesSearch;
-                      }).length
-                    } <span className="text-[10px] md:text-xs font-normal text-slate-500">台 / 共{equipments.length}台</span>
+                    {matrixFilteredEquipments.length} <span className="text-[10px] md:text-xs font-normal text-slate-500">台 / 共{visibleEquipments.length}台</span>
                   </p>
                 </div>
               </div>
@@ -3425,7 +4109,7 @@ Clinical class: Life-saving respiratory device`;
                 <div>
                   <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest">正常运行比例</p>
                   <p className="text-sm md:text-xl font-black text-emerald-600">
-                    {Math.round((equipments.filter(e => e.status === '正常运行').length / (equipments.length || 1)) * 100)}%
+                    {Math.round((visibleEquipments.filter(e => e.status === '正常运行').length / (visibleEquipments.length || 1)) * 100)}%
                   </p>
                 </div>
               </div>
@@ -3437,7 +4121,7 @@ Clinical class: Life-saving respiratory device`;
                 <div>
                   <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest">故障待修总数</p>
                   <p className="text-sm md:text-xl font-black text-rose-600">
-                    {equipments.filter(e => e.status === '故障维修').length} <span className="text-[10px] md:text-xs font-normal text-slate-500">台在修理</span>
+                    {visibleEquipments.filter(e => e.status === '故障维修').length} <span className="text-[10px] md:text-xs font-normal text-slate-500">台在修理</span>
                   </p>
                 </div>
               </div>
@@ -3449,7 +4133,7 @@ Clinical class: Life-saving respiratory device`;
                 <div>
                   <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest">下期计量检定数</p>
                   <p className="text-sm md:text-xl font-black text-indigo-600">
-                    {equipments.filter(e => e.calibrationRequired).length} <span className="text-[10px] md:text-xs font-normal text-slate-500">台受控</span>
+                    {visibleEquipments.filter(e => e.calibrationRequired).length} <span className="text-[10px] md:text-xs font-normal text-slate-500">台受控</span>
                   </p>
                 </div>
               </div>
@@ -3465,32 +4149,55 @@ Clinical class: Life-saving respiratory device`;
                     <span>医学装备资产台账明细表</span>
                   </h3>
                   <p className="text-[11px] text-slate-500 mt-1">
-                    实时汇总之全院资产设备，支持按多字段首字母排序与多维度精细化联动检索，点击“定位档案”可自动穿透跳转至主台账对应设备卷宗。
+                    实时汇总之{assetScopeLabel}资产设备，支持按多字段首字母排序与多维度精细化联动检索，点击“定位档案”可自动穿透跳转至主台账对应设备卷宗。
                   </p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
                   {/* Export Button */}
-                  <button
-                    onClick={() => {
-                      const csvContent = "data:text/csv;charset=utf-8,\uFEFF" // Include BOM for Chinese encoding support in Excel
-                        + ["设备编号,设备名称,科室,品类,品牌/厂商,型号,出厂SN,购置金额,运行状态,下期维保时间,是否强检"]
-                          .concat(equipments.map(e => `"${e.id}","${e.deviceName}","${e.dept}","${e.category}","${e.manufacturer}","${e.model}","${e.sn}",${e.purchasePrice},"${e.status}","${e.nextMaintenanceDate || ''}","${e.calibrationRequired ? '是' : '否'}"`))
-                          .join("\n");
-                      const encodedUri = encodeURI(csvContent);
-                      const link = document.createElement("a");
-                      link.setAttribute("href", encodedUri);
-                      link.setAttribute("download", `医学装备资产台账明细_${new Date().toISOString().slice(0,10)}.csv`);
-                      document.body.appendChild(link);
-                      link.click();
-                      document.body.removeChild(link);
-                    }}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-xs transition-all cursor-pointer"
-                    title="导出当前全量设备资产报表为 CSV 格式"
-                  >
-                    <Printer className="w-3.5 h-3.5 text-slate-500" />
-                    <span>导出全表 (CSV)</span>
-                  </button>
+                  {canManageEquipmentArchive ? (
+                    <button
+                      onClick={() => {
+                        const escapeCsvValue = (value: string | number | boolean | null | undefined) =>
+                          `"${String(value ?? '').replace(/"/g, '""')}"`;
+                        const csvRows = [
+                          ["设备编号", "设备名称", "科室", "品类", "品牌/厂商", "型号", "出厂SN", "购置金额", "运行状态", "下期维保时间", "是否强检"],
+                          ...matrixFilteredEquipments.map(e => [
+                            e.id,
+                            e.deviceName,
+                            e.dept,
+                            e.category,
+                            e.manufacturer,
+                            e.model,
+                            e.sn,
+                            e.purchaseCost,
+                            e.status,
+                            e.nextMaintenanceDate || '',
+                            e.calibrationRequired ? '是' : '否',
+                          ]),
+                        ];
+                        const csvContent = `\uFEFF${csvRows.map(row => row.map(escapeCsvValue).join(",")).join("\n")}`;
+                        const csvBlob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+                        const downloadUrl = URL.createObjectURL(csvBlob);
+                        const link = document.createElement("a");
+                        link.setAttribute("href", downloadUrl);
+                        link.setAttribute("download", `医学装备资产台账明细_${assetScopeLabel}_${getLocalDateString()}.csv`);
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 0);
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-xs transition-all cursor-pointer"
+                      title={`导出当前${assetScopeLabel}可见设备资产报表为 CSV 格式`}
+                    >
+                      <Printer className="w-3.5 h-3.5 text-slate-500" />
+                      <span>导出当前表 (CSV)</span>
+                    </button>
+                  ) : (
+                    <span className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 text-slate-500 font-bold rounded-lg text-xs border border-slate-200">
+                      临床只读台账
+                    </span>
+                  )}
 
                   {/* Reset All Filters */}
                   {(matrixSelectedDept !== '全部科室' || matrixSelectedCategory !== '全部分类' || matrixSelectedStatus !== '全部状态' || matrixSearchQuery) && (
@@ -3535,8 +4242,8 @@ Clinical class: Life-saving respiratory device`;
                     onChange={(e) => setMatrixSelectedDept(e.target.value)}
                     className="w-full text-xs bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-slate-600 focus:outline-none font-bold"
                   >
-                    <option value="全部科室">全部科室 ({Array.from(new Set(equipments.map(e => e.dept))).filter(Boolean).length}个)</option>
-                    {Array.from(new Set(equipments.map(e => e.dept))).filter(Boolean).sort().map(dept => (
+                    <option value="全部科室">{assetScopeLabel} ({visibleDepartments.length - 1}个)</option>
+                    {visibleDepartments.filter(dept => dept !== '全部科室').sort().map(dept => (
                       <option key={dept} value={dept}>{dept}</option>
                     ))}
                   </select>
@@ -3576,24 +4283,13 @@ Clinical class: Life-saving respiratory device`;
               {/* Table rendering panel */}
               <div className="overflow-x-auto border border-slate-200 rounded-xl flex-1 min-h-[300px]">
                 {(() => {
-                  const sortedAndFilteredEquipments = [...equipments]
-                    .filter(e => {
-                      const matchesDept = matrixSelectedDept === '全部科室' || e.dept === matrixSelectedDept;
-                      const matchesCategory = matrixSelectedCategory === '全部分类' || e.category === matrixSelectedCategory;
-                      const matchesStatus = matrixSelectedStatus === '全部状态' || e.status === matrixSelectedStatus;
-                      const matchesSearch = !matrixSearchQuery.trim() || 
-                        e.deviceName.toLowerCase().includes(matrixSearchQuery.toLowerCase()) ||
-                        e.sn.toLowerCase().includes(matrixSearchQuery.toLowerCase()) ||
-                        e.model.toLowerCase().includes(matrixSearchQuery.toLowerCase()) ||
-                        e.manufacturer.toLowerCase().includes(matrixSearchQuery.toLowerCase());
-                      return matchesDept && matchesCategory && matchesStatus && matchesSearch;
-                    })
+                  const sortedAndFilteredEquipments = [...matrixFilteredEquipments]
                     .sort((a, b) => {
                       let valA = (a[matrixSortField as keyof MedicalEquipment] || '').toString();
                       let valB = (b[matrixSortField as keyof MedicalEquipment] || '').toString();
-                      if (matrixSortField === 'purchasePrice') {
-                        const numA = Number(a.purchasePrice) || 0;
-                        const numB = Number(b.purchasePrice) || 0;
+                      if (matrixSortField === 'purchaseCost') {
+                        const numA = Number(a.purchaseCost) || 0;
+                        const numB = Number(b.purchaseCost) || 0;
                         return matrixSortOrder === 'asc' ? numA - numB : numB - numA;
                       }
                       return matrixSortOrder === 'asc' 
@@ -3802,13 +4498,27 @@ Clinical class: Life-saving respiratory device`;
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      setQuickRepairEquipId(eq.id);
+                                      const quickRepairBlockMessage = getQuickRepairBlockMessage(eq);
+                                      if (quickRepairBlockMessage) {
+                                        showArchiveToast({
+                                          type: 'warning',
+                                          message: quickRepairBlockMessage
+                                        });
+                                        return;
+                                      }
+
+                                      resetQuickRepairDraft(eq.id);
                                       setQuickRepairDesc(`【台账明细表一键快捷报修】\n管理员在“台账明细表”执行快捷报修，请立刻核实响应。`);
                                       setQuickRepairUrgency('high');
                                       setIsQuickRepairModalOpen(true);
                                     }}
-                                    className="px-2.5 py-1 bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-600 hover:text-white rounded-md text-[10.5px] font-bold transition-all cursor-pointer"
-                                    title="一键报修"
+                                    disabled={!canStartQuickRepairForEquipment(eq)}
+                                    className={`px-2.5 py-1 border rounded-md text-[10.5px] font-bold transition-all ${
+                                      canStartQuickRepairForEquipment(eq)
+                                        ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-600 hover:text-white cursor-pointer'
+                                        : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                                    }`}
+                                    title={canStartQuickRepairForEquipment(eq) ? '一键报修' : getQuickRepairBlockMessage(eq)}
                                   >
                                     报修
                                   </button>
@@ -3834,9 +4544,9 @@ Clinical class: Life-saving respiratory device`;
                   <Layers className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest">全院设备总数</p>
+                  <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest">{assetScopeLabel}设备总数</p>
                   <div className="flex items-baseline gap-1 mt-0.5">
-                    <span className="text-xl md:text-2xl font-black text-slate-800">{equipments.length}</span>
+                    <span className="text-xl md:text-2xl font-black text-slate-800">{visibleEquipments.length}</span>
                     <span className="text-[10px] md:text-xs text-slate-500 font-bold">台设备在册</span>
                   </div>
                 </div>
@@ -3850,7 +4560,7 @@ Clinical class: Life-saving respiratory device`;
                   <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest">正常运行中</p>
                   <div className="flex items-baseline gap-1 mt-0.5">
                     <span className="text-xl md:text-2xl font-black text-emerald-600">
-                      {equipments.filter(e => e.status === '正常运行').length}
+                      {visibleEquipments.filter(e => e.status === '正常运行').length}
                     </span>
                     <span className="text-[10px] md:text-xs text-slate-500 font-bold">台状态优良</span>
                   </div>
@@ -3865,7 +4575,7 @@ Clinical class: Life-saving respiratory device`;
                   <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest">故障待修状态</p>
                   <div className="flex items-baseline gap-1 mt-0.5">
                     <span className="text-xl md:text-2xl font-black text-rose-600">
-                      {equipments.filter(e => e.status === '故障维修').length}
+                      {visibleEquipments.filter(e => e.status === '故障维修').length}
                     </span>
                     <span className="text-[10px] md:text-xs text-slate-500 font-bold">台维保待料</span>
                   </div>
@@ -3877,10 +4587,10 @@ Clinical class: Life-saving respiratory device`;
                   <LayoutGrid className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest">业务实体科室数</p>
+                  <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest">{assetScopeLabel}实体科室数</p>
                   <div className="flex items-baseline gap-1 mt-0.5">
                     <span className="text-xl md:text-2xl font-black text-indigo-600">
-                      {Array.from(new Set(equipments.map(e => e.dept))).filter(Boolean).length}
+                      {visibleDepartments.length - 1}
                     </span>
                     <span className="text-[10px] md:text-xs text-slate-500 font-bold">个医学科室</span>
                   </div>
@@ -3894,7 +4604,7 @@ Clinical class: Life-saving respiratory device`;
                 <div>
                   <h3 className="text-sm md:text-base font-black text-slate-800 flex items-center gap-2">
                     <LayoutGrid className="w-5 h-5 text-indigo-500 animate-pulse" />
-                    <span>全院科室 ✕ 装备类别 联动资产看板</span>
+                    <span>{assetScopeLabel}科室 ✕ 装备类别 联动资产看板</span>
                   </h3>
                   <p className="text-[11px] text-slate-500 mt-1">
                     系统根据实际库存智能统计。<strong>点击下表任何科室行、品类列、交叉单元格或总数，将自动完成筛选并跳转到【台账明细表】专属页面，实现穿透下钻！</strong>
@@ -3907,7 +4617,7 @@ Clinical class: Life-saving respiratory device`;
                 <table className="w-full text-xs text-left border-collapse">
                   <thead>
                     <tr className="bg-slate-50/80 text-slate-500 font-bold border-b border-slate-100">
-                      <th className="p-3 min-w-[140px] font-black text-slate-600">科室机构 (点击整行筛选)</th>
+                      <th className="p-3 min-w-[140px] font-black text-slate-600">{assetScopeLabel}科室机构 (点击整行筛选)</th>
                       {['急救生命支持', '影像诊断', '检验分析', '手术治疗', '其他'].map(cat => {
                         return (
                           <th 
@@ -3918,11 +4628,11 @@ Clinical class: Life-saving respiratory device`;
                               setViewMode('list');
                             }}
                             className="p-3 text-center cursor-pointer hover:bg-slate-150 hover:text-indigo-600 transition-all"
-                            title={`点击查看全院“${cat}”装备明细列表`}
+                            title={`点击查看${assetScopeLabel}“${cat}”装备明细列表`}
                           >
                             <span className="block font-bold">{cat}</span>
                             <span className="text-[9px] font-normal text-slate-400">
-                              (全院: {equipments.filter(e => e.category === cat).length}台)
+                              ({assetScopeLabel}: {visibleEquipments.filter(e => e.category === cat).length}台)
                             </span>
                           </th>
                         );
@@ -3934,15 +4644,15 @@ Clinical class: Life-saving respiratory device`;
                           setViewMode('list');
                         }}
                         className="p-3 text-center font-black text-blue-600 bg-blue-50/30 cursor-pointer hover:bg-blue-100 transition-all"
-                        title="点击查看全院所有设备台账明细列表"
+                        title={`点击查看${assetScopeLabel}所有设备台账明细列表`}
                       >
                         科室资产总计
                       </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
-                    {Array.from(new Set(equipments.map(e => e.dept))).filter(Boolean).map(dept => {
-                      const deptTotal = equipments.filter(e => e.dept === dept).length;
+                    {visibleDepartments.filter(dept => dept !== '全部科室').map(dept => {
+                      const deptTotal = visibleEquipments.filter(e => isSameDepartment(e.dept, dept)).length;
                       
                       return (
                         <tr 
@@ -3968,7 +4678,7 @@ Clinical class: Life-saving respiratory device`;
 
                           {/* Category Count Cells */}
                           {['急救生命支持', '影像诊断', '检验分析', '手术治疗', '其他'].map(cat => {
-                            const count = equipments.filter(e => e.dept === dept && e.category === cat).length;
+                            const count = visibleEquipments.filter(e => isSameDepartment(e.dept, dept) && e.category === cat).length;
                             
                             return (
                               <td key={cat} className="p-2.5 text-center">
@@ -4013,9 +4723,9 @@ Clinical class: Life-saving respiratory device`;
 
                     {/* Overall Summary Row */}
                     <tr className="bg-slate-100/60 font-black border-t-2 border-slate-200">
-                      <td className="p-3 text-slate-800 font-extrabold">全院品类小计</td>
+                      <td className="p-3 text-slate-800 font-extrabold">{assetScopeLabel}品类小计</td>
                       {['急救生命支持', '影像诊断', '检验分析', '手术治疗', '其他'].map(cat => {
-                        const colTotal = equipments.filter(e => e.category === cat).length;
+                        const colTotal = visibleEquipments.filter(e => e.category === cat).length;
                         
                         return (
                           <td key={cat} className="p-3 text-center">
@@ -4027,7 +4737,7 @@ Clinical class: Life-saving respiratory device`;
                                 setViewMode('list');
                               }}
                               className="px-3 py-1 rounded-lg text-xs font-extrabold transition-all bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-700"
-                              title={`点击穿透查看全院“${cat}”装备明细`}
+                              title={`点击穿透查看${assetScopeLabel}“${cat}”装备明细`}
                             >
                               {colTotal}台
                             </button>
@@ -4044,7 +4754,7 @@ Clinical class: Life-saving respiratory device`;
                           }}
                           className="font-black"
                         >
-                          {equipments.length}台
+                          {visibleEquipments.length}台
                         </button>
                       </td>
                     </tr>
@@ -4066,7 +4776,7 @@ Clinical class: Life-saving respiratory device`;
             <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-4 md:p-6">
               <h3 className="text-sm md:text-base font-black text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-3 mb-4">
                 <BarChart2 className="w-5 h-5 text-indigo-500" />
-                <span>全院资产购置成本分布分析</span>
+                <span>{assetScopeLabel}资产购置成本分布分析</span>
               </h3>
               
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -4078,9 +4788,9 @@ Clinical class: Life-saving respiratory device`;
                       <span>科室资产原值排行</span>
                     </p>
                     <div className="space-y-2 font-mono">
-                      {Array.from(new Set(equipments.map(e => e.dept))).filter(Boolean)
+                      {visibleDepartments.filter(dept => dept !== '全部科室')
                         .map(dept => {
-                          const value = equipments.filter(e => e.dept === dept).reduce((sum, e) => sum + (Number(e.purchasePrice) || 0), 0);
+                          const value = visibleEquipments.filter(e => isSameDepartment(e.dept, dept)).reduce((sum, e) => sum + (Number(e.purchaseCost) || 0), 0);
                           return { dept, value };
                         })
                         .sort((a, b) => b.value - a.value)
@@ -4101,7 +4811,7 @@ Clinical class: Life-saving respiratory device`;
                     </p>
                     <div className="space-y-2 font-mono">
                       {['急救生命支持', '影像诊断', '检验分析', '手术治疗', '其他'].map((cat, idx) => {
-                        const value = equipments.filter(e => e.category === cat).reduce((sum, e) => sum + (Number(e.purchasePrice) || 0), 0);
+                        const value = visibleEquipments.filter(e => e.category === cat).reduce((sum, e) => sum + (Number(e.purchaseCost) || 0), 0);
                         const ratio = totalAssetsValue > 0 ? ((value / totalAssetsValue) * 100).toFixed(1) : '0';
                         return (
                           <div key={idx} className="flex justify-between items-center text-[11px]">
@@ -4119,11 +4829,11 @@ Clinical class: Life-saving respiratory device`;
                   <BarChart2 className="w-12 h-12 text-slate-300 mb-2 animate-bounce" />
                   <p className="text-xs font-bold text-slate-700">科室资产总原值堆叠对比</p>
                   <p className="text-[10px] text-slate-400 mt-1">
-                    系统已对齐全院在册装备数据，支持 3D 响应式分析
+                    系统已对齐{assetScopeLabel}在册装备数据，支持 3D 响应式分析
                   </p>
                   <div className="flex gap-1.5 mt-3 flex-wrap justify-center">
-                    {Array.from(new Set(equipments.map(e => e.dept))).filter(Boolean).map(dept => {
-                      const count = equipments.filter(e => e.dept === dept).length;
+                    {visibleDepartments.filter(dept => dept !== '全部科室').map(dept => {
+                      const count = visibleEquipments.filter(e => isSameDepartment(e.dept, dept)).length;
                       return (
                         <span key={dept} className="text-[9px] bg-white border border-slate-200 rounded px-1.5 py-0.5 text-slate-500 font-bold font-mono">
                           {dept} ({count}台)
@@ -4141,11 +4851,11 @@ Clinical class: Life-saving respiratory device`;
       {/* Global Bottom Footer stats info */}
       <footer id="global_footer" className="hidden md:flex mt-6 justify-between text-[11px] text-slate-400 border-t border-slate-200/60 pt-4">
         <div className="flex gap-6">
-          <span>全院医学装备资产估算总值: <strong className="text-slate-600">¥{totalAssetsValue.toLocaleString()}</strong></span>
+          <span>{assetScopeLabel}医学装备资产估算总值: <strong className="text-slate-600">¥{totalAssetsValue.toLocaleString()}</strong></span>
           <span>运行设备完好率: <strong className="text-emerald-600 font-bold">{perfectRate}%</strong></span>
           <span>医学强检监控状态: <strong className="text-slate-600">良好</strong></span>
         </div>
-        <span>医疗质量与物理安全自诊断时间: 2026-07-01 23:03:29 (本地时间)</span>
+        <span>医疗质量与物理安全自诊断时间: {getLocalDateTimeString()} (本地时间)</span>
       </footer>
 
       {/* Mobile Sticky Navigation Tab Bar */}
@@ -5044,13 +5754,19 @@ Clinical class: Life-saving respiratory device`;
                 <span className="font-extrabold text-slate-800 text-sm">医院设备资产管理系统 - 电子派工单 (Work Order)</span>
               </div>
               <div className="flex items-center gap-2">
-                <button 
-                  onClick={() => window.print()} 
-                  className="px-2.5 py-1 text-[11px] font-bold bg-white text-slate-700 border border-slate-300 rounded hover:bg-slate-50 flex items-center gap-1 shadow-2xs"
-                >
-                  <Printer className="w-3 h-3" />
-                  <span>打印单据</span>
-                </button>
+                {canManageEquipmentArchive ? (
+                  <button 
+                    onClick={() => window.print()} 
+                    className="px-2.5 py-1 text-[11px] font-bold bg-white text-slate-700 border border-slate-300 rounded hover:bg-slate-50 flex items-center gap-1 shadow-2xs"
+                  >
+                    <Printer className="w-3 h-3" />
+                    <span>打印单据</span>
+                  </button>
+                ) : (
+                  <span className="px-2.5 py-1 text-[11px] font-bold bg-slate-100 text-slate-500 border border-slate-200 rounded flex items-center gap-1">
+                    临床只读阅览
+                  </span>
+                )}
                 <button 
                   onClick={() => setViewMaintenanceLog(null)} 
                   className="text-slate-400 hover:text-slate-600 transition-colors"
@@ -5080,7 +5796,7 @@ Clinical class: Life-saving respiratory device`;
                 <div className="grid grid-cols-2 gap-x-6 gap-y-3.5 text-xs py-4 border-b border-dashed border-slate-200">
                   <div>
                     <span className="text-slate-400">医学装备名称:</span>
-                    <strong className="text-slate-800 ml-1.5">{selectedEquipment?.name}</strong>
+                    <strong className="text-slate-800 ml-1.5">{selectedEquipment?.deviceName}</strong>
                   </div>
                   <div>
                     <span className="text-slate-400">工单备案号:</span>
@@ -5092,7 +5808,7 @@ Clinical class: Life-saving respiratory device`;
                   </div>
                   <div>
                     <span className="text-slate-400">医院资产编号:</span>
-                    <span className="text-slate-800 ml-1.5 font-mono">{selectedEquipment?.assetNo || 'HA-0081-392'}</span>
+                    <span className="text-slate-800 ml-1.5 font-mono">{selectedEquipment?.id}</span>
                   </div>
                   <div>
                     <span className="text-slate-400">生产厂商/品牌:</span>
@@ -5100,7 +5816,7 @@ Clinical class: Life-saving respiratory device`;
                   </div>
                   <div>
                     <span className="text-slate-400">使用临床科室:</span>
-                    <span className="text-slate-800 ml-1.5 bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-medium">{selectedEquipment?.department}</span>
+                    <span className="text-slate-800 ml-1.5 bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-medium">{selectedEquipment?.dept}</span>
                   </div>
                 </div>
 
@@ -5236,13 +5952,19 @@ Clinical class: Life-saving respiratory device`;
                 <span className="font-extrabold text-slate-800 text-sm">法定计量强制检定证书与科室绿标印证系统</span>
               </div>
               <div className="flex items-center gap-2">
-                <button 
-                  onClick={() => window.print()} 
-                  className="px-2.5 py-1 text-[11px] font-bold bg-white text-slate-700 border border-slate-300 rounded hover:bg-slate-50 flex items-center gap-1 shadow-2xs"
-                >
-                  <Printer className="w-3 h-3" />
-                  <span>打印合格证 & 证书</span>
-                </button>
+                {canManageEquipmentArchive ? (
+                  <button 
+                    onClick={() => window.print()} 
+                    className="px-2.5 py-1 text-[11px] font-bold bg-white text-slate-700 border border-slate-300 rounded hover:bg-slate-50 flex items-center gap-1 shadow-2xs"
+                  >
+                    <Printer className="w-3 h-3" />
+                    <span>打印合格证 & 证书</span>
+                  </button>
+                ) : (
+                  <span className="px-2.5 py-1 text-[11px] font-bold bg-slate-100 text-slate-500 border border-slate-200 rounded flex items-center gap-1">
+                    临床只读阅览
+                  </span>
+                )}
                 <button 
                   onClick={() => setViewCalibrationLog(null)} 
                   className="text-slate-400 hover:text-slate-600 transition-colors"
@@ -5284,11 +6006,11 @@ Clinical class: Life-saving respiratory device`;
                       </div>
                       <div>
                         <span className="font-bold text-slate-400 mr-1 inline-block w-14">设备名称:</span>
-                        <strong className="text-slate-900">{selectedEquipment?.name}</strong>
+                        <strong className="text-slate-900">{selectedEquipment?.deviceName}</strong>
                       </div>
                       <div>
                         <span className="font-bold text-slate-400 mr-1 inline-block w-14">安装科室:</span>
-                        <span className="font-medium text-slate-800">{selectedEquipment?.department}</span>
+                        <span className="font-medium text-slate-800">{selectedEquipment?.dept}</span>
                       </div>
                       <div className="grid grid-cols-2 gap-1 pt-1 border-t border-slate-100">
                         <div>
@@ -5350,11 +6072,11 @@ Clinical class: Life-saving respiratory device`;
                       </div>
                       <div>
                         <span className="text-slate-400">计量器具名称:</span>
-                        <span className="text-slate-800 ml-1.5 font-semibold">{selectedEquipment?.name}</span>
+                        <span className="text-slate-800 ml-1.5 font-semibold">{selectedEquipment?.deviceName}</span>
                       </div>
                       <div>
                         <span className="text-slate-400">设备出厂编号:</span>
-                        <span className="text-slate-800 ml-1.5 font-mono">{selectedEquipment?.serialNo || 'SN-UNASSIGNED'}</span>
+                        <span className="text-slate-800 ml-1.5 font-mono">{selectedEquipment?.sn || 'SN-UNASSIGNED'}</span>
                       </div>
                     </div>
 
@@ -5564,7 +6286,10 @@ Clinical class: Life-saving respiratory device`;
                 </div>
               </div>
               <button 
-                onClick={() => setIsQuickRepairModalOpen(false)} 
+                onClick={() => {
+                  setIsQuickRepairModalOpen(false);
+                  resetQuickRepairDraft();
+                }} 
                 className="text-white/80 hover:text-white transition-colors"
                 type="button"
               >
@@ -5581,15 +6306,17 @@ Clinical class: Life-saving respiratory device`;
                   1. 选择发生故障的装备
                 </label>
                 <select
+                  id="quick-repair-equipment-select"
+                  aria-label="选择发生故障的装备"
                   value={quickRepairEquipId}
-                  onChange={(e) => setQuickRepairEquipId(e.target.value)}
+                  onChange={(e) => resetQuickRepairDraft(e.target.value)}
                   className="w-full text-xs font-bold border border-slate-200 rounded-lg p-2.5 bg-slate-50 text-slate-700 focus:ring-2 focus:ring-rose-500 outline-none"
                   required
                 >
                   <option value="">-- 请选择本科室发生故障的设备 --</option>
-                  {equipments.filter(eq => !currentUser.dept || eq.dept === currentUser.dept).map(eq => (
-                    <option key={eq.id} value={eq.id}>
-                      [{eq.status}] {eq.deviceName} ({eq.model}) (SN: {eq.sn})
+                  {visibleEquipments.map(eq => (
+                    <option key={eq.id} value={eq.id} disabled={!canStartQuickRepairForEquipment(eq)}>
+                      [{eq.status}] {eq.deviceName} ({eq.model}) (SN: {eq.sn}){hasActiveRepairWorkOrder(eq) ? ' - 已有维修中工单' : ''}
                     </option>
                   ))}
                 </select>
@@ -5607,6 +6334,8 @@ Clinical class: Life-saving respiratory device`;
                     { value: 'high', label: '🔴 高 (紧急到场)', desc: '影响急救生命支持' }
                   ].map(opt => (
                     <button
+                      id={`quick-repair-urgency-${opt.value}`}
+                      aria-label={`设置报修紧急度：${opt.label}`}
                       key={opt.value}
                       type="button"
                       onClick={() => setQuickRepairUrgency(opt.value as 'low' | 'medium' | 'high')}
@@ -5629,6 +6358,8 @@ Clinical class: Life-saving respiratory device`;
                   3. 故障现象具体描述
                 </label>
                 <textarea
+                  id="quick-repair-description"
+                  aria-label="故障现象具体描述"
                   value={quickRepairDesc}
                   onChange={(e) => setQuickRepairDesc(e.target.value)}
                   placeholder="请输入该设备在临床运行中出现的故障代码、异响、黑屏、漏气或报错提示，方便检修技术员携带对应零备件到场..."
@@ -5641,15 +6372,24 @@ Clinical class: Life-saving respiratory device`;
               {/* Footer Buttons */}
               <div className="pt-4 flex justify-end gap-2 border-t border-slate-100 flex-shrink-0">
                 <button
+                  id="btn-cancel-quick-repair"
+                  aria-label="取消快捷报修"
                   type="button"
-                  onClick={() => setIsQuickRepairModalOpen(false)}
+                  onClick={() => {
+                    setIsQuickRepairModalOpen(false);
+                    resetQuickRepairDraft();
+                  }}
                   className="px-4 py-2 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-lg transition-colors cursor-pointer"
                 >
                   取消
                 </button>
                 <button
+                  id="btn-submit-quick-repair"
+                  aria-label="提交快捷报修并分派"
                   type="submit"
-                  className="px-5 py-2 text-xs bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white font-extrabold rounded-lg shadow-md flex items-center gap-1.5 transition-all cursor-pointer"
+                  disabled={!canSubmitQuickRepair}
+                  title={canSubmitQuickRepair ? '提交快捷报修并同步主工单' : quickRepairSubmitDisabledReason}
+                  className="px-5 py-2 text-xs bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white font-extrabold rounded-lg shadow-md flex items-center gap-1.5 transition-all cursor-pointer disabled:from-slate-300 disabled:to-slate-400 disabled:shadow-none disabled:cursor-not-allowed disabled:text-white/80"
                 >
                   <Send className="w-3.5 h-3.5" />
                   <span>提交报修并分派</span>
@@ -5747,15 +6487,25 @@ Clinical class: Life-saving respiratory device`;
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
-                  {equipments.map(eq => (
+                  {equipments.filter(canCurrentUserReportEquipment).map(eq => (
                     <button
                       key={eq.id}
                       type="button"
                       onClick={() => {
+                        if (!canStartQuickRepairForEquipment(eq)) {
+                          setScannerMatchError(getQuickRepairBlockMessage(eq));
+                          return;
+                        }
                         setScannedSnResult(eq.sn);
                         handleScannedSn(eq.sn);
                       }}
-                      className="text-left bg-slate-950 hover:bg-slate-800/80 p-2 border border-slate-800 rounded-lg hover:border-indigo-500/50 transition-all flex flex-col justify-between group cursor-pointer"
+                      disabled={!canStartQuickRepairForEquipment(eq)}
+                      title={canStartQuickRepairForEquipment(eq) ? '模拟扫码定位并填充报修' : getQuickRepairBlockMessage(eq)}
+                      className={`text-left p-2 border rounded-lg transition-all flex flex-col justify-between group ${
+                        canStartQuickRepairForEquipment(eq)
+                          ? 'bg-slate-950 hover:bg-slate-800/80 border-slate-800 hover:border-indigo-500/50 cursor-pointer'
+                          : 'bg-slate-950/50 border-slate-900 opacity-60 cursor-not-allowed'
+                      }`}
                     >
                       <div className="flex justify-between items-center w-full">
                         <span className="font-bold text-slate-200 truncate max-w-[120px]">{eq.deviceName}</span>
@@ -5772,6 +6522,11 @@ Clinical class: Life-saving respiratory device`;
                     </button>
                   ))}
                 </div>
+                {equipments.filter(canCurrentUserReportEquipment).length === 0 && (
+                  <div className="rounded-lg border border-slate-800 bg-slate-950 p-3 text-[10px] text-slate-400">
+                    当前账号暂无可扫码报修的本科室设备。
+                  </div>
+                )}
               </div>
 
               {/* Manual SN entry fallback */}
@@ -5783,7 +6538,10 @@ Clinical class: Life-saving respiratory device`;
                   <input
                     type="text"
                     value={scannedSnResult}
-                    onChange={(e) => setScannedSnResult(e.target.value)}
+                    onChange={(e) => {
+                      setScannedSnResult(e.target.value);
+                      setScannerMatchError(null);
+                    }}
                     placeholder="如：MR-SI-99201A 或直接输入系统自编ID..."
                     className="flex-1 bg-slate-950 text-slate-100 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 outline-none placeholder-slate-600 font-mono font-bold"
                   />
@@ -5795,6 +6553,11 @@ Clinical class: Life-saving respiratory device`;
                     确认定位
                   </button>
                 </div>
+                {scannerMatchError && (
+                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[10px] leading-relaxed text-amber-200">
+                    {scannerMatchError}
+                  </div>
+                )}
               </div>
 
               {/* Advantage Explanation Badge */}
@@ -5826,7 +6589,7 @@ Clinical class: Life-saving respiratory device`;
       )}
 
       {/* ================= MODAL 6: MEDICAL EQUIPMENT DOSSIER PDF EXPORT ================= */}
-      {isDossierModalOpen && selectedEquipment && (
+      {canManageEquipmentArchive && isDossierModalOpen && selectedEquipment && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto">
           <div className="relative bg-slate-100 rounded-xl border border-slate-200/80 w-full max-w-4xl shadow-2xl flex flex-col my-4 max-h-[90vh]">
             
@@ -5894,7 +6657,7 @@ Clinical class: Life-saving respiratory device`;
                   <div className="absolute top-0 right-0 hidden sm:flex flex-col items-end text-right font-mono text-[9px] text-slate-400 leading-normal">
                     <span>备案号: ARC-{selectedEquipment.id.toUpperCase()}</span>
                     <span>归档级别: {selectedEquipment.deviceClass || '暂未分类'}</span>
-                    <span>导出时间: 2026-07-02 01:30</span>
+                    <span>导出时间: {getLocalDateTimeString()}</span>
                   </div>
                 </div>
 
@@ -6214,13 +6977,19 @@ Clinical class: Life-saving respiratory device`;
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <button
-                    onClick={() => triggerDownloadFile(previewFile)}
-                    className="flex items-center gap-1 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 transition-all cursor-pointer"
-                    title="下载源技术文档文件"
-                  >
-                    <span>下载原档</span>
-                  </button>
+                  {canManageEquipmentArchive ? (
+                    <button
+                      onClick={() => triggerDownloadFile(previewFile)}
+                      className="flex items-center gap-1 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 transition-all cursor-pointer"
+                      title="下载源技术文档文件"
+                    >
+                      <span>下载原档</span>
+                    </button>
+                  ) : (
+                    <span className="flex items-center gap-1 bg-slate-800 text-slate-400 px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-700">
+                      临床只读预览
+                    </span>
+                  )}
                   <button
                     onClick={() => setIsPreviewOpen(false)}
                     className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors cursor-pointer"
@@ -6461,23 +7230,30 @@ Clinical class: Life-saving respiratory device`;
                       </div>
 
                       {/* Sparkles premium extract page snapshot button */}
-                      <button
-                        onClick={() => handleExtractSnapshot(activePageData)}
-                        disabled={isExtractingSnapshot}
-                        className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-slate-700 disabled:to-slate-800 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
-                      >
-                        {isExtractingSnapshot ? (
-                          <>
-                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                            <span>正在进行 AI OCR 智能提取...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                            <span>📌 提取当前页为设备关联快照</span>
-                          </>
-                        )}
-                      </button>
+                      {canManageEquipmentArchive ? (
+                        <button
+                          onClick={() => handleExtractSnapshot(activePageData)}
+                          disabled={isExtractingSnapshot}
+                          className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-slate-700 disabled:to-slate-800 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
+                        >
+                          {isExtractingSnapshot ? (
+                            <>
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              <span>正在进行 AI OCR 智能提取...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                              <span>📌 提取当前页为设备关联快照</span>
+                            </>
+                          )}
+                        </button>
+                      ) : (
+                        <div className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-slate-800 text-slate-300 px-4 py-2 rounded-lg text-xs font-bold border border-slate-700">
+                          <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
+                          <span>临床只读预览</span>
+                        </div>
+                      )}
 
                     </div>
 
@@ -6486,7 +7262,16 @@ Clinical class: Life-saving respiratory device`;
                       {previewData.pages.map((p, pidx) => (
                         <div
                           key={pidx}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`切换到附件预览第 ${p.pageNum} 页：${p.title}`}
                           onClick={() => setActivePreviewPage(p.pageNum)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              setActivePreviewPage(p.pageNum);
+                            }
+                          }}
                           className={`p-2 rounded-lg border text-left cursor-pointer transition-all flex flex-col justify-between h-14 select-none ${
                             activePreviewPage === p.pageNum
                               ? 'bg-blue-600/10 border-blue-500'
