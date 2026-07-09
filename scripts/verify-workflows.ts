@@ -558,14 +558,21 @@ const checks: Check[] = [
     run: () => {
       assert(isSameDepartment('呼吸', '呼吸内科'), '呼吸科室别名应归一');
       assert(isSameDepartment('ICU', '重症医学科 (ICU)'), 'ICU 别名应归一');
+      assert(isSameDepartment('急诊ICU', '急诊科'), '急诊 ICU 默认历史工单应归入急诊科临床视图');
 
       const tasks = [
         createTask({ id: 'TKT-RESP', department: '呼吸内科', status: '处理中' }),
-        createTask({ id: 'TKT-ER', department: '急诊科', status: '待科室验收' })
+        createTask({ id: 'TKT-ER', department: '急诊科', status: '待科室验收' }),
+        createTask({ id: 'TKT-ER-ICU', department: '急诊ICU', status: '已完成' })
       ];
       const visibleTasks = getDepartmentTasks(tasks, '呼吸');
       assertEqual(visibleTasks.length, 1, '呼吸内科临床用户只能看到本科室任务');
       assertEqual(visibleTasks[0].id, 'TKT-RESP', '呼吸内科可见任务应为本科室任务');
+      const emergencyVisibleTasks = getDepartmentTasks(tasks, '急诊科').map(task => task.id);
+      assert(
+        emergencyVisibleTasks.includes('TKT-ER') && emergencyVisibleTasks.includes('TKT-ER-ICU'),
+        '急诊科临床用户应同时看到急诊科与急诊 ICU 历史任务'
+      );
     }
   },
   {

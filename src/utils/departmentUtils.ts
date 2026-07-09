@@ -5,6 +5,8 @@ const DEPARTMENT_ALIASES: Record<string, string> = {
   重症医学科: '重症医学科 (ICU)',
   急诊: '急诊科',
   急诊科: '急诊科',
+  急诊ICU: '急诊科',
+  '急诊 ICU': '急诊科',
   放射: '放射科',
   放射科: '放射科',
   妇产: '妇产科',
